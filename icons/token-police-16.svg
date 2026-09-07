@@ -1,21 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
-  <!-- 16px: 75% hair — thinning crown, sides + bangs, collar badge. -->
+  <!-- 16px: 75% hair — thinning crown, sides + bangs. Footer bar is
+       decorative and half-full forever — not live quota. -->
   <rect width="16" height="16" rx="3.5" fill="#14161c"/>
-  <path fill="#3a4c68" d="M3.6 12.8C3.6 11.2 5.4 10.5 8 10.9 10.6 10.5 12.4 11.2 12.4 12.8V16H3.6z"/>
-  <path d="M5.3 12.15 L8 11.2 L10.7 12.15" fill="none" stroke="#5CD6B3" stroke-width=".85" stroke-linecap="round"/>
-  <circle cx="8" cy="13.85" r="1.05" fill="#5CD6B3"/>
+  <path fill="#3a4c68" d="M3.6 12.15C3.6 10.7 5.4 10.05 8 10.45 10.6 10.05 12.4 10.7 12.4 12.15V13.15H3.6z"/>
+  <path d="M5.3 11.5 L8 10.6 L10.7 11.5" fill="none" stroke="#5CD6B3" stroke-width=".85" stroke-linecap="round"/>
   <!-- remaining crown tufts (left / front-left) -->
-  <ellipse cx="5.7" cy="2.65" rx="1.15" ry="1.35" fill="#c9842c"/>
-  <ellipse cx="7.2" cy="2.35" rx="1.05" ry="1.25" fill="#c9842c"/>
+  <ellipse cx="5.7" cy="2.45" rx="1.15" ry="1.35" fill="#c9842c"/>
+  <ellipse cx="7.2" cy="2.15" rx="1.05" ry="1.25" fill="#c9842c"/>
   <!-- side hair -->
-  <ellipse cx="3.15" cy="8.15" rx="1.5" ry="2.15" fill="#c9842c"/>
-  <ellipse cx="12.85" cy="8.15" rx="1.5" ry="2.15" fill="#c9842c"/>
-  <circle cx="8" cy="7.85" r="4.05" fill="#f3c29a"/>
+  <ellipse cx="3.15" cy="7.85" rx="1.5" ry="2.05" fill="#c9842c"/>
+  <ellipse cx="12.85" cy="7.85" rx="1.5" ry="2.05" fill="#c9842c"/>
+  <circle cx="8" cy="7.55" r="4.05" fill="#f3c29a"/>
   <!-- bangs -->
-  <ellipse cx="5.7" cy="6.35" rx=".85" ry="1.35" fill="#c9842c"/>
-  <ellipse cx="8" cy="6.15" rx=".8" ry="1.25" fill="#c9842c"/>
-  <ellipse cx="10.3" cy="6.35" rx=".85" ry="1.35" fill="#c9842c"/>
-  <circle cx="6.45" cy="7.95" r=".85" fill="#fff"/>
-  <circle cx="9.55" cy="7.95" r=".85" fill="#fff"/>
-  <path d="M6.5 9.85 Q8 10.8 9.5 9.85" fill="none" stroke="#3a2a20" stroke-width=".7" stroke-linecap="round"/>
+  <ellipse cx="5.7" cy="6.05" rx=".85" ry="1.35" fill="#c9842c"/>
+  <ellipse cx="8" cy="5.85" rx=".8" ry="1.25" fill="#c9842c"/>
+  <ellipse cx="10.3" cy="6.05" rx=".85" ry="1.35" fill="#c9842c"/>
+  <circle cx="6.45" cy="7.65" r=".85" fill="#fff"/>
+  <circle cx="9.55" cy="7.65" r=".85" fill="#fff"/>
+  <path d="M6.5 9.55 Q8 10.5 9.5 9.55" fill="none" stroke="#3a2a20" stroke-width=".7" stroke-linecap="round"/>
+  <defs>
+    <clipPath id="bar16">
+      <rect x="2" y="13.15" width="12" height="1.85" rx="0.925"/>
+    </clipPath>
+  </defs>
+  <rect x="2" y="13.15" width="12" height="1.85" rx="0.925" fill="#23272f"/>
+  <rect x="2" y="13.15" width="6" height="1.85" fill="#5CD6B3" clip-path="url(#bar16)"/>
 </svg>

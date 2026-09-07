@@ -13,24 +13,11 @@ if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 }
 
-// 徽章常驻显示"所有勾选产品里最低的剩余%"，不用打开面板也能扫一眼
-function updateBadge() {
-  if (refreshing) return; // 手动刷新期间显示 "…"，结束时再更新
-  chrome.storage.local.get(['agents', 'enabledAgents'], (res) => {
-    const map = res.agents || {};
-    const en = res.enabledAgents || {};
-    let min = null;
-    AGENTS.forEach((a) => {
-      if (en[a.id] === false) return;
-      const ag = map[a.id];
-      const pct = ag && ag.limits && ag.limits[0] ? ag.limits[0].percent_left : null;
-      if (pct != null && (min == null || pct < min)) min = pct;
-    });
-    if (min == null) { chrome.action.setBadgeText({ text: '' }); return; }
-    chrome.action.setBadgeText({ text: String(min) });
-    // 深色底配白字才看得清（面板里的浅色系在徽章上对比度不够）
-    chrome.action.setBadgeBackgroundColor({ color: min > 50 ? '#2e9e6b' : min >= 20 ? '#c98a1b' : '#d64545' });
-  });
+// Older builds put the lowest remaining % on the toolbar icon. Users found
+// that metric confusing, so the number is gone — clear leftover text on load
+// so an in-place update does not keep a stale badge.
+function clearBadge() {
+  chrome.action.setBadgeText({ text: '' });
 }
 
 // 每小时静默自动检查（autoRefresh，默认开）：所有勾选的产品统一在后台标签页尽力抓，
@@ -122,7 +109,6 @@ if (chrome.alarms) {
 
 chrome.storage.onChanged.addListener((ch, area) => {
   if (area !== 'local' || !ch) return;
-  if (ch.agents || ch.enabledAgents) updateBadge();
   if (ch.autoRefresh) syncAlarm();
   if (ch.checkUpdates) {
     syncUpdateAlarm();
@@ -133,7 +119,7 @@ chrome.storage.onChanged.addListener((ch, area) => {
 });
 
 syncAlarm();
-updateBadge();
+clearBadge();
 syncUpdateAlarm();
 checkForUpdate(false);
 
@@ -288,8 +274,6 @@ async function runRefresh() {
   let results = null;
   setRefresh({ running: true, started, finished: null, results: null });
   try {
-    chrome.action.setBadgeText({ text: '…' });
-    chrome.action.setBadgeBackgroundColor({ color: '#6E9BF5' });
     const en = (await getLocal(['enabledAgents'])).enabledAgents || {};
     const list = AGENTS.filter((a) => en[a.id] !== false);
     // 轻页面：后台并行；重页面：前台逐个，抓到即关（同一 URL 只开一次）
@@ -309,6 +293,5 @@ async function runRefresh() {
   } finally {
     refreshing = false;
     setRefresh({ running: false, finished: Date.now(), results });
-    updateBadge(); // 刷新结束：从 "…" 恢复成最低剩余%
   }
 }

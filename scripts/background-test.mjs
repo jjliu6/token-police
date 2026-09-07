@@ -1,7 +1,7 @@
-// Exercise background.js: serialized storage writes, badge, low-quota
-// notifications, and the hourly quiet-check alarm. Storage callbacks are
-// async (setTimeout) exactly so an unserialized implementation would
-// interleave and lose an update.
+// Exercise background.js: serialized storage writes, empty toolbar badge,
+// low-quota notifications, and the hourly quiet-check alarm. Storage
+// callbacks are async (setTimeout) exactly so an unserialized
+// implementation would interleave and lose an update.
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -157,23 +157,18 @@ if (store.history.filter((h) => h.id === 'codex').length !== 1) {
 await send({ type: 'closeMe' });
 if (!removedTabs.includes(7)) problems.push('closeMe should remove the sender tab');
 
-// 5) 徽章 = 勾选产品里最低的剩余%（claude 80 / codex 60 / cursor 40 → 40，黄色）
+// 5) 工具栏徽章不再显示剩余%（启动时清空；写数据 / 改勾选也不再写数字）
 await tick(10);
-if (badge.texts[badge.texts.length - 1] !== '40') {
-  problems.push(`badge should show min 40, got ${JSON.stringify(badge.texts.slice(-3))}`);
-}
-if (badge.colors[badge.colors.length - 1] !== '#c98a1b') {
-  problems.push(`badge for 40% should be amber, got ${badge.colors[badge.colors.length - 1]}`);
+const badgeHasMetric = (texts) => texts.some((t) => t !== '');
+if (badgeHasMetric(badge.texts)) {
+  problems.push(`badge must stay empty after agent data, got ${JSON.stringify(badge.texts)}`);
 }
 
-// 6) 取消勾选 cursor 后徽章重算（min 变 60，绿色）
+// 6) 取消勾选 cursor：徽章仍应为空（不再按最低剩余%重算）
 await new Promise((r) => ctxObj.chrome.storage.local.set({ enabledAgents: { cursor: false } }, r));
 await tick(10);
-if (badge.texts[badge.texts.length - 1] !== '60') {
-  problems.push(`badge should recompute to 60 without cursor, got ${badge.texts[badge.texts.length - 1]}`);
-}
-if (badge.colors[badge.colors.length - 1] !== '#2e9e6b') {
-  problems.push(`badge for 60% should be green, got ${badge.colors[badge.colors.length - 1]}`);
+if (badgeHasMetric(badge.texts)) {
+  problems.push(`toggling enabledAgents must not write a badge number, got ${JSON.stringify(badge.texts)}`);
 }
 
 // 7) 低额度通知：只在跌破阈值那一刻触发（动一动提醒默认开，这里只数 low- 通知）
@@ -256,6 +251,9 @@ const rr = store.refresh && store.refresh.results;
 if (!rr || rr.cursor !== 'ok' || rr.gemini !== 'ok') problems.push(`refresh results should mark cursor/gemini ok, got ${JSON.stringify(rr)}`);
 if (!rr || rr['grok-bot'] !== 'missing') problems.push(`grok-bot should be 'missing' when cursor was read but no Grok Bot section, got ${JSON.stringify(rr)}`);
 if (!rr || rr['grok-build'] !== 'fail') problems.push(`an agent whose page never reported should stay 'fail', got ${JSON.stringify(rr)}`);
+if (badge.texts.includes('…') || badgeHasMetric(badge.texts)) {
+  problems.push(`refresh must not put a number or ellipsis on the badge, got ${JSON.stringify(badge.texts)}`);
+}
 
 // 13) 更新检查：启动时查一次 GitHub、存结果；每天一次的闹钟；关掉开关就清掉
 await tick(10);
@@ -361,7 +359,7 @@ if (problems.length) {
 console.log('ok  Concurrent agentData saves are serialized (no lost update)');
 console.log('ok  Cursor usage+spending pages merge into one record');
 console.log('ok  History dedupe and closeMe behave as before');
-console.log('ok  Badge shows the lowest remaining % across tracked agents');
+console.log('ok  Toolbar badge stays empty (no remaining-% number, including after refresh)');
 console.log('ok  Low-quota notifications fire only on threshold crossings');
 console.log('ok  Hourly quiet check: background tabs only, tracked agents only, toggleable');
 console.log('ok  Move reminder: on by default, >10% burned in 2h, 2h cooldown, off when unticked, counts from the last reset');

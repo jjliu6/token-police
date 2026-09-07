@@ -1,28 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
-  <!-- 16px: 75% hair — thinning crown, sides + bangs. Footer bar is
-       decorative and half-full forever — not live quota. -->
-  <rect width="16" height="16" rx="3.5" fill="#14161c"/>
-  <path fill="#3a4c68" d="M3.6 12.15C3.6 10.7 5.4 10.05 8 10.45 10.6 10.05 12.4 10.7 12.4 12.15V13.15H3.6z"/>
-  <path d="M5.3 11.5 L8 10.6 L10.7 11.5" fill="none" stroke="#5CD6B3" stroke-width=".85" stroke-linecap="round"/>
-  <!-- remaining crown tufts (left / front-left) -->
-  <ellipse cx="5.7" cy="2.45" rx="1.15" ry="1.35" fill="#c9842c"/>
-  <ellipse cx="7.2" cy="2.15" rx="1.05" ry="1.25" fill="#c9842c"/>
-  <!-- side hair -->
-  <ellipse cx="3.15" cy="7.85" rx="1.5" ry="2.05" fill="#c9842c"/>
-  <ellipse cx="12.85" cy="7.85" rx="1.5" ry="2.05" fill="#c9842c"/>
-  <circle cx="8" cy="7.55" r="4.05" fill="#f3c29a"/>
-  <!-- bangs -->
-  <ellipse cx="5.7" cy="6.05" rx=".85" ry="1.35" fill="#c9842c"/>
-  <ellipse cx="8" cy="5.85" rx=".8" ry="1.25" fill="#c9842c"/>
-  <ellipse cx="10.3" cy="6.05" rx=".85" ry="1.35" fill="#c9842c"/>
-  <circle cx="6.45" cy="7.65" r=".85" fill="#fff"/>
-  <circle cx="9.55" cy="7.65" r=".85" fill="#fff"/>
-  <path d="M6.5 9.55 Q8 10.5 9.5 9.55" fill="none" stroke="#3a2a20" stroke-width=".7" stroke-linecap="round"/>
+  <!-- 16px: 75% hair — thinning crown, sides + bangs, collar badge.
+       Ring is a decorative in-progress meter — not live quota. -->
   <defs>
-    <clipPath id="bar16">
-      <rect x="2" y="13.15" width="12" height="1.85" rx="0.925"/>
-    </clipPath>
+    <pattern id="ringHatch16" patternUnits="userSpaceOnUse" width="2.4" height="2.4" patternTransform="rotate(38)">
+      <rect width="2.4" height="2.4" fill="#7AF0C8"/>
+      <rect width="1.2" height="2.4" fill="#2a8a6e"/>
+    </pattern>
   </defs>
-  <rect x="2" y="13.15" width="12" height="1.85" rx="0.925" fill="#23272f"/>
-  <rect x="2" y="13.15" width="6" height="1.85" fill="#5CD6B3" clip-path="url(#bar16)"/>
+  <rect width="16" height="16" rx="3.5" fill="#14161c"/>
+  <path fill="#3a4c68" d="M4.2 11.6C4.2 10.4 5.7 9.85 8 10.2 10.3 9.85 11.8 10.4 11.8 11.6V13.3H4.2z"/>
+  <path d="M5.6 11.05 L8 10.25 L10.4 11.05" fill="none" stroke="#5CD6B3" stroke-width=".75" stroke-linecap="round"/>
+  <circle cx="8" cy="12.35" r=".85" fill="#5CD6B3"/>
+  <!-- remaining crown tufts (left / front-left) -->
+  <ellipse cx="5.85" cy="3.15" rx="1" ry="1.15" fill="#c9842c"/>
+  <ellipse cx="7.25" cy="2.9" rx=".9" ry="1.05" fill="#c9842c"/>
+  <!-- side hair -->
+  <ellipse cx="3.7" cy="7.35" rx="1.25" ry="1.75" fill="#c9842c"/>
+  <ellipse cx="12.3" cy="7.35" rx="1.25" ry="1.75" fill="#c9842c"/>
+  <circle cx="8" cy="7.15" r="3.35" fill="#f3c29a"/>
+  <!-- bangs -->
+  <ellipse cx="5.95" cy="5.85" rx=".7" ry="1.1" fill="#c9842c"/>
+  <ellipse cx="8" cy="5.7" rx=".65" ry="1" fill="#c9842c"/>
+  <ellipse cx="10.05" cy="5.85" rx=".7" ry="1.1" fill="#c9842c"/>
+  <circle cx="6.65" cy="7.2" r=".7" fill="#fff"/>
+  <circle cx="9.35" cy="7.2" r=".7" fill="#fff"/>
+  <path d="M6.65 8.85 Q8 9.6 9.35 8.85" fill="none" stroke="#3a2a20" stroke-width=".6" stroke-linecap="round"/>
+  <!-- Static ~37% ring: slate track, hatched mint arc from 12 o'clock. -->
+  <circle cx="8" cy="8" r="6.35" fill="none" stroke="#5c6676" stroke-width="1.85"/>
+  <circle cx="8" cy="8" r="6.35" fill="none" stroke="url(#ringHatch16)" stroke-width="1.85"
+    stroke-linecap="round" stroke-dasharray="14.8 25.1" transform="rotate(-90 8 8)"/>
 </svg>

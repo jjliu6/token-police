@@ -1,5 +1,14 @@
 // Draft quota tips for the hair mascot. NOT wired into the dashboard yet.
 // Do not load this file from popup.html until wiring is intentional.
+// The live panel never shows these today.
+//
+// Intended display (not coded yet):
+//   fat  — that agent's remaining is high AND reset is close
+//          (or this period is barely used). Example: Grok 88% left, 3h to reset.
+//   thin — that agent's remaining is low, reset still far
+//          (same neighborhood as the 15% / 5% low-quota alerts).
+//   Sit-clock rest veil still wins: stretch activities, not these tips.
+//   Surface: mascot .say bubble (full say) + optional .acts buttons (btn).
 //
 // Eric-approved v2 (8 agent-specific tips). Copy formula:
 //   fat  ZH: 烧掉用不完的 token，你可以这样：…

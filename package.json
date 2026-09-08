@@ -1,6 +1,6 @@
 {
   "name": "token-police",
-  "version": "1.3.17",
+  "version": "1.3.18",
   "private": true,
   "description": "Chrome (Manifest V3) extension that shows remaining usage for Claude Code, Codex, Grok, Cursor, Grok Bot and Gemini.",
   "type": "module",

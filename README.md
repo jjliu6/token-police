@@ -81,6 +81,7 @@ replace the folder's contents, then click the ↻ reload button on the extension
 - `_locales/` — Chrome Store / `chrome://extensions` name and description
 - `icons/` — extension icons (`token-police.svg` is the source; `python3 scripts/render-icons.py` writes `mark-*.png`)
 - `docs/` — the landing page (`index.html`) published to GitHub Pages, plus README screenshots
+- `docs/ideas/` — parked product ideas (not scheduled). Start at [docs/ideas/README.md](docs/ideas/README.md)
 
 ## Development
 

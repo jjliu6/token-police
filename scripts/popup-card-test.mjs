@@ -41,6 +41,9 @@ let sent = [];
 let sideOpened = 0;
 let windowsCreated = 0;
 let uiLanguageCalls = 0;
+let clipboardWrites = [];
+let tabsCreated = [];
+const docListeners = {};
 const store = { agents: { 'grok-build': grok }, history: [] };
 const noop = () => {};
 
@@ -61,6 +64,7 @@ function el(extra) {
     offsetWidth: 176,
     offsetHeight: 200,
     setPointerCapture: noop,
+    setAttribute: noop,
     ...extra,
   };
 }
@@ -83,6 +87,15 @@ const els = {
   acts: el({ hidden: true }),
   ver: el(),
   credits: el(),
+  share: el(),
+  'share-overlay': el({ hidden: true }),
+  'share-card': el(),
+  'share-close': el(),
+  'share-title': el(),
+  'share-pitch': el(),
+  'share-url': el(),
+  'share-copy': el(),
+  'share-x': el(),
 };
 
 const popupCtx = {
@@ -122,11 +135,20 @@ const popupCtx = {
       getLastFocused: (_opts, cb) => cb({ id: 42, type: 'normal' }),
       create: () => { windowsCreated++; },
     },
+    tabs: { create: (opts) => { tabsCreated.push(opts); } },
   },
   document: {
     documentElement: { lang: 'en' },
     getElementById: (id) => els[id] || null,
     body: { classList: { add: noop }, style: {} },
+    addEventListener: (type, fn) => {
+      (docListeners[type] = docListeners[type] || []).push(fn);
+    },
+  },
+  navigator: {
+    clipboard: {
+      writeText: (s) => { clipboardWrites.push(s); },
+    },
   },
   location: { href: 'chrome-extension://id/popup.html' },
   setTimeout: noop,
@@ -155,6 +177,7 @@ if (els.legend.textContent !== 'number = remaining') {
 }
 if (els.lang.textContent !== '中文') problems.push(`English UI should show a 中文 button, got ${JSON.stringify(els.lang.textContent)}`);
 if (els.refresh.textContent !== 'Refresh') problems.push(`default refresh label should be Refresh, got ${JSON.stringify(els.refresh.textContent)}`);
+if (els.share.textContent !== 'Share') problems.push(`default share label should be Share, got ${JSON.stringify(els.share.textContent)}`);
 if (popupCtx.document.documentElement.lang !== 'en') {
   problems.push(`<html lang> should be en by default, got ${popupCtx.document.documentElement.lang}`);
 }
@@ -283,6 +306,77 @@ if (verProblems.length) {
   process.exit(1);
 }
 console.log('ok  Version line shows the installed version and flags a newer release');
+
+// --- Share card (footer button → overlay, copy + X, landing URL) ---
+const shareProblems = [];
+for (const key of ['share', 'shareTitle', 'sharePitch', 'shareCopy', 'shareCopied', 'shareX', 'shareClose', 'shareTweet']) {
+  if (!ctx.t(key) || ctx.t(key) === key) shareProblems.push(`missing English i18n key ${key}`);
+}
+if (ctx.t('share') !== 'Share') shareProblems.push(`share should be Share, got ${ctx.t('share')}`);
+if (ctx.sharePageUrl() !== 'https://token-police.philosophie.ai/') {
+  shareProblems.push(`share URL must be the landing page, got ${ctx.sharePageUrl()}`);
+}
+if (/github\.com/i.test(ctx.sharePageUrl()) || /github\.com\/jjliu6/i.test(ctx.shareTweetText())) {
+  shareProblems.push('share URL / tweet must not point at GitHub');
+}
+if (!ctx.shareTweetText().includes('https://token-police.philosophie.ai/')) {
+  shareProblems.push('tweet copy should include the landing URL');
+}
+const intent = ctx.shareIntentUrl();
+if (!intent.startsWith('https://x.com/intent/tweet?text=')) {
+  shareProblems.push(`X intent should be x.com tweet intent, got ${intent}`);
+}
+if (!intent.includes(encodeURIComponent('https://token-police.philosophie.ai/'))) {
+  shareProblems.push('X intent should encode the landing URL');
+}
+if (/github\.com/i.test(decodeURIComponent(intent.split('text=')[1] || ''))) {
+  shareProblems.push('X intent text must not include GitHub');
+}
+if (!els['share-overlay'].hidden) shareProblems.push('share overlay should start hidden');
+ctx.openShare();
+if (els['share-overlay'].hidden) shareProblems.push('openShare should show the overlay');
+if (els['share-title'].textContent !== 'Share Token Police') {
+  shareProblems.push(`share title should be English, got ${JSON.stringify(els['share-title'].textContent)}`);
+}
+if (!els['share-pitch'].textContent.includes('side panel')) {
+  shareProblems.push(`share pitch should be the English product blurb, got ${JSON.stringify(els['share-pitch'].textContent)}`);
+}
+if (els['share-url'].textContent !== 'https://token-police.philosophie.ai/') {
+  shareProblems.push(`share card URL should be the landing page, got ${JSON.stringify(els['share-url'].textContent)}`);
+}
+if (els['share-copy'].textContent !== 'Copy link') shareProblems.push('copy button should say Copy link');
+if (els['share-x'].textContent !== 'Share on X') shareProblems.push('X button should say Share on X');
+clipboardWrites = [];
+ctx.copyShareLink();
+if (clipboardWrites.join() !== 'https://token-police.philosophie.ai/') {
+  shareProblems.push(`copy should write the landing URL, got ${JSON.stringify(clipboardWrites)}`);
+}
+if (els['share-copy'].textContent !== 'Copied') {
+  shareProblems.push(`copy should flash Copied, got ${JSON.stringify(els['share-copy'].textContent)}`);
+}
+tabsCreated = [];
+ctx.openShareX();
+if (tabsCreated.length !== 1 || tabsCreated[0].url !== intent) {
+  shareProblems.push(`Share on X should open the tweet intent tab, got ${JSON.stringify(tabsCreated)}`);
+}
+ctx.closeShare();
+if (!els['share-overlay'].hidden) shareProblems.push('closeShare should hide the overlay');
+if (els['share-copy'].textContent !== 'Copy link') shareProblems.push('closing should restore Copy link');
+ctx.openShare();
+(docListeners.keydown || []).forEach((fn) => fn({ key: 'Escape' }));
+if (!els['share-overlay'].hidden) shareProblems.push('Escape should dismiss the share card');
+const overlayEl = els['share-overlay'];
+overlayEl.hidden = false;
+const onOverlayClick = (e) => { if (e.target === overlayEl) ctx.closeShare(); };
+onOverlayClick({ target: els['share-card'] });
+if (overlayEl.hidden) shareProblems.push('clicking the share card should not dismiss');
+onOverlayClick({ target: overlayEl });
+if (!overlayEl.hidden) shareProblems.push('clicking the dimmed backdrop should dismiss');
+if (shareProblems.length) {
+  console.error(shareProblems.join('\n'));
+  process.exit(1);
+}
+console.log('ok  Share card opens on the landing URL with copy + X, dismisses on Esc/backdrop');
 
 // --- Failure state on cards ---
 const failProblems = [];
@@ -851,6 +945,18 @@ if (!/class="bottom"/.test(htmlCss) || !/\.bottom\{/.test(htmlCss)) {
 if (!/\.hint:empty\{display:none/.test(htmlCss)) {
   layoutProblems.push('empty hint must not leave a gap above the version line');
 }
+if (!/<div class="bottom">[\s\S]*id="share"[\s\S]*id="credits"/.test(htmlCss)) {
+  layoutProblems.push('Share button should sit in the footer/credits area, not the top toolbar');
+}
+if (/<div class="top">[\s\S]*id="share"[\s\S]*<div class="settings"/.test(htmlCss)) {
+  layoutProblems.push('Share must not clutter the Refresh/settings row');
+}
+if (!/id="share-overlay"[\s\S]*hidden/.test(htmlCss) || !/class="share-card"/.test(htmlCss)) {
+  layoutProblems.push('Share should open a hidden overlay card, not a copy-only toast');
+}
+if (!/\.share-overlay\{[^}]*z-index:\s*60/.test(htmlCss)) {
+  layoutProblems.push('share overlay should sit above the mascot (z-index 40) and veil');
+}
 if (!/\.ver\{[^}]*overflow-wrap:\s*anywhere/.test(htmlCss)) {
   layoutProblems.push('version line should wrap instead of overflowing the panel');
 }
@@ -1081,6 +1187,20 @@ if (!htmlZh.includes('>剩余<')) zhProblems.push('Chinese card should say 剩�
 if (htmlZh.includes('>left<')) zhProblems.push('Chinese card should not say left');
 if (els.lang.textContent !== 'EN') zhProblems.push(`Chinese UI should show an EN button, got ${JSON.stringify(els.lang.textContent)}`);
 if (els.refresh.textContent !== '刷新') zhProblems.push(`Chinese refresh label should be 刷新, got ${JSON.stringify(els.refresh.textContent)}`);
+if (els.share.textContent !== '分享') zhProblems.push(`Chinese share label should be 分享, got ${JSON.stringify(els.share.textContent)}`);
+if (els['share-title'].textContent !== '分享 Token Police') {
+  zhProblems.push(`Chinese share title, got ${JSON.stringify(els['share-title'].textContent)}`);
+}
+if (!els['share-pitch'].textContent.includes('侧边栏')) {
+  zhProblems.push(`Chinese share pitch, got ${JSON.stringify(els['share-pitch'].textContent)}`);
+}
+if (els['share-copy'].textContent !== '复制链接' && els['share-copy'].textContent !== '已复制') {
+  zhProblems.push(`Chinese copy button, got ${JSON.stringify(els['share-copy'].textContent)}`);
+}
+if (els['share-x'].textContent !== '分享到 X') zhProblems.push(`Chinese X button, got ${JSON.stringify(els['share-x'].textContent)}`);
+if (!ctx.shareTweetText().includes('侧边栏') || !ctx.shareTweetText().includes('https://token-police.philosophie.ai/')) {
+  zhProblems.push('Chinese tweet should keep the landing URL');
+}
 if (els['brand-name'].textContent !== 'TOKEN POLICE') {
   zhProblems.push(`Chinese brand, got ${JSON.stringify(els['brand-name'].textContent)}`);
 }

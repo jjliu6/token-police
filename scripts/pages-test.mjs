@@ -75,6 +75,29 @@ try {
   assert.ok(en.includes('<span>Token Police</span>'), 'first English string kept');
   assert.ok(en.includes("<p>Unofficial. Not affiliated with Anthropic, OpenAI, xAI, Cursor or Google."), 'last English string kept');
 
+  // Social share: header shortcut + bottom buttons, both languages.
+  for (const [name, html] of [['/en/', en], ['/zh/', zh], ['/', root]]) {
+    assert.ok(html.includes('id="share"'), `${name}: share block`);
+    assert.ok(html.includes('id="header-share"'), `${name}: header share button`);
+    assert.ok(html.includes('data-network="x"') && html.includes('data-network="weibo"'), `${name}: X and Weibo`);
+    assert.ok(html.includes('data-network="linkedin"') && html.includes('data-network="reddit"'), `${name}: LinkedIn and Reddit`);
+    assert.ok(html.includes('id="share-copy"'), `${name}: copy-link button`);
+    assert.ok(html.includes('function shareHref('), `${name}: share URLs are filled in the page script`);
+    assert.ok(html.includes('via=jjl13579'), `${name}: X intent credits the author`);
+  }
+  assert.ok(en.includes('Like it? Spread the word.'), 'en share prompt');
+  assert.ok(en.includes('Copy link'), 'en copy label');
+  assert.ok(en.includes('title="Share this page"'), 'en header share title');
+  assert.ok(en.includes('see remaining Claude Code'), 'en share text');
+  assert.ok(zh.includes('觉得有用？发给朋友吧。'), 'zh share prompt');
+  assert.ok(zh.includes('复制链接'), 'zh copy label');
+  assert.ok(zh.includes('分享到…'), 'zh native share label');
+  assert.ok(zh.includes('微博'), 'zh Weibo label');
+  assert.ok(zh.includes('title="分享这个页面"'), 'zh header share title');
+  assert.ok(zh.includes('一眼看清 Claude Code、Codex、Cursor、Grok、Gemini 还剩多少额度'), 'zh share text');
+  assert.ok(!zh.includes('Like it? Spread the word.'), 'zh has no English share prompt');
+  assert.ok(zh.includes('>复制链接</span>') && !zh.includes('>Copy link</span>'), 'zh copy button is translated');
+
   console.log('pages-test: OK');
 } finally {
   rmSync(out, { recursive: true, force: true });

@@ -35,8 +35,8 @@ const docs = join(root, 'docs');
 const SITE = 'https://token-police.philosophie.ai';
 
 export const LANGS = {
-  en: { htmlLang: 'en', ogLocale: 'en_US', path: '/en/', label: 'EN', switchTitle: 'Switch to English' },
-  zh: { htmlLang: 'zh-CN', ogLocale: 'zh_CN', path: '/zh/', label: '中文', switchTitle: '切换到中文' },
+  en: { htmlLang: 'en', ogLocale: 'en_US', path: '/en/', label: 'EN', switchTitle: 'Switch to English', shareTitle: 'Share this page' },
+  zh: { htmlLang: 'zh-CN', ogLocale: 'zh_CN', path: '/zh/', label: '中文', switchTitle: '切换到中文', shareTitle: '分享这个页面' },
 };
 
 // Things in docs/ that are build inputs, not site files.
@@ -122,6 +122,7 @@ export function render(template, { lang, dict, root: isRoot = false }) {
     altHtmlLang: other.htmlLang,
     altLabel: other.label,
     altTitle: other.switchTitle,
+    shareTitle: me.shareTitle,
   };
   // Strip the template banner comment first: it doesn't ship, and it mentions
   // {{placeholders}} literally.

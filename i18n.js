@@ -49,6 +49,15 @@ const I18N = {
     builtBy: 'Built by {name} at {org} · MIT License · {src}',
     creditsSrc: 'Source on GitHub',
     disclaimer: 'Unofficial. Not affiliated with Anthropic, OpenAI, xAI, Cursor or Google. It only reads usage numbers already shown on each product\'s own page.',
+    share: 'Share',
+    shareTitle: 'Share Token Police',
+    sharePitch: 'Remaining Claude Code, Codex, Cursor, Grok & Gemini quota in one Chrome side panel. Free, open source — nothing leaves your browser.',
+    shareCopy: 'Copy link',
+    shareCopied: 'Copied',
+    shareX: 'Share on X',
+    shareClose: 'Close',
+    shareTweet: 'Token Police: remaining Claude, Codex, Cursor, Grok & Gemini quota in one Chrome side panel. {url}',
+    shareShotAlt: 'Token Police dashboard preview',
     lowTitle: '{name}: {n}% left',
     lowBody: 'Usage quota is running low.',
     lowBodyR: 'Usage quota is running low. Resets {r}.',
@@ -126,6 +135,15 @@ const I18N = {
     builtBy: '由 {name} @ {org} 构建 · MIT 协议 · {src}',
     creditsSrc: 'GitHub 源码',
     disclaimer: '非官方项目，与 Anthropic、OpenAI、xAI、Cursor、Google 均无关联。它只读取各产品页面上已经展示的用量数字。',
+    share: '分享',
+    shareTitle: '分享 Token Police',
+    sharePitch: '一个 Chrome 侧边栏看清 Claude Code、Codex、Cursor、Grok、Gemini 还剩多少额度。免费开源，数据不出浏览器。',
+    shareCopy: '复制链接',
+    shareCopied: '已复制',
+    shareX: '分享到 X',
+    shareClose: '关闭',
+    shareTweet: 'Token Police：一个 Chrome 侧边栏看清 Claude、Codex、Cursor、Grok、Gemini 还剩多少额度。{url}',
+    shareShotAlt: 'Token Police 面板预览',
     lowTitle: '{name}：剩余 {n}%',
     lowBody: '额度即将用完。',
     lowBodyR: '额度即将用完。重置时间：{r}',
@@ -189,6 +207,12 @@ function applyI18n() {
   }
   const gearBtn = document.getElementById('gear');
   if (gearBtn) gearBtn.title = t('gearTitle');
+  const shareBtn = document.getElementById('share');
+  if (shareBtn) {
+    shareBtn.textContent = t('share');
+    shareBtn.title = t('shareTitle');
+  }
+  if (typeof fillShareCard === 'function') fillShareCard();
 }
 
 function applyStoredLang(lang) {

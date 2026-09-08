@@ -1058,6 +1058,123 @@ function renderCredits() {
   if (el) el.innerHTML = creditsLine();
 }
 
+// 分享卡片：落地页链接（不是 GitHub），复制 + 预填 X 推文。不发新的网络请求。
+var SHARE_COPIED_MS = 1600;
+var shareCopiedTimer = null;
+
+function sharePageUrl() {
+  return UPDATE_PAGE;
+}
+
+function shareTweetText() {
+  return t('shareTweet', { url: sharePageUrl() });
+}
+
+function shareIntentUrl() {
+  return 'https://x.com/intent/tweet?text=' + encodeURIComponent(shareTweetText());
+}
+
+function sharePreviewSrc() {
+  return currentLang() === 'zh' ? 'icons/share-preview-zh.webp' : 'icons/share-preview-en.webp';
+}
+
+function shareOverlayOpen() {
+  const overlay = document.getElementById('share-overlay');
+  return !!(overlay && !overlay.hidden);
+}
+
+function fillShareCard() {
+  const shot = document.getElementById('share-shot');
+  if (shot) {
+    shot.src = sharePreviewSrc();
+    shot.alt = t('shareShotAlt');
+  }
+  const title = document.getElementById('share-title');
+  if (title) title.textContent = t('shareTitle');
+  const pitch = document.getElementById('share-pitch');
+  if (pitch) pitch.textContent = t('sharePitch');
+  const urlEl = document.getElementById('share-url');
+  if (urlEl) urlEl.textContent = sharePageUrl();
+  const copyBtn = document.getElementById('share-copy');
+  if (copyBtn && shareCopiedTimer == null) copyBtn.textContent = t('shareCopy');
+  const xBtn = document.getElementById('share-x');
+  if (xBtn) xBtn.textContent = t('shareX');
+  const closeBtn = document.getElementById('share-close');
+  if (closeBtn) {
+    closeBtn.title = t('shareClose');
+    if (closeBtn.setAttribute) closeBtn.setAttribute('aria-label', t('shareClose'));
+  }
+}
+
+function openShare() {
+  fillShareCard();
+  const overlay = document.getElementById('share-overlay');
+  if (overlay) overlay.hidden = false;
+}
+
+function closeShare() {
+  const overlay = document.getElementById('share-overlay');
+  if (overlay) overlay.hidden = true;
+  if (shareCopiedTimer != null && typeof clearTimeout === 'function') {
+    clearTimeout(shareCopiedTimer);
+    shareCopiedTimer = null;
+  }
+  const copyBtn = document.getElementById('share-copy');
+  if (copyBtn) copyBtn.textContent = t('shareCopy');
+}
+
+function fallbackCopy(text) {
+  if (typeof document === 'undefined' || !document.body) return false;
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = !!(document.execCommand && document.execCommand('copy')); } catch (e) { ok = false; }
+  if (ta.parentNode) ta.parentNode.removeChild(ta);
+  return ok;
+}
+
+function markShareCopied() {
+  const copyBtn = document.getElementById('share-copy');
+  if (!copyBtn) return;
+  copyBtn.textContent = t('shareCopied');
+  if (shareCopiedTimer != null && typeof clearTimeout === 'function') clearTimeout(shareCopiedTimer);
+  if (typeof setTimeout === 'function') {
+    shareCopiedTimer = setTimeout(() => {
+      shareCopiedTimer = null;
+      if (copyBtn) copyBtn.textContent = t('shareCopy');
+    }, SHARE_COPIED_MS);
+  }
+}
+
+function copyShareLink() {
+  const url = sharePageUrl();
+  const done = () => markShareCopied();
+  if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+    const p = navigator.clipboard.writeText(url);
+    if (p && typeof p.then === 'function') {
+      p.then(done).catch(() => { if (fallbackCopy(url)) done(); });
+      return;
+    }
+    done();
+    return;
+  }
+  if (fallbackCopy(url)) done();
+}
+
+function openShareX() {
+  const url = shareIntentUrl();
+  if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.create) {
+    chrome.tabs.create({ url });
+    return;
+  }
+  if (typeof window !== 'undefined' && window.open) window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 let staleTimer = null;
 
 function render() {
@@ -1204,6 +1321,33 @@ const langBtn = document.getElementById('lang');
 if (langBtn) {
   langBtn.addEventListener('click', () => {
     setLang(currentLang() === 'zh' ? 'en' : 'zh', render);
+  });
+}
+const shareBtn = document.getElementById('share');
+if (shareBtn && shareBtn.addEventListener) {
+  shareBtn.addEventListener('click', openShare);
+}
+const shareOverlay = document.getElementById('share-overlay');
+if (shareOverlay && shareOverlay.addEventListener) {
+  shareOverlay.addEventListener('click', (e) => {
+    if (e.target === shareOverlay) closeShare();
+  });
+}
+const shareClose = document.getElementById('share-close');
+if (shareClose && shareClose.addEventListener) {
+  shareClose.addEventListener('click', closeShare);
+}
+const shareCopy = document.getElementById('share-copy');
+if (shareCopy && shareCopy.addEventListener) {
+  shareCopy.addEventListener('click', copyShareLink);
+}
+const shareX = document.getElementById('share-x');
+if (shareX && shareX.addEventListener) {
+  shareX.addEventListener('click', openShareX);
+}
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('keydown', (e) => {
+    if (e && e.key === 'Escape' && shareOverlayOpen()) closeShare();
   });
 }
 

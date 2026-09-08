@@ -1074,12 +1074,21 @@ function shareIntentUrl() {
   return 'https://x.com/intent/tweet?text=' + encodeURIComponent(shareTweetText());
 }
 
+function sharePreviewSrc() {
+  return currentLang() === 'zh' ? 'icons/share-preview-zh.webp' : 'icons/share-preview-en.webp';
+}
+
 function shareOverlayOpen() {
   const overlay = document.getElementById('share-overlay');
   return !!(overlay && !overlay.hidden);
 }
 
 function fillShareCard() {
+  const shot = document.getElementById('share-shot');
+  if (shot) {
+    shot.src = sharePreviewSrc();
+    shot.alt = t('shareShotAlt');
+  }
   const title = document.getElementById('share-title');
   if (title) title.textContent = t('shareTitle');
   const pitch = document.getElementById('share-pitch');

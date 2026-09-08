@@ -1,7 +1,7 @@
 // Render the Grok card with the SuperGrok fixture and check the remaining %.
 // Also checks default-English i18n and the 中文 / EN toggle.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
@@ -96,6 +96,7 @@ const els = {
   'share-url': el(),
   'share-copy': el(),
   'share-x': el(),
+  'share-shot': el({ src: '', alt: '' }),
 };
 
 const popupCtx = {
@@ -309,7 +310,7 @@ console.log('ok  Version line shows the installed version and flags a newer rele
 
 // --- Share card (footer button → overlay, copy + X, landing URL) ---
 const shareProblems = [];
-for (const key of ['share', 'shareTitle', 'sharePitch', 'shareCopy', 'shareCopied', 'shareX', 'shareClose', 'shareTweet']) {
+for (const key of ['share', 'shareTitle', 'sharePitch', 'shareCopy', 'shareCopied', 'shareX', 'shareClose', 'shareTweet', 'shareShotAlt']) {
   if (!ctx.t(key) || ctx.t(key) === key) shareProblems.push(`missing English i18n key ${key}`);
 }
 if (ctx.t('share') !== 'Share') shareProblems.push(`share should be Share, got ${ctx.t('share')}`);
@@ -343,6 +344,18 @@ if (!els['share-pitch'].textContent.includes('side panel')) {
 }
 if (els['share-url'].textContent !== 'https://token-police.philosophie.ai/') {
   shareProblems.push(`share card URL should be the landing page, got ${JSON.stringify(els['share-url'].textContent)}`);
+}
+if (els['share-shot'].src !== 'icons/share-preview-en.webp') {
+  shareProblems.push(`English share card should show the panel screenshot, got ${JSON.stringify(els['share-shot'].src)}`);
+}
+if (els['share-shot'].alt !== 'Token Police dashboard preview') {
+  shareProblems.push(`share screenshot alt, got ${JSON.stringify(els['share-shot'].alt)}`);
+}
+if (!existsSync(resolve(root, 'icons/share-preview-en.webp')) || !existsSync(resolve(root, 'icons/share-preview-zh.webp'))) {
+  shareProblems.push('bundled EN/ZH dashboard screenshots must ship with the extension');
+}
+if (ctx.sharePreviewSrc() !== 'icons/share-preview-en.webp') {
+  shareProblems.push(`sharePreviewSrc en, got ${ctx.sharePreviewSrc()}`);
 }
 if (els['share-copy'].textContent !== 'Copy link') shareProblems.push('copy button should say Copy link');
 if (els['share-x'].textContent !== 'Share on X') shareProblems.push('X button should say Share on X');
@@ -954,6 +967,9 @@ if (/<div class="top">[\s\S]*id="share"[\s\S]*<div class="settings"/.test(htmlCs
 if (!/id="share-overlay"[\s\S]*hidden/.test(htmlCss) || !/class="share-card"/.test(htmlCss)) {
   layoutProblems.push('Share should open a hidden overlay card, not a copy-only toast');
 }
+if (!/id="share-shot"/.test(htmlCss) || !/\.share-card \.shot\{/.test(htmlCss)) {
+  layoutProblems.push('share card should show a dashboard screenshot, not text-only');
+}
 if (!/\.share-overlay\{[^}]*z-index:\s*60/.test(htmlCss)) {
   layoutProblems.push('share overlay should sit above the mascot (z-index 40) and veil');
 }
@@ -1200,6 +1216,9 @@ if (els['share-copy'].textContent !== '复制链接' && els['share-copy'].textCo
 if (els['share-x'].textContent !== '分享到 X') zhProblems.push(`Chinese X button, got ${JSON.stringify(els['share-x'].textContent)}`);
 if (!ctx.shareTweetText().includes('侧边栏') || !ctx.shareTweetText().includes('https://token-police.philosophie.ai/')) {
   zhProblems.push('Chinese tweet should keep the landing URL');
+}
+if (els['share-shot'].src !== 'icons/share-preview-zh.webp') {
+  zhProblems.push(`Chinese share card should show the zh panel screenshot, got ${JSON.stringify(els['share-shot'].src)}`);
 }
 if (els['brand-name'].textContent !== 'TOKEN POLICE') {
   zhProblems.push(`Chinese brand, got ${JSON.stringify(els['brand-name'].textContent)}`);

@@ -1,11 +1,17 @@
 // Draft quota tips for the hair mascot. NOT wired into the dashboard yet.
-// Copy is WIP — revise before merging. Do not load this file from popup.html
-// until the wording and triggers are approved.
+// Do not load this file from popup.html until wiring is intentional.
+//
+// Eric-approved v2 (8 agent-specific tips). Copy formula:
+//   fat  ZH: 烧掉用不完的 token，你可以这样：…
+//   fat  EN: Burn the quota you’d waste anyway — you can do this: …
+//   thin ZH: 额度紧了，先别硬烧，你可以这样：…
+//   thin EN: Quota is tight — don’t burn it on fluff; do this instead: …
+// No slang like「还肥」.
 //
 // fat  — remaining quota is high, or reset is close and a lot is still unused
 // thin — remaining quota is low; stretch what is left, or wait
 //
-// say = mascot bubble. btn = optional pickable tip label (same pattern as activities).
+// say = mascot bubble (full text, including the lead-in). btn = short pickable label.
 
 var QUOTA_TIP_LIST = [];
 function addQuotaTip(pool, id, sayEn, sayZh, btnEn, btnZh) {
@@ -20,165 +26,69 @@ function addQuotaTip(pool, id, sayEn, sayZh, btnEn, btnZh) {
 // --- fat: spend leftover quota ---
 addQuotaTip(
   'fat',
-  'tipCompetitors',
-  "quota's about to rot. paste two competitors, get a feature map.",
-  '额度要作废了。丢两个竞品链接，让它拆功能表。',
-  'competitor feature map',
-  '竞品功能对照'
+  'tipGrokXComplaints',
+  'Burn the quota you’d waste anyway — you can do this: open Grok, search X for real user complaints about a product, and export a punch list with original post links.',
+  '烧掉用不完的 token，你可以这样：打开 Grok，搜 X 上用户对某产品的真实吐槽，整理成带原帖链接的抱怨清单。',
+  'Grok: X complaint list',
+  'Grok：搜 X 抱怨清单'
 );
 addQuotaTip(
   'fat',
-  'tipTranslate',
-  "don't let tokens die at reset. paste a long piece and translate it.",
-  '别让 token 烂在重置里。丢一篇长文，中英来回翻。',
-  'translate a long piece',
-  '翻译一篇长文'
+  'tipGeminiPromoImages',
+  'Burn the quota you’d waste anyway — you can do this: open Gemini, upload a product blurb or screenshot, and generate 3 promo-image drafts in different styles.',
+  '烧掉用不完的 token，你可以这样：打开 Gemini，上传一页产品说明或截图，让它生成 3 张不同风格的宣传图草稿。',
+  'Gemini: 3 promo drafts',
+  'Gemini：3 张宣传图'
 );
 addQuotaTip(
   'fat',
-  'tipTests',
-  "quota's still fat. have it cover the barest module with tests.",
-  '额度还胖。让它给最裸的模块补测试，别再手写样板。',
-  'cover a bare module',
-  '给裸模块补测试'
+  'tipCursorCloudBug',
+  'Burn the quota you’d waste anyway — you can do this: launch a Cursor cloud agent on one repo with one clear bug and have it open a PR.',
+  '烧掉用不完的 token，你可以这样：在 Cursor 开 cloud agent，指定 repo 和一个边界清晰的 bug，让它改完并开 PR。',
+  'Cursor: cloud agent PR',
+  'Cursor：cloud agent 开 PR'
 );
 addQuotaTip(
   'fat',
-  'tipOnboarding',
-  'this batch expires anyway. dump the onboarding in your head into a doc.',
-  '这波过期没人心疼。把脑子里的 onboarding 倒给它，写成文档。',
-  'dump onboarding docs',
-  '倒出 onboarding'
+  'tipGrokBotRoutine',
+  'Burn the quota you’d waste anyway — you can do this: demo once to Grok Bot—log into a portal, export, save to Drive—then save it as a routine to run overnight.',
+  '烧掉用不完的 token，你可以这样：演示一次「登录某后台→导出→归档到 Drive」给 Grok Bot，让它固化成 routine 过夜跑。',
+  'Grok Bot: overnight routine',
+  'Grok Bot：固化过夜 routine'
 );
 addQuotaTip(
   'fat',
-  'tipStalePrs',
-  "you've barely burned anything. toss the stale PRs in for review notes.",
-  '你都快零消耗了。积压 PR 丢进来，先让它写 review 要点。',
-  'review stale PRs',
-  '清积压 PR'
-);
-addQuotaTip(
-  'fat',
-  'tipPriceyModel',
-  "don't cheap out today. use the pricey model on the hard design.",
-  '今天别省着。切最贵的模型，把难设计问透。',
-  'use the expensive model',
-  '切大模型想清楚'
-);
-addQuotaTip(
-  'fat',
-  'tipNewStack',
-  "it's zeroing out anyway. blow this on a throwaway of that stack you want.",
-  '反正要清零。用这波额度探一个一直想试的栈，能跑就行。',
-  'throwaway stack prototype',
-  '扔一个新栈原型'
-);
-addQuotaTip(
-  'fat',
-  'tipArchMap',
-  'feed it the entry files. get a module map. next onboarding just got shorter.',
-  '丢入口文件进去，让它画模块图。下次 onboarding 少讲半小时。',
-  'map the architecture',
-  '画仓库模块图'
-);
-addQuotaTip(
-  'fat',
-  'tipChangelog',
-  "quota's idle. turn recent commits into a changelog humans can read.",
-  '额度闲着。把最近的 commit 喂进去，写一版人能看的更新说明。',
-  'changelog from git',
-  '从 commit 写更新说明'
-);
-addQuotaTip(
-  'fat',
-  'tipRedTeam',
-  "feature's in, quota isn't gone. have it hunt edges, bad data, and holes.",
-  '功能写完了，额度还在。让它专门找边界、坏数据和权限漏洞。',
-  'red-team the feature',
-  '给功能做红队'
+  'tipClaudeCodeTests',
+  'Burn the quota you’d waste anyway — you can do this: open Claude Code in your terminal on this repo, run the tests, and fix until green.',
+  '烧掉用不完的 token，你可以这样：在本机终端打开 Claude Code，对准当前仓库跑测试并修到绿。',
+  'Claude Code: tests to green',
+  'Claude Code：测试修到绿'
 );
 
 // --- thin: save / stretch quota ---
 addQuotaTip(
   'thin',
-  'tipSpecFirst',
-  'no more long chats. write the goal on paper, then ask once.',
-  '别开长会话了。纸上写清目标，一次问完。',
-  'spec first, then one ask',
-  '先写 spec 再提问'
+  'tipGrokShortAsk',
+  'Quota is tight — don’t burn it on fluff; do this instead: ask Grok one concrete question for a 3-bullet answer plus two links—no long research.',
+  '额度紧了，先别硬烧，你可以这样：只丢一个具体问题给 Grok，要三句结论+两条链接，别开长调研。',
+  'Grok: 3 bullets + 2 links',
+  'Grok：三句+两条链接'
 );
 addQuotaTip(
   'thin',
-  'tipCheapModel',
-  "don't use the flagship to rename stuff. save quota for the part that thinks.",
-  '改文案、改 import 别用旗舰。额度留给会想的那一步。',
-  'cheap model for boilerplate',
-  '样板用便宜模型'
+  'tipCursorLocalFirst',
+  'Quota is tight — don’t burn it on fluff; do this instead: fix one file locally with the shortest prompt; only then spend cloud agent quota.',
+  '额度紧了，先别硬烧，你可以这样：先在本地用最短提示改一个文件，确认思路再开 cloud agent。',
+  'Cursor: local first',
+  'Cursor：先本地再 cloud'
 );
 addQuotaTip(
   'thin',
-  'tipAtFiles',
-  'longer context, faster burn. @ the files. don\'t dump the whole repo.',
-  '上下文越长越烧。点名文件，别把整个 repo 塞进去。',
-  '@ only the files you need',
-  '只 @ 相关文件'
-);
-addQuotaTip(
-  'thin',
-  'tipGrepFirst',
-  'grep the error, run the tests. if you can find it, don\'t ask.',
-  '报错先搜、测试先跑。搜得到就别问 agent。',
-  'grep before you ask',
-  '先 grep 再问'
-);
-addQuotaTip(
-  'thin',
-  'tipPlanOnly',
-  'take the plan, then stop. write this round yourself.',
-  '让它出步骤就停。这轮手写，额度留着打难的。',
-  'take the plan, write it',
-  '只要计划自己写'
-);
-addQuotaTip(
-  'thin',
-  'tipDiffOnly',
-  "ask for a diff, not a full reprint. that's half the tokens.",
-  '要补丁，不要全文重印。能省一半 token。',
-  'ask for a diff',
-  '只要 diff 不要全文'
-);
-addQuotaTip(
-  'thin',
-  'tipBatchAsks',
-  'three small questions, one prompt. don\'t open three chats.',
-  '三个小问题合成一条。别连开三个会话。',
-  'batch the questions',
-  '问题合成一条'
-);
-addQuotaTip(
-  'thin',
-  'tipSwitchAgent',
-  "this one's empty. the card next to it is still fat — use that.",
-  '这个见底了。旁边那个还肥，先用它顶住。',
-  'switch to a fatter agent',
-  '换一个还有额度的'
-);
-addQuotaTip(
-  'thin',
-  'tipWaitReset',
-  'hold on. reset is cheaper than stretching this. comments and tickets till then.',
-  '撑一下。重置比续命便宜。先写注释、整理 ticket。',
-  'wait for reset',
-  '撑到重置'
-);
-addQuotaTip(
-  'thin',
-  'tipZeroToken',
-  "quota's gone, don't force it. sketch, reply, sort the backlog. brain is free this round.",
-  '额度见底就别硬烧。去画稿、回消息、整理 backlog。人脑这轮免费。',
-  'do zero-token work',
-  '做零 token 的活'
+  'tipGeminiOnePass',
+  'Quota is tight — don’t burn it on fluff; do this instead: use Gemini for one short Q&A or a single image pass—skip long video and multi-round polish.',
+  '额度紧了，先别硬烧，你可以这样：用 Gemini 只做一次短问答或压一张图，别开长视频/多轮精修。',
+  'Gemini: one short pass',
+  'Gemini：一次短问答或压图'
 );
 
 var QUOTA_TIPS = { fat: [], thin: [] };

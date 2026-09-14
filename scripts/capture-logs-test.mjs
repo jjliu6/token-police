@@ -41,8 +41,8 @@ if (parsed.length !== 5000 || parsed[0].timestamp < parsed[1].timestamp) {
 
 const csv = ctx.captureLogsCsv(pruned);
 if (!csv.startsWith('"timestamp","status"')) problems.push('CSV export should include a stable header');
-for (const unsafe of ['"=HYPERLINK', '"+cmd"', '"@formula"', '"-1 day"']) {
-  if (csv.includes(unsafe)) problems.push(`CSV formula injection was not neutralized: ${unsafe}`);
+if (/(?:^|,)"[=+\-@]/m.test(csv)) {
+  problems.push('CSV contains a cell whose first character can trigger a spreadsheet formula');
 }
 for (const safe of ['"\'=HYPERLINK', '"\'+cmd"', '"\'@formula', '"\'-1 day"']) {
   if (!csv.includes(safe)) problems.push(`CSV should prefix formula-like values: ${safe}`);

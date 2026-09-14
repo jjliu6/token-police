@@ -35,7 +35,7 @@ function csvSafe(value) {
 
 function captureLogsCsv(logs) {
   const columns = [
-    'timestamp', 'status', 'agent_id', 'agent_name', 'trigger', 'duration_ms',
+    'timestamp', 'attempted_at', 'status', 'agent_id', 'agent_name', 'trigger', 'duration_ms',
     'reason', 'percent_left', 'limits', 'tokens_total', 'credits', 'plan',
     'source_url', 'extension_version',
   ];

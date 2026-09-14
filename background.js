@@ -228,6 +228,7 @@ function saveAgent(a) {
       const timestamp = Number(a.scraped_at) || Date.now();
       const log = {
         timestamp,
+        attempted_at: timestamp,
         status: 'success',
         agent_id: a.id,
         agent_name: merged.name || (AGENTS.find((x) => x.id === a.id) || {}).name || a.id,
@@ -269,6 +270,7 @@ function saveFailedAttempt(agent, status, reason, trigger, started, sourceUrl) {
       const timestamp = Date.now();
       const log = {
         timestamp,
+        attempted_at: timestamp,
         status: status === 'missing' ? 'missing' : 'failed',
         agent_id: agent.id,
         agent_name: agent.name || agent.id,

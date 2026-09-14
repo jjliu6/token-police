@@ -40,7 +40,7 @@ if (parsed.length !== 5000 || parsed[0].timestamp < parsed[1].timestamp) {
 }
 
 const csv = ctx.captureLogsCsv(pruned);
-if (!csv.startsWith('"timestamp","status"')) problems.push('CSV export should include a stable header');
+if (!csv.startsWith('"timestamp","attempted_at","status"')) problems.push('CSV export should include a stable header');
 if (/(?:^|,)"[=+\-@]/m.test(csv)) {
   problems.push('CSV contains a cell whose first character can trigger a spreadsheet formula');
 }

@@ -114,9 +114,58 @@ function makeAgents() {
 
 // 抓到的数据发给 background 统一写入。多个抓取标签页可能同时完成，
 // 各自 get→改→set 会互相覆盖，所以由 background 排队串行写。
+const captureStartedAt = Date.now();
+
+function captureTrigger() {
+  const m = (location.search || '').match(/[?&]cawtrigger=([^&]+)/);
+  if (m && decodeURIComponent(m[1]) === 'automatic') return 'automatic';
+  if (m && decodeURIComponent(m[1]) === 'manual') return 'manual';
+  if (/(?:\?|&)cawrefresh(?:=|&|$)/.test(location.search || '')) return 'manual';
+  return 'page';
+}
+
+function captureSourceUrl() {
+  if (location.href) return location.href;
+  return `https://${location.hostname}${location.pathname || '/'}${location.search || ''}${location.hash || ''}`;
+}
+
+function pageAgentIds() {
+  const h = location.hostname;
+  const p = location.pathname || '';
+  const q = location.search || '';
+  if (h.includes('claude.ai') && p.startsWith('/new')) return ['claude-code'];
+  if (h.includes('chatgpt.com') && p.includes('/codex/cloud/settings/analytics')) return ['codex'];
+  if (h.includes('grok.com') && /[?&]_s=usage/.test(q)) return ['grok-build'];
+  if (h.includes('cursor.com') && p.includes('/dashboard/spending')) return ['cursor', 'grok-bot'];
+  if (h.includes('cursor.com') && p.includes('/dashboard/usage')) return ['cursor'];
+  if (h.includes('gemini.google.com') && p.includes('/usage')) return ['gemini'];
+  return [];
+}
+
+function reportPageOutcomes() {
+  if (captureTrigger() !== 'page') return;
+  pageAgentIds().forEach((id) => {
+    if (saved[id]) return;
+    const missing = id === 'grok-bot' && !!saved.cursor;
+    try {
+      chrome.runtime.sendMessage({
+        type: 'pageCaptureFailed',
+        agent_id: id,
+        status: missing ? 'missing' : 'failed',
+        reason: missing ? 'section_missing' : 'read_failed',
+        started: captureStartedAt,
+        source_url: captureSourceUrl(),
+      });
+    } catch (e) {}
+  });
+}
+
 function save(a, done) {
   a.scraped_at = Date.now();
   a.status = 'ok';
+  a.capture_trigger = captureTrigger();
+  a.capture_source_url = captureSourceUrl();
+  a.capture_duration_ms = a.scraped_at - captureStartedAt;
   try {
     chrome.runtime.sendMessage({ type: 'agentData', agent: a }, () => {
       void chrome.runtime.lastError;
@@ -155,6 +204,7 @@ function finish() { if (obs) obs.disconnect(); if (iv) clearInterval(iv); }
 function maybeClose() {
   if (!done || inflight > 0 || closing) return;
   closing = true;
+  reportPageOutcomes();
   closeIfAuto();
 }
 function tryOnce() {

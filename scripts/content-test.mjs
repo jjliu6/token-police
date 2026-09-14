@@ -14,7 +14,7 @@ const contentSrc = readFileSync(resolve(root, 'content.js'), 'utf8');
 
 // 造一个最小的假浏览器环境：innerText 就是我们给的文本，MutationObserver / setInterval
 // 都由测试手动触发，chrome.runtime.sendMessage 记录发出的消息。
-function runPage({ host, search = '', text }) {
+function runPage({ host, path = '/', search = '', text }) {
   const sent = [];
   let body = { innerText: text, childNodes: [] };
   let observerCb = null;
@@ -25,7 +25,7 @@ function runPage({ host, search = '', text }) {
     clearInterval: () => { intervalCb = null; },
     MutationObserver: class { constructor(cb) { observerCb = cb; } observe() {} disconnect() { observerCb = null; } },
     document: { body, documentElement: {} },
-    location: { hostname: host, search },
+    location: { hostname: host, pathname: path, search, hash: '', href: `https://${host}${path}${search}` },
     chrome: { runtime: { sendMessage: (msg, cb) => { sent.push(msg); if (cb) cb(); }, lastError: null } },
   };
   const ctx = vm.createContext(ctxObj);
@@ -37,6 +37,7 @@ function runPage({ host, search = '', text }) {
     tick: () => { if (intervalCb) intervalCb(); },
     agents: () => sent.filter((m) => m.type === 'agentData').map((m) => m.agent),
     closed: () => sent.some((m) => m.type === 'closeMe'),
+    failures: () => sent.filter((m) => m.type === 'pageCaptureFailed'),
   };
 }
 
@@ -78,7 +79,17 @@ Resets 9月3日 (23 hours and 4 minutes left)
   check(bot && bot.limits[0].percent_left === 87, `Grok Bot should be 87% left, got ${JSON.stringify(bot)}`);
   check(bot && bot.limits[0].resets_text === '9月3日 (23 hours and 4 minutes left)', `Grok Bot reset text, got ${bot && bot.limits[0].resets_text}`);
   check(ag.every((a) => a.status === 'ok' && a.scraped_at > 0), 'every agent should carry status/scraped_at');
+  check(ag.every((a) => a.capture_trigger === 'manual' && a.capture_source_url.includes('cursor.com')), 'auto-opened agents should carry trigger/source metadata');
   check(p.closed(), 'auto-opened spending page should close after both agents are saved');
+}
+
+// --- A user-opened spending page records section_missing, not a login failure ---
+{
+  const noBot = SPENDING.slice(0, SPENDING.indexOf('Grok Bot'));
+  const p = runPage({ host: 'cursor.com', path: '/dashboard/spending', text: noBot });
+  const miss = p.failures().find((x) => x.agent_id === 'grok-bot');
+  check(miss && miss.status === 'missing' && miss.reason === 'section_missing',
+    `page scrape should report missing/section_missing for Grok Bot, got ${JSON.stringify(p.failures())}`);
 }
 
 // --- Same page without a Grok Bot section: only Cursor, and the tab still closes ---
@@ -107,6 +118,15 @@ Resets 9月3日 (23 hours and 4 minutes left)
   for (let i = 0; i < 31; i++) p.tick();
   check(p.agents().length === 0, 'no data should be sent for a page that never renders');
   check(p.closed(), 'auto-opened page should still close after the timeout');
+}
+
+// --- User-opened usage page timeout reports a failed page attempt ---
+{
+  const p = runPage({ host: 'gemini.google.com', path: '/usage', text: 'Loading…' });
+  for (let i = 0; i < 31; i++) p.tick();
+  const fail = p.failures()[0];
+  check(fail && fail.agent_id === 'gemini' && fail.status === 'failed' && fail.reason === 'read_failed',
+    `page timeout should report failed/read_failed, got ${JSON.stringify(p.failures())}`);
 }
 
 // --- Gemini usage page from the user's screenshot ---

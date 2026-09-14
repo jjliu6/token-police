@@ -100,12 +100,15 @@
   .credits a{color:#5f6775;text-decoration:none}
   .credits a:hover{text-decoration:underline}
   .share-bar{display:flex;justify-content:center;margin:8px 0 0}
-  .btn.share{font-size:10.5px;padding:4px 12px;letter-spacing:.04em}
+  .footer-actions{display:flex;justify-content:center;gap:7px;margin:8px 0 0}
+  .btn.share{font-size:10.5px;padding:5px 12px;letter-spacing:.04em;background:#2f5d4a;color:#d9ffe9}
+  .btn.logs{font-size:10.5px;padding:5px 12px;letter-spacing:.04em;background:transparent;border:1px solid #343a46;color:var(--ink2)}
   .share-overlay{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:18px 14px;background:rgba(8,10,14,.62);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
   .share-card{position:relative;width:100%;max-width:300px;background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:10px 12px 14px;box-shadow:0 14px 36px rgba(0,0,0,.45);overflow:hidden}
   .share-card .shot{display:block;width:calc(100% + 24px);max-width:none;margin:-10px -12px 10px;height:auto;border:none;border-bottom:1px solid var(--line);background:#14161c}
   .share-card .ttl{font-size:12px;font-weight:700;letter-spacing:.08em;margin:0 28px 6px 0}
   .share-card .pitch{font-size:11.5px;color:var(--ink2);line-height:1.45;margin:0 0 10px}
+  .share-card .privacy{font-size:11px;font-weight:650;color:#d9ffe9;line-height:1.45;margin:0 0 10px;padding:8px 9px;border:1px solid rgba(92,207,158,.28);border-radius:8px;background:rgba(47,93,74,.3)}
   .share-card .url{font-size:10.5px;color:var(--muted);background:#2a2f3a;border-radius:8px;padding:7px 9px;margin:0 0 10px;overflow-wrap:anywhere;word-break:break-all;user-select:all}
   .share-actions{display:flex;gap:6px}
   .share-actions .btn{flex:1;text-align:center;padding:7px 8px}
@@ -115,6 +118,24 @@
   .share-dismiss:hover{background:rgba(20,22,28,.8);color:var(--ink)}
   .fail{font-size:10.5px;color:var(--bad);margin-top:7px;line-height:1.4}
   .fail a{color:var(--ink2);white-space:nowrap}
+  .card.stale .ring,.card.stale .stats,.card.stale .spark{filter:grayscale(.8);opacity:.58}
+  .freshness{font-size:10.5px;color:var(--warn);margin-top:7px;line-height:1.4}
+  .freshness.cache{color:var(--muted)}
+  .attempt{font-size:10px;color:var(--bad);margin-top:4px}
+  .logs-view{position:fixed;inset:0;z-index:70;background:#14161c;padding:12px 13px 18px;display:flex;flex-direction:column;overflow:hidden}
+  .logs-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+  .logs-head h1{font-size:14px;letter-spacing:.06em}
+  .logs-toolbar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .logs-toolbar .btn{padding:6px 9px}
+  .logs-toolbar .filter.active{background:#2f5d4a;color:#d9ffe9}
+  .logs-toolbar .danger{color:#ffb0b0;margin-left:auto}
+  .logs-list{overflow-y:auto;display:flex;flex-direction:column;gap:7px;min-height:0}
+  .log-row{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 10px}
+  .log-top{display:flex;justify-content:space-between;gap:8px;font-size:11px}
+  .log-status{font-weight:700;color:var(--good)}
+  .log-status.failed,.log-status.missing{color:var(--bad)}
+  .log-meta,.log-detail{font-size:10px;color:var(--muted);line-height:1.45;margin-top:4px;overflow-wrap:anywhere}
+  .logs-empty{margin:auto;text-align:center;color:var(--muted);font-size:12px;line-height:1.6;padding:30px}
   .spark{margin-top:7px;border-bottom:1px solid var(--line)}
   .spark svg{display:block;width:100%;height:22px}
   .settings{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:var(--ink2)}
@@ -147,7 +168,7 @@
   <div class="bottom">
     <div class="hint" id="hint"></div>
     <div class="ver" id="ver"></div>
-    <div class="share-bar"><button class="btn share" id="share" type="button">Share</button></div>
+    <div class="footer-actions"><button class="btn logs" id="logs" type="button">Logs</button><button class="btn share" id="share" type="button">Share app</button></div>
     <div class="credits" id="credits"></div>
   </div>
   <div class="share-overlay" id="share-overlay" hidden>
@@ -156,6 +177,7 @@
       <img class="shot" id="share-shot" src="icons/share-preview-en.webp" alt="" width="640" height="472">
       <p class="ttl" id="share-title"></p>
       <p class="pitch" id="share-pitch"></p>
+      <p class="privacy" id="share-privacy"></p>
       <p class="url" id="share-url"></p>
       <div class="share-actions">
         <button class="btn copy" id="share-copy" type="button">Copy link</button>
@@ -163,6 +185,18 @@
       </div>
     </div>
   </div>
+  <section class="logs-view" id="logs-view" hidden aria-labelledby="logs-title">
+    <div class="logs-head"><h1 id="logs-title">Logs</h1><button class="btn" id="logs-close" type="button">Close</button></div>
+    <div class="logs-toolbar">
+      <button class="btn filter active" type="button" data-log-filter="all">All</button>
+      <button class="btn filter" type="button" data-log-filter="success">Success</button>
+      <button class="btn filter" type="button" data-log-filter="failure">Failed</button>
+      <button class="btn" id="logs-json" type="button">Export JSON</button>
+      <button class="btn" id="logs-csv" type="button">Export CSV</button>
+      <button class="btn danger" id="logs-clear" type="button">Clear logs</button>
+    </div>
+    <div class="logs-list" id="logs-list"></div>
+  </section>
   <div class="buddy wander" id="buddy" hidden>
     <p class="say" id="say" hidden></p>
     <span class="mascot" id="hair" hidden></span>
@@ -171,6 +205,7 @@
   <script src="agents.js"></script>
   <script src="activities.js"></script>
   <script src="update.js"></script>
+  <script src="capture-logs.js"></script>
   <script src="i18n.js"></script>
   <script src="popup.js"></script>
 </body>

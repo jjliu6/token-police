@@ -5,7 +5,7 @@
 // - 只刷新用户在面板里勾选的产品（enabledAgents，缺省全开）。
 // - 刷新结束后按 agent 记录成/败（refresh.results），面板据此提示"没抓到，可能未登录"。
 
-importScripts('agents.js', 'i18n.js', 'update.js');
+importScripts('agents.js', 'i18n.js', 'update.js', 'capture-logs.js');
 
 let refreshing = false;
 
@@ -21,8 +21,8 @@ function clearBadge() {
 }
 
 // 每小时静默自动检查（autoRefresh，默认开）：所有勾选的产品统一在后台标签页尽力抓，
-// 绝不抢焦点。重页面(Cursor/Grok)在后台可能被浏览器节流渲染不出来——抓不到就保持
-// 原数据、不标失败（卡片上的 "Xh ago" 反映新鲜度），要保证最新走手动 Refresh。
+// 绝不抢焦点。重页面(Cursor/Grok)在后台可能被浏览器节流渲染不出来——抓不到就保留
+// 原数据，同时在卡片与本地日志里记录失败；要保证最新走手动 Refresh。
 // 只在闹钟还不存在时才创建。service worker 会被反复唤醒又休眠，每次冷启动都重跑
 // syncAlarm/syncUpdateAlarm；而 chrome.alarms.create 用同一个名字再建一次，会取消旧闹钟、
 // 把周期倒计时清零。频繁重启就意味着倒计时永远走不到点——闹钟从不触发。先 get 一下，
@@ -59,7 +59,9 @@ async function runQuietRefresh() {
   if (refreshing) return; // 手动刷新进行中就别添乱
   const en = (await getLocal(['enabledAgents'])).enabledAgents || {};
   const list = AGENTS.filter((a) => en[a.id] !== false);
-  await Promise.all(uniqueUrls(list).map((u) => openAndWait(u, false, 25000)));
+  const started = Date.now();
+  await Promise.all(uniqueUrls(list).map((u) => openAndWait(u, false, 25000, 'automatic')));
+  await recordRefreshFailures(list, started, 'automatic');
 }
 
 // 每天检查一次有没有新版本（checkUpdates，默认开）：向 GitHub 的公开 API 问一句
@@ -201,7 +203,7 @@ function maybeMoveNudge(a, hist) {
 
 function saveAgent(a) {
   const run = () => new Promise((resolve) => {
-    chrome.storage.local.get(['agents', 'history'], (res) => {
+    chrome.storage.local.get(['agents', 'history', 'captureLogs', 'latestAttempts'], (res) => {
       const map = res.agents || {};
       const prev = map[a.id];
       const oldPct = prev && prev.limits && prev.limits[0] ? prev.limits[0].percent_left : null;
@@ -223,17 +225,134 @@ function saveAgent(a) {
       }
       maybeNotify(merged, oldPct, pct);
       maybeMoveNudge(merged, hist);
-      chrome.storage.local.set({ agents: map, history: hist }, resolve);
+      const timestamp = Number(a.scraped_at) || Date.now();
+      const log = {
+        timestamp,
+        status: 'success',
+        agent_id: a.id,
+        agent_name: merged.name || (AGENTS.find((x) => x.id === a.id) || {}).name || a.id,
+        trigger: a.capture_trigger || 'page',
+        duration_ms: Math.max(0, Number(a.capture_duration_ms) || 0),
+        reason: '',
+        percent_left: pct,
+        limits: (merged.limits || []).map((limit) => ({
+          label: limit.label == null ? '' : String(limit.label),
+          percent_left: limit.percent_left == null ? null : Number(limit.percent_left),
+          resets_text: limit.resets_text == null ? null : String(limit.resets_text),
+        })),
+        tokens_total: merged.tokens && merged.tokens.total != null ? merged.tokens.total : null,
+        credits: merged.credits == null ? null : String(merged.credits),
+        plan: merged.plan == null ? null : String(merged.plan),
+        source_url: sanitizeSourceUrl(a.capture_source_url),
+        extension_version: chrome.runtime.getManifest().version,
+      };
+      const logs = pruneCaptureLogs([...(res.captureLogs || []), log], timestamp);
+      const latestAttempts = Object.assign({}, res.latestAttempts, {
+        [a.id]: {
+          status: 'success',
+          attempted_at: timestamp,
+          duration_ms: log.duration_ms,
+          reason: '',
+          trigger: log.trigger,
+        },
+      });
+      chrome.storage.local.set({ agents: map, history: hist, captureLogs: logs, latestAttempts }, resolve);
     });
   });
   writeQueue = writeQueue.then(run, run);
   return writeQueue;
 }
 
+function saveFailedAttempt(agent, status, reason, trigger, started, sourceUrl) {
+  const run = () => new Promise((resolve) => {
+    chrome.storage.local.get(['captureLogs', 'latestAttempts'], (res) => {
+      const timestamp = Date.now();
+      const log = {
+        timestamp,
+        status: status === 'missing' ? 'missing' : 'failed',
+        agent_id: agent.id,
+        agent_name: agent.name || agent.id,
+        trigger,
+        duration_ms: Math.max(0, timestamp - started),
+        reason: reason || 'read_failed',
+        percent_left: null,
+        limits: [],
+        tokens_total: null,
+        credits: null,
+        plan: null,
+        source_url: sanitizeSourceUrl(sourceUrl || agent.page),
+        extension_version: chrome.runtime.getManifest().version,
+      };
+      const logs = pruneCaptureLogs([...(res.captureLogs || []), log], timestamp);
+      const latestAttempts = Object.assign({}, res.latestAttempts, {
+        [agent.id]: {
+          status: log.status,
+          attempted_at: timestamp,
+          duration_ms: log.duration_ms,
+          reason: log.reason,
+          trigger,
+        },
+      });
+      chrome.storage.local.set({ captureLogs: logs, latestAttempts }, resolve);
+    });
+  });
+  writeQueue = writeQueue.then(run, run);
+  return writeQueue;
+}
+
+function clearCaptureLogs() {
+  const run = () => new Promise((resolve) => {
+    chrome.storage.local.set({ captureLogs: [] }, resolve);
+  });
+  writeQueue = writeQueue.then(run, run);
+  return writeQueue;
+}
+
+async function recordRefreshFailures(list, started, trigger) {
+  const map = (await getLocal(['agents'])).agents || {};
+  const fresh = (id) => !!(map[id] && map[id].scraped_at >= started);
+  const statuses = {};
+  for (const agent of list) {
+    if (fresh(agent.id)) {
+      statuses[agent.id] = 'ok';
+      continue;
+    }
+    const missing = agent.id === 'grok-bot' && fresh('cursor');
+    statuses[agent.id] = missing ? 'missing' : 'fail';
+    await saveFailedAttempt(
+      agent,
+      missing ? 'missing' : 'failed',
+      missing ? 'section_missing' : 'read_failed',
+      trigger,
+      started,
+      agent.id === 'grok-bot' ? 'https://cursor.com/dashboard/spending' : agent.page,
+    );
+  }
+  return statuses;
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'agentData' && msg.agent && typeof msg.agent.id === 'string') {
     saveAgent(msg.agent).then(() => sendResponse({ ok: true }));
     return true; // 等写完再 sendResponse
+  }
+  if (msg && msg.type === 'pageCaptureFailed' && typeof msg.agent_id === 'string') {
+    const agent = AGENTS.find((a) => a.id === msg.agent_id);
+    if (agent) {
+      saveFailedAttempt(
+        agent,
+        msg.status === 'missing' ? 'missing' : 'failed',
+        msg.reason || 'read_failed',
+        'page',
+        Number(msg.started) || Date.now(),
+        msg.source_url || (sender.tab && sender.tab.url),
+      ).then(() => sendResponse({ ok: true }));
+      return true;
+    }
+  }
+  if (msg && msg.type === 'clearCaptureLogs') {
+    clearCaptureLogs().then(() => sendResponse({ ok: true }));
+    return true;
   }
   if (msg && msg.type === 'closeMe' && sender.tab && sender.tab.id != null) {
     chrome.tabs.remove(sender.tab.id, () => void chrome.runtime.lastError);
@@ -242,9 +361,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // 打开一个标签页，等它被 content.js 抓完自己关掉；最多等 maxMs 就强制关、继续下一个
-function openAndWait(url, active, maxMs) {
+function openAndWait(url, active, maxMs, trigger) {
   return new Promise((resolve) => {
-    chrome.tabs.create({ url, active }, (tab) => {
+    let target = url;
+    if (trigger) {
+      try {
+        const parsed = new URL(url);
+        parsed.searchParams.set('cawtrigger', trigger);
+        target = parsed.toString();
+      } catch (e) { /* keep the registered URL */ }
+    }
+    chrome.tabs.create({ url: target, active }, (tab) => {
       const tid = tab && tab.id;
       if (tid == null) return resolve();
       let finished = false;
@@ -277,19 +404,10 @@ async function runRefresh() {
     const en = (await getLocal(['enabledAgents'])).enabledAgents || {};
     const list = AGENTS.filter((a) => en[a.id] !== false);
     // 轻页面：后台并行；重页面：前台逐个，抓到即关（同一 URL 只开一次）
-    const bg = uniqueUrls(list, (a) => !a.foreground).map((u) => openAndWait(u, false, 25000));
-    for (const u of uniqueUrls(list, (a) => a.foreground)) await openAndWait(u, true, 25000);
+    const bg = uniqueUrls(list, (a) => !a.foreground).map((u) => openAndWait(u, false, 25000, 'manual'));
+    for (const u of uniqueUrls(list, (a) => a.foreground)) await openAndWait(u, true, 25000, 'manual');
     await Promise.all(bg);
-    // 这轮有没有真的抓到新数据：拿 scraped_at 和本轮开始时间比
-    const map = (await getLocal(['agents'])).agents || {};
-    results = {};
-    const fresh = (id) => !!(map[id] && map[id].scraped_at >= started);
-    list.forEach((a) => {
-      results[a.id] = fresh(a.id) ? 'ok' : 'fail';
-    });
-    // Grok Bot 和 Cursor 同页：Cursor 抓到了而 Grok Bot 没有 → 页面读到了，只是没有 Grok Bot 区块
-    //（多半是没开通），面板据此提示"可在 ⚙ 里取消勾选"，而不是误报"可能未登录"
-    if (results['grok-bot'] === 'fail' && fresh('cursor')) results['grok-bot'] = 'missing';
+    results = await recordRefreshFailures(list, started, 'manual');
   } finally {
     refreshing = false;
     setRefresh({ running: false, finished: Date.now(), results });

@@ -93,10 +93,19 @@ const els = {
   'share-close': el(),
   'share-title': el(),
   'share-pitch': el(),
+  'share-privacy': el(),
   'share-url': el(),
   'share-copy': el(),
   'share-x': el(),
   'share-shot': el({ src: '', alt: '' }),
+  logs: el(),
+  'logs-view': el({ hidden: true }),
+  'logs-title': el(),
+  'logs-close': el(),
+  'logs-list': el(),
+  'logs-json': el(),
+  'logs-csv': el(),
+  'logs-clear': el(),
 };
 
 const popupCtx = {
@@ -163,6 +172,7 @@ const ctx = vm.createContext(popupCtx);
 vm.runInContext(readFileSync(resolve(root, 'agents.js'), 'utf8'), ctx, { filename: 'agents.js' });
 vm.runInContext(readFileSync(resolve(root, 'activities.js'), 'utf8'), ctx, { filename: 'activities.js' });
 vm.runInContext(readFileSync(resolve(root, 'update.js'), 'utf8'), ctx, { filename: 'update.js' });
+vm.runInContext(readFileSync(resolve(root, 'capture-logs.js'), 'utf8'), ctx, { filename: 'capture-logs.js' });
 vm.runInContext(readFileSync(resolve(root, 'i18n.js'), 'utf8'), ctx, { filename: 'i18n.js' });
 vm.runInContext(readFileSync(resolve(root, 'popup.js'), 'utf8'), ctx, { filename: 'popup.js' });
 
@@ -178,7 +188,8 @@ if (els.legend.textContent !== 'number = remaining') {
 }
 if (els.lang.textContent !== '中文') problems.push(`English UI should show a 中文 button, got ${JSON.stringify(els.lang.textContent)}`);
 if (els.refresh.textContent !== 'Refresh') problems.push(`default refresh label should be Refresh, got ${JSON.stringify(els.refresh.textContent)}`);
-if (els.share.textContent !== 'Share') problems.push(`default share label should be Share, got ${JSON.stringify(els.share.textContent)}`);
+if (els.share.textContent !== 'Share app') problems.push(`default share label should be Share app, got ${JSON.stringify(els.share.textContent)}`);
+if (els.logs.textContent !== 'Logs') problems.push(`default logs label should be Logs, got ${JSON.stringify(els.logs.textContent)}`);
 if (popupCtx.document.documentElement.lang !== 'en') {
   problems.push(`<html lang> should be en by default, got ${popupCtx.document.documentElement.lang}`);
 }
@@ -310,10 +321,10 @@ console.log('ok  Version line shows the installed version and flags a newer rele
 
 // --- Share card (footer button → overlay, copy + X, landing URL) ---
 const shareProblems = [];
-for (const key of ['share', 'shareTitle', 'sharePitch', 'shareCopy', 'shareCopied', 'shareX', 'shareClose', 'shareTweet', 'shareShotAlt']) {
+for (const key of ['share', 'shareTitle', 'sharePitch', 'sharePrivacy', 'shareCopy', 'shareCopied', 'shareX', 'shareClose', 'shareTweet', 'shareShotAlt']) {
   if (!ctx.t(key) || ctx.t(key) === key) shareProblems.push(`missing English i18n key ${key}`);
 }
-if (ctx.t('share') !== 'Share') shareProblems.push(`share should be Share, got ${ctx.t('share')}`);
+if (ctx.t('share') !== 'Share app') shareProblems.push(`share should be Share app, got ${ctx.t('share')}`);
 if (ctx.sharePageUrl() !== 'https://token-police.philosophie.ai/') {
   shareProblems.push(`share URL must be the landing page, got ${ctx.sharePageUrl()}`);
 }
@@ -341,6 +352,9 @@ if (els['share-title'].textContent !== 'Share Token Police') {
 }
 if (!els['share-pitch'].textContent.includes('side panel')) {
   shareProblems.push(`share pitch should be the English product blurb, got ${JSON.stringify(els['share-pitch'].textContent)}`);
+}
+if (els['share-privacy'].textContent !== 'Only the product link is shared. Your quota, logs, and account data are never included.') {
+  shareProblems.push(`share privacy statement mismatch: ${JSON.stringify(els['share-privacy'].textContent)}`);
 }
 if (els['share-url'].textContent !== 'https://token-police.philosophie.ai/') {
   shareProblems.push(`share card URL should be the landing page, got ${JSON.stringify(els['share-url'].textContent)}`);
@@ -391,6 +405,44 @@ if (shareProblems.length) {
 }
 console.log('ok  Share card opens on the landing URL with copy + X, dismisses on Esc/backdrop');
 
+// --- Full-screen local capture logs ---
+const logsProblems = [];
+store.captureLogs = [
+  {
+    timestamp: Date.now() - 1000, status: 'success', agent_id: 'cursor',
+    agent_name: 'Cursor<img src=x>', trigger: 'manual', duration_ms: 120,
+    percent_left: 38, limits: [{ label: 'Cursor Models', percent_left: 38, resets_text: 'tomorrow' }],
+    source_url: 'https://cursor.com/dashboard/usage', extension_version: '1.3.18',
+  },
+  {
+    timestamp: Date.now(), status: 'failed', agent_id: 'gemini',
+    agent_name: 'Gemini', trigger: 'automatic', duration_ms: 25000,
+    reason: 'read_failed', source_url: 'https://gemini.google.com/usage', extension_version: '1.3.18',
+  },
+];
+ctx.openLogs();
+if (els['logs-view'].hidden) logsProblems.push('Logs button should open the full-screen logs view');
+if (!els['logs-list'].innerHTML.includes('Gemini') || !els['logs-list'].innerHTML.includes('Cursor')) {
+  logsProblems.push(`all filter should show success and failure rows: ${els['logs-list'].innerHTML}`);
+}
+if (els['logs-list'].innerHTML.indexOf('Gemini') > els['logs-list'].innerHTML.indexOf('Cursor')) {
+  logsProblems.push('logs should be sorted newest first');
+}
+if (els['logs-list'].innerHTML.includes('<img src=x>')) logsProblems.push('scraped log strings must be escaped');
+vm.runInContext("logFilter = 'success'; renderLogRows()", ctx);
+if (!els['logs-list'].innerHTML.includes('Cursor') || els['logs-list'].innerHTML.includes('Gemini')) {
+  logsProblems.push('success filter should hide failed rows');
+}
+vm.runInContext("logFilter = 'failure'; visibleLogs = []; renderLogRows()", ctx);
+if (!els['logs-list'].innerHTML.includes('No capture logs yet.')) logsProblems.push('empty filter should show the empty state');
+ctx.closeLogs();
+if (!els['logs-view'].hidden) logsProblems.push('closeLogs should hide the logs view');
+if (logsProblems.length) {
+  console.error(logsProblems.join('\n'));
+  process.exit(1);
+}
+console.log('ok  Logs view sorts, filters, escapes scraped strings, and shows its empty state');
+
 // --- Failure state on cards ---
 const failProblems = [];
 const failHtml = ctx.card('grok-build', grok, [], true);
@@ -421,6 +473,41 @@ if (failProblems.length) {
 }
 console.log('ok  Failed refresh is visible on the card with an "open page" link');
 console.log('ok  Grok Bot section missing from the Cursor page shows a dedicated hint');
+
+// --- Cached-data freshness ---
+const freshnessProblems = [];
+const freshNow = Date.now();
+const old2h = { ...grok, scraped_at: freshNow - 3 * 3600000 };
+const old24h = { ...grok, scraped_at: freshNow - 25 * 3600000 };
+const failedAfter = { status: 'failed', attempted_at: freshNow - 5 * 60000, reason: 'read_failed' };
+const stale2 = ctx.card('grok-build', old2h, [
+  { id: 'grok-build', t: freshNow - 8 * 3600000, pct: 90 },
+  { id: 'grok-build', t: freshNow - 5 * 3600000, pct: 80 },
+  { id: 'grok-build', t: freshNow - 3 * 3600000, pct: 67 },
+], false, failedAfter);
+if (!stale2.includes('Data may be out of date') || !stale2.includes('class="card stale"')) {
+  freshnessProblems.push('older than 2h should render the yellow stale warning and stale card class');
+}
+if (stale2.includes('Burning ~') || stale2.includes('Burn rate:')) {
+  freshnessProblems.push('stale data must not render a burn-rate prediction');
+}
+if (!stale2.includes('Last success:') || !stale2.includes('Last attempt:')) {
+  freshnessProblems.push('stale card should show last success and the later failed attempt');
+}
+const stale24 = ctx.card('grok-build', old24h, [], false, failedAfter);
+if (!stale24.includes('Cached value, not current quota') || !stale24.includes('freshness cache')) {
+  freshnessProblems.push('older than 24h should render the cached-value state');
+}
+if (ctx.staleLevel(freshNow - 60 * 60000, freshNow) !== 0 ||
+    ctx.staleLevel(freshNow - 3 * 3600000, freshNow) !== 1 ||
+    ctx.staleLevel(freshNow - 25 * 3600000, freshNow) !== 2) {
+  freshnessProblems.push('staleLevel should distinguish fresh, 2h warning, and 24h cache');
+}
+if (freshnessProblems.length) {
+  console.error(freshnessProblems.join('\n'));
+  process.exit(1);
+}
+console.log('ok  Cards distinguish 2h/24h stale data and suppress burn-rate predictions');
 
 // --- Grok Bot and Gemini cards ---
 const newCards = [];
@@ -1203,12 +1290,16 @@ if (!htmlZh.includes('>剩余<')) zhProblems.push('Chinese card should say 剩�
 if (htmlZh.includes('>left<')) zhProblems.push('Chinese card should not say left');
 if (els.lang.textContent !== 'EN') zhProblems.push(`Chinese UI should show an EN button, got ${JSON.stringify(els.lang.textContent)}`);
 if (els.refresh.textContent !== '刷新') zhProblems.push(`Chinese refresh label should be 刷新, got ${JSON.stringify(els.refresh.textContent)}`);
-if (els.share.textContent !== '分享') zhProblems.push(`Chinese share label should be 分享, got ${JSON.stringify(els.share.textContent)}`);
-if (els['share-title'].textContent !== '分享 Token Police') {
+if (els.share.textContent !== '推荐应用') zhProblems.push(`Chinese share label should be 推荐应用, got ${JSON.stringify(els.share.textContent)}`);
+if (els.logs.textContent !== '抓取日志') zhProblems.push(`Chinese logs label should be 抓取日志, got ${JSON.stringify(els.logs.textContent)}`);
+if (els['share-title'].textContent !== '推荐 Token Police') {
   zhProblems.push(`Chinese share title, got ${JSON.stringify(els['share-title'].textContent)}`);
 }
 if (!els['share-pitch'].textContent.includes('侧边栏')) {
   zhProblems.push(`Chinese share pitch, got ${JSON.stringify(els['share-pitch'].textContent)}`);
+}
+if (els['share-privacy'].textContent !== '仅分享产品介绍和链接，不会包含你的额度、日志或账户数据。') {
+  zhProblems.push(`Chinese share privacy statement mismatch: ${JSON.stringify(els['share-privacy'].textContent)}`);
 }
 if (els['share-copy'].textContent !== '复制链接' && els['share-copy'].textContent !== '已复制') {
   zhProblems.push(`Chinese copy button, got ${JSON.stringify(els['share-copy'].textContent)}`);

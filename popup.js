@@ -942,7 +942,18 @@ function failText(fail) {
   return fail === 'missing' ? t('sectionMissing') : t('fetchFailed');
 }
 
-function card(id, a, hist, fail) {
+const STALE_WARNING_MS = 2 * 3600000;
+const STALE_CACHE_MS = 24 * 3600000;
+
+function staleLevel(scrapedAt, now) {
+  if (!scrapedAt) return 0;
+  const age = (now == null ? Date.now() : now) - scrapedAt;
+  if (age > STALE_CACHE_MS) return 2;
+  if (age > STALE_WARNING_MS) return 1;
+  return 0;
+}
+
+function card(id, a, hist, fail, latestAttempt) {
   const meta = META[id];
   if (!a) {
     return `<div class="card">
@@ -954,9 +965,10 @@ function card(id, a, hist, fail) {
   const L = a.limits || [], p0 = L[0], p1 = L[1];
   const pct = p0 ? p0.percent_left : null;
   const now = Date.now();
+  const stale = staleLevel(a.scraped_at, now);
   const resetDate = p0 ? parseReset(p0.resets_text, now) : null;
   const resetLabel = untilText(resetDate, now) || (p0 && p0.resets_text && esc(p0.resets_text)) || '';
-  const est = pct != null ? verdict(hist, resetDate, now) : null;
+  const est = pct != null && stale === 0 ? verdict(hist, resetDate, now) : null;
   const plan = a.plan ? esc(a.plan) : null;
   const foot = [];
   if (a.tokens && a.tokens.total != null) foot.push(t('tokens', { n: fmtTok(a.tokens.total) }));
@@ -976,8 +988,15 @@ function card(id, a, hist, fail) {
   const failLine = fail
     ? `<div class="fail">⚠ ${failText(fail)} ${openLink(id)}</div>`
     : '';
+  const freshness = stale
+    ? `<div class="freshness${stale === 2 ? ' cache' : ''}">⚠ ${t(stale === 2 ? 'stale24h' : 'stale2h')}</div>`
+    : '';
+  const lastAttempt = latestAttempt && latestAttempt.status !== 'success' &&
+    latestAttempt.attempted_at > a.scraped_at
+    ? `<div class="attempt">${t('lastAttempt', { time: ago(latestAttempt.attempted_at) })}</div>`
+    : '';
 
-  return `<div class="card">
+  return `<div class="card${stale ? ' stale' : ''}">
     <div class="chead">
       <div class="name">${logo(id, meta.color)}${a.name ? esc(a.name) : meta.name}</div>
       ${plan ? `<span class="plan">${plan}</span>` : ''}
@@ -991,8 +1010,10 @@ function card(id, a, hist, fail) {
     </div>
     ${burn}
     ${sparkline(hist, meta.color)}
+    ${freshness}
     ${failLine}
-    <div class="foot"><span>${foot.filter(Boolean).join(' · ')}</span><span>${ago(a.scraped_at)}</span></div>
+    ${lastAttempt}
+    <div class="foot"><span>${foot.filter(Boolean).join(' · ')}</span><span>${t('lastSuccess', { time: ago(a.scraped_at) })}</span></div>
   </div>`;
 }
 
@@ -1093,6 +1114,8 @@ function fillShareCard() {
   if (title) title.textContent = t('shareTitle');
   const pitch = document.getElementById('share-pitch');
   if (pitch) pitch.textContent = t('sharePitch');
+  const privacy = document.getElementById('share-privacy');
+  if (privacy) privacy.textContent = t('sharePrivacy');
   const urlEl = document.getElementById('share-url');
   if (urlEl) urlEl.textContent = sharePageUrl();
   const copyBtn = document.getElementById('share-copy');
@@ -1176,9 +1199,98 @@ function openShareX() {
 }
 
 let staleTimer = null;
+let freshnessTimer = null;
+let logFilter = 'all';
+let visibleLogs = [];
+
+function logTriggerLabel(trigger) {
+  if (trigger === 'automatic') return t('logAutomatic');
+  if (trigger === 'manual') return t('logManual');
+  return t('logPage');
+}
+
+function logMatches(entry) {
+  if (logFilter === 'success') return entry.status === 'success';
+  if (logFilter === 'failure') return entry.status === 'failed' || entry.status === 'missing';
+  return true;
+}
+
+function renderLogRows() {
+  const list = document.getElementById('logs-list');
+  if (!list) return;
+  const rows = visibleLogs.filter(logMatches)
+    .sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+  if (!rows.length) {
+    list.innerHTML = `<div class="logs-empty">${esc(t('logsEmpty'))}</div>`;
+    return;
+  }
+  list.innerHTML = rows.map((entry) => {
+    const limits = (entry.limits || []).map((limit) =>
+      `${esc(limit.label)}: ${limit.percent_left == null ? '—' : esc(limit.percent_left + '%')}${limit.resets_text ? ` · ${esc(limit.resets_text)}` : ''}`
+    ).join('<br>');
+    const detail = entry.status === 'success'
+      ? `${entry.percent_left == null ? '' : `${esc(entry.percent_left + '%')} · `}${limits}`
+      : esc(entry.reason || 'read_failed');
+    return `<article class="log-row">
+      <div class="log-top"><span><b>${esc(entry.agent_name || entry.agent_id)}</b> · ${esc(logTriggerLabel(entry.trigger))}</span><span class="log-status ${esc(entry.status)}">${esc(entry.status)}</span></div>
+      <div class="log-meta">${esc(new Date(entry.timestamp).toLocaleString())} · ${esc(entry.duration_ms || 0)}ms</div>
+      ${detail ? `<div class="log-detail">${detail}</div>` : ''}
+      <div class="log-meta">${esc(entry.source_url || '')} · v${esc(entry.extension_version || '')}</div>
+    </article>`;
+  }).join('');
+}
+
+function fillLogsView() {
+  const text = {
+    'logs-title': 'logs',
+    'logs-close': 'logsClose',
+    'logs-json': 'logsJson',
+    'logs-csv': 'logsCsv',
+    'logs-clear': 'logsClear',
+  };
+  Object.keys(text).forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = t(text[id]);
+  });
+  const labels = { all: 'logsAll', success: 'logsSuccess', failure: 'logsFailure' };
+  const filters = document.querySelectorAll ? document.querySelectorAll('[data-log-filter]') : [];
+  if (filters && filters.forEach) filters.forEach((button) => {
+    button.textContent = t(labels[button.dataset.logFilter]);
+    button.classList.toggle('active', button.dataset.logFilter === logFilter);
+  });
+  renderLogRows();
+}
+
+function openLogs() {
+  const view = document.getElementById('logs-view');
+  if (view) view.hidden = false;
+  chrome.storage.local.get(['captureLogs'], (res) => {
+    visibleLogs = pruneCaptureLogs(res.captureLogs || []);
+    fillLogsView();
+  });
+}
+
+function closeLogs() {
+  const view = document.getElementById('logs-view');
+  if (view) view.hidden = true;
+}
+
+function downloadLogs(kind) {
+  const data = kind === 'json' ? captureLogsJson(visibleLogs) : captureLogsCsv(visibleLogs);
+  const type = kind === 'json' ? 'application/json' : 'text/csv';
+  const blob = new Blob([data], { type: `${type};charset=utf-8` });
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = `token-police-logs.${kind}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+}
 
 function render() {
-  chrome.storage.local.get(['agents', 'history', 'refresh', 'enabledAgents', 'autoRefresh', 'notifyLow', 'showHair', 'moveReminder', 'activityPick', 'activityDoneAt', 'lastMovedAt', 'buddyPos', 'hairBoostPct', 'activityOffer', 'checkUpdates', 'updateCheck'], (res) => {
+  chrome.storage.local.get(['agents', 'history', 'refresh', 'latestAttempts', 'enabledAgents', 'autoRefresh', 'notifyLow', 'showHair', 'moveReminder', 'activityPick', 'activityDoneAt', 'lastMovedAt', 'buddyPos', 'hairBoostPct', 'activityOffer', 'checkUpdates', 'updateCheck'], (res) => {
     const map = res.agents || {};
     const hist = res.history || [];
     const en = res.enabledAgents || {};
@@ -1202,7 +1314,13 @@ function render() {
       return (map[id] && rf.started && map[id].scraped_at >= rf.started) ? false : st;
     };
     document.getElementById('grid').innerHTML =
-      shown.map((id) => card(id, map[id], byId[id], failed(id))).join('');
+      shown.map((id) => {
+        const attempt = (res.latestAttempts || {})[id];
+        const attemptFail = attempt && attempt.status !== 'success' && attempt.attempted_at > ((map[id] && map[id].scraped_at) || 0)
+          ? attempt.status
+          : false;
+        return card(id, map[id], byId[id], failed(id) || attemptFail, attempt);
+      }).join('');
     renderSettings(en, { autoRefresh: res.autoRefresh, notifyLow: res.notifyLow, showHair: res.showHair, moveReminder: res.moveReminder, checkUpdates: res.checkUpdates });
     const pct = avgPct(map, shown);
     const boost = clampHairBoost(pct, res.hairBoostPct);
@@ -1246,6 +1364,8 @@ function render() {
       if (btn) { btn.textContent = t('refresh'); btn.disabled = false; }
       document.getElementById('hint').textContent = any ? '' : t('firstTime');
     }
+    if (freshnessTimer != null) clearTimeout(freshnessTimer);
+    freshnessTimer = setTimeout(render, 60000);
   });
 }
 
@@ -1327,6 +1447,32 @@ const shareBtn = document.getElementById('share');
 if (shareBtn && shareBtn.addEventListener) {
   shareBtn.addEventListener('click', openShare);
 }
+const logsBtn = document.getElementById('logs');
+if (logsBtn && logsBtn.addEventListener) logsBtn.addEventListener('click', openLogs);
+const logsClose = document.getElementById('logs-close');
+if (logsClose && logsClose.addEventListener) logsClose.addEventListener('click', closeLogs);
+const logsView = document.getElementById('logs-view');
+if (logsView && logsView.addEventListener) {
+  logsView.addEventListener('click', (e) => {
+    const filter = e.target && e.target.dataset && e.target.dataset.logFilter;
+    if (!filter) return;
+    logFilter = filter;
+    fillLogsView();
+  });
+}
+const logsJson = document.getElementById('logs-json');
+if (logsJson && logsJson.addEventListener) logsJson.addEventListener('click', () => downloadLogs('json'));
+const logsCsv = document.getElementById('logs-csv');
+if (logsCsv && logsCsv.addEventListener) logsCsv.addEventListener('click', () => downloadLogs('csv'));
+const logsClear = document.getElementById('logs-clear');
+if (logsClear && logsClear.addEventListener) {
+  logsClear.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ type: 'clearCaptureLogs' }, () => {
+      visibleLogs = [];
+      renderLogRows();
+    });
+  });
+}
 const shareOverlay = document.getElementById('share-overlay');
 if (shareOverlay && shareOverlay.addEventListener) {
   shareOverlay.addEventListener('click', (e) => {
@@ -1347,12 +1493,19 @@ if (shareX && shareX.addEventListener) {
 }
 if (typeof document !== 'undefined' && document.addEventListener) {
   document.addEventListener('keydown', (e) => {
-    if (e && e.key === 'Escape' && shareOverlayOpen()) closeShare();
+    if (!e || e.key !== 'Escape') return;
+    const logs = document.getElementById('logs-view');
+    if (logs && !logs.hidden) closeLogs();
+    else if (shareOverlayOpen()) closeShare();
   });
 }
 
 chrome.storage.onChanged.addListener((changes) => {
   if (changes && changes.uiLang) applyStoredLang(changes.uiLang.newValue);
+  if (changes && changes.captureLogs) {
+    visibleLogs = pruneCaptureLogs(changes.captureLogs.newValue || []);
+    renderLogRows();
+  }
   render();
 });
 loadLang(render);

@@ -49,15 +49,32 @@ const I18N = {
     builtBy: 'Built by {name} at {org} · MIT License · {src}',
     creditsSrc: 'Source on GitHub',
     disclaimer: 'Unofficial. Not affiliated with Anthropic, OpenAI, xAI, Cursor or Google. It only reads usage numbers already shown on each product\'s own page.',
-    share: 'Share',
+    share: 'Share app',
     shareTitle: 'Share Token Police',
     sharePitch: 'Remaining Claude Code, Codex, Cursor, Grok & Gemini quota in one Chrome side panel. Free, open source — nothing leaves your browser.',
+    sharePrivacy: 'Only the product link is shared. Your quota, logs, and account data are never included.',
     shareCopy: 'Copy link',
     shareCopied: 'Copied',
     shareX: 'Share on X',
     shareClose: 'Close',
     shareTweet: 'Token Police: remaining Claude, Codex, Cursor, Grok & Gemini quota in one Chrome side panel. {url}',
     shareShotAlt: 'Token Police dashboard preview',
+    logs: 'Logs',
+    logsClose: 'Close',
+    logsAll: 'All',
+    logsSuccess: 'Success',
+    logsFailure: 'Failed',
+    logsJson: 'Export JSON',
+    logsCsv: 'Export CSV',
+    logsClear: 'Clear logs',
+    logsEmpty: 'No capture logs yet.',
+    logManual: 'manual',
+    logAutomatic: 'automatic',
+    logPage: 'page',
+    stale2h: 'Data may be out of date',
+    stale24h: 'Cached value, not current quota',
+    lastSuccess: 'Last success: {time}',
+    lastAttempt: 'Last attempt: {time}',
     lowTitle: '{name}: {n}% left',
     lowBody: 'Usage quota is running low.',
     lowBodyR: 'Usage quota is running low. Resets {r}.',
@@ -135,15 +152,32 @@ const I18N = {
     builtBy: '由 {name} @ {org} 构建 · MIT 协议 · {src}',
     creditsSrc: 'GitHub 源码',
     disclaimer: '非官方项目，与 Anthropic、OpenAI、xAI、Cursor、Google 均无关联。它只读取各产品页面上已经展示的用量数字。',
-    share: '分享',
-    shareTitle: '分享 Token Police',
+    share: '推荐应用',
+    shareTitle: '推荐 Token Police',
     sharePitch: '一个 Chrome 侧边栏看清 Claude Code、Codex、Cursor、Grok、Gemini 还剩多少额度。免费开源，数据不出浏览器。',
+    sharePrivacy: '仅分享产品介绍和链接，不会包含你的额度、日志或账户数据。',
     shareCopy: '复制链接',
     shareCopied: '已复制',
     shareX: '分享到 X',
     shareClose: '关闭',
     shareTweet: 'Token Police：一个 Chrome 侧边栏看清 Claude、Codex、Cursor、Grok、Gemini 还剩多少额度。{url}',
     shareShotAlt: 'Token Police 面板预览',
+    logs: '抓取日志',
+    logsClose: '关闭',
+    logsAll: '全部',
+    logsSuccess: '成功',
+    logsFailure: '失败',
+    logsJson: '导出 JSON',
+    logsCsv: '导出 CSV',
+    logsClear: '清除日志',
+    logsEmpty: '暂无抓取日志。',
+    logManual: '手动',
+    logAutomatic: '自动',
+    logPage: '页面',
+    stale2h: '数据可能已过期',
+    stale24h: '缓存值，并非当前额度',
+    lastSuccess: '最后成功：{time}',
+    lastAttempt: '最后尝试：{time}',
     lowTitle: '{name}：剩余 {n}%',
     lowBody: '额度即将用完。',
     lowBodyR: '额度即将用完。重置时间：{r}',
@@ -212,7 +246,13 @@ function applyI18n() {
     shareBtn.textContent = t('share');
     shareBtn.title = t('shareTitle');
   }
+  const logsBtn = document.getElementById('logs');
+  if (logsBtn) {
+    logsBtn.textContent = t('logs');
+    logsBtn.title = t('logs');
+  }
   if (typeof fillShareCard === 'function') fillShareCard();
+  if (typeof fillLogsView === 'function') fillLogsView();
 }
 
 function applyStoredLang(lang) {

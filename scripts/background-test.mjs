@@ -29,6 +29,7 @@ let nextTabId = 100;
 const ctxObj = {
   setTimeout,
   clearTimeout,
+  URL,
   fetch: (url, opts) => { fetches.push({ url, opts }); return Promise.resolve(fetchReply); },
   chrome: {
     storage: {
@@ -129,7 +130,7 @@ await tick();
 // 1) 两个 agent 同时抓完：都必须写进去，谁也不能覆盖谁
 const now = Date.now();
 await Promise.all([
-  send(agentData({ id: 'claude-code', scraped_at: now, limits: [{ label: 'Weekly (All models)', percent_left: 80 }] })),
+  send(agentData({ id: 'claude-code', scraped_at: now, capture_trigger: 'page', capture_source_url: 'https://claude.ai/new?token=secret#settings/usage', limits: [{ label: 'Weekly (All models)', percent_left: 80 }] })),
   send(agentData({ id: 'codex', scraped_at: now, limits: [{ label: 'Weekly', percent_left: 60 }] })),
 ]);
 if (!store.agents || !store.agents['claude-code'] || !store.agents.codex) {
@@ -137,6 +138,16 @@ if (!store.agents || !store.agents['claude-code'] || !store.agents.codex) {
 }
 if (!store.history || store.history.length !== 2) {
   problems.push(`expected 2 history entries, got ${JSON.stringify(store.history)}`);
+}
+if (!store.captureLogs || store.captureLogs.length !== 2) {
+  problems.push(`concurrent agentData should retain both logs, got ${JSON.stringify(store.captureLogs)}`);
+}
+const claudeLog = store.captureLogs && store.captureLogs.find((x) => x.agent_id === 'claude-code');
+if (!claudeLog || claudeLog.status !== 'success' || claudeLog.percent_left !== 80) {
+  problems.push(`successful scrape log should preserve percent_left=80, got ${JSON.stringify(claudeLog)}`);
+}
+if (claudeLog && claudeLog.source_url !== 'https://claude.ai/new') {
+  problems.push(`capture log source URL should remove query/hash, got ${claudeLog.source_url}`);
 }
 
 // 2) Cursor 分两页：后到的一页要合并、不能丢掉先到那页的字段
@@ -207,7 +218,7 @@ await tick(10);
 // 10) 静默检查：所有勾选产品都在后台标签页尝试（cursor 已取消勾选 → 不开）
 const before = createdTabs.length;
 alarms.listener({ name: 'quietRefresh' });
-await tick(15);
+await tick(60);
 const quiet = createdTabs.slice(before);
 if (!quiet.length || quiet.some((o) => o.active !== false)) {
   problems.push(`quiet check must only open background tabs, got ${JSON.stringify(quiet)}`);
@@ -220,6 +231,8 @@ if (!urls.includes('claude.ai') || !urls.includes('chatgpt.com') || !urls.includ
 if (urls.includes('cursor.com/dashboard/usage')) problems.push('quiet check must skip unchecked agents');
 if (!urls.includes('cursor.com/dashboard/spending')) problems.push('quiet check should still open the spending page for Grok Bot');
 if (!urls.includes('gemini.google.com')) problems.push('quiet check should include Gemini');
+const autoFailures = (store.captureLogs || []).filter((x) => x.trigger === 'automatic' && x.status === 'failed');
+if (!autoFailures.length) problems.push('automatic check failures must be written to captureLogs');
 
 // 11) Cursor 和 Grok Bot 共用 spending 页：勾选全部时同一 URL 只开一次
 await new Promise((r) => ctxObj.chrome.storage.local.set({ enabledAgents: {} }, r));
@@ -251,6 +264,15 @@ const rr = store.refresh && store.refresh.results;
 if (!rr || rr.cursor !== 'ok' || rr.gemini !== 'ok') problems.push(`refresh results should mark cursor/gemini ok, got ${JSON.stringify(rr)}`);
 if (!rr || rr['grok-bot'] !== 'missing') problems.push(`grok-bot should be 'missing' when cursor was read but no Grok Bot section, got ${JSON.stringify(rr)}`);
 if (!rr || rr['grok-build'] !== 'fail') problems.push(`an agent whose page never reported should stay 'fail', got ${JSON.stringify(rr)}`);
+const manualFailures = (store.captureLogs || []).filter((x) => x.trigger === 'manual' && x.status === 'failed');
+if (!manualFailures.some((x) => x.agent_id === 'grok-build' && x.reason === 'read_failed')) {
+  problems.push(`manual refresh failures must be logged, got ${JSON.stringify(manualFailures)}`);
+}
+const missingLog = (store.captureLogs || []).find((x) =>
+  x.trigger === 'manual' && x.agent_id === 'grok-bot' && x.status === 'missing');
+if (!missingLog || missingLog.reason !== 'section_missing') {
+  problems.push(`missing Grok Bot section must log missing/section_missing, got ${JSON.stringify(missingLog)}`);
+}
 if (badge.texts.includes('…') || badgeHasMetric(badge.texts)) {
   problems.push(`refresh must not put a number or ellipsis on the badge, got ${JSON.stringify(badge.texts)}`);
 }

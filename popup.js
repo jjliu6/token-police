@@ -1511,6 +1511,7 @@ let dispatchPrompt = '';
 let dispatchRepo = '';
 let dispatchRepos = [];
 let dispatchJobs = [];
+let dispatchAutoSend = false;
 let dispatchShake = false;
 
 function dispatchFloatOpen() {
@@ -1552,6 +1553,7 @@ function persistDispatch() {
     dispatchSelected,
     dispatchRepos,
     dispatchJobs,
+    dispatchAutoSend,
   });
 }
 
@@ -1613,6 +1615,10 @@ function renderDispatch() {
   if (go) go.textContent = kindSelected.length
     ? t('dispatchMulti', { n: kindSelected.length })
     : t('dispatch');
+  const sendTog = document.getElementById('dispatch-send');
+  if (sendTog) sendTog.checked = dispatchAutoSend;
+  const sendLabel = document.getElementById('dispatch-send-label');
+  if (sendLabel) sendLabel.textContent = t('dispatchSend');
   const note = document.getElementById('dispatch-note');
   if (note) note.textContent = t('dispatchHint');
   renderDispatchBoard();
@@ -1654,14 +1660,26 @@ function fireDispatch(agents, auto) {
   if (dispatchKind === 'code' && dispatchRepo) {
     dispatchRepos = [dispatchRepo].concat(dispatchRepos.filter((r) => r !== dispatchRepo)).slice(0, 6);
   }
-  const jobs = agents.map((a) => makeDispatchJob(a, prompt, dispatchRepo, auto));
+  const jobs = agents.map((a) => makeDispatchJob(a, prompt, dispatchRepo, auto, dispatchAutoSend));
   persistDispatch();
   chrome.runtime.sendMessage({ type: 'dispatchOpen', jobs }, (opened) => {
     void chrome.runtime.lastError;
     dispatchJobs = Array.isArray(opened) ? opened : jobs;
     persistDispatch();
     setDispatchOpen(false);
-    openDispatchBoard();
+    // A single destination doesn't need the whole tab board — just jump to it.
+    // The board earns its space only when there are multiple tabs to switch between.
+    if (dispatchJobs.length <= 1) {
+      const only = dispatchJobs[0];
+      if (only) {
+        chrome.runtime.sendMessage(
+          { type: 'dispatchFocus', tabId: only.tabId, url: only.url },
+          () => void chrome.runtime.lastError,
+        );
+      }
+    } else {
+      openDispatchBoard();
+    }
   });
 }
 
@@ -1705,6 +1723,13 @@ if (dispatchPromptEl && dispatchPromptEl.addEventListener) {
         else shakeDispatch();
       }
     }
+  });
+}
+const dispatchSendEl = document.getElementById('dispatch-send');
+if (dispatchSendEl && dispatchSendEl.addEventListener) {
+  dispatchSendEl.addEventListener('change', () => {
+    dispatchAutoSend = !!dispatchSendEl.checked;
+    persistDispatch();
   });
 }
 const dispatchRepoEl = document.getElementById('dispatch-repo');
@@ -1790,13 +1815,14 @@ if (dispatchTiles && dispatchTiles.addEventListener) {
 }
 
 if (chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-  chrome.storage.local.get(['dispatchKind', 'dispatchPrompt', 'dispatchRepo', 'dispatchSelected', 'dispatchRepos', 'dispatchJobs'], (res) => {
+  chrome.storage.local.get(['dispatchKind', 'dispatchPrompt', 'dispatchRepo', 'dispatchSelected', 'dispatchRepos', 'dispatchJobs', 'dispatchAutoSend'], (res) => {
     if (res.dispatchKind === 'chat' || res.dispatchKind === 'code') dispatchKind = res.dispatchKind;
     if (typeof res.dispatchPrompt === 'string') dispatchPrompt = res.dispatchPrompt;
     if (typeof res.dispatchRepo === 'string') dispatchRepo = res.dispatchRepo;
     if (Array.isArray(res.dispatchSelected)) dispatchSelected = res.dispatchSelected;
     if (Array.isArray(res.dispatchRepos)) dispatchRepos = res.dispatchRepos;
     if (Array.isArray(res.dispatchJobs)) dispatchJobs = res.dispatchJobs;
+    if (typeof res.dispatchAutoSend === 'boolean') dispatchAutoSend = res.dispatchAutoSend;
     renderDispatch();
   });
 }

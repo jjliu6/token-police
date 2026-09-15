@@ -331,7 +331,41 @@ function fillComposer(prompt) {
     const area = (r.width || 0) * (r.height || 0);
     if (area >= bestArea) { best = el; bestArea = area; }
   }
-  return best ? trySet(best) : false;
+  // Return the element we filled (not just a boolean) so the caller can submit it.
+  return best && trySet(best) ? best : null;
+}
+
+// Best-effort "press send" after a prefill. Composers differ a lot between
+// sites and many ignore synthetic Enter (isTrusted=false), so we try a real
+// send button first and fall back to a keyboard Enter.
+function findSendButton(el) {
+  const scopes = [];
+  const form = el.closest ? el.closest('form') : null;
+  if (form) scopes.push(form);
+  let p = el.parentElement;
+  for (let i = 0; i < 5 && p; i++) { scopes.push(p); p = p.parentElement; }
+  const sel = 'button[data-testid*="send" i],button[aria-label*="send" i],'
+    + 'button[aria-label*="发送"],button[title*="send" i],button[type="submit"]';
+  for (let i = 0; i < scopes.length; i++) {
+    const b = scopes[i].querySelector && scopes[i].querySelector(sel);
+    if (b && !b.disabled) return b;
+  }
+  return null;
+}
+
+function submitComposer(el) {
+  if (!el) return false;
+  const btn = findSendButton(el);
+  if (btn) { try { btn.click(); return true; } catch (e) {} }
+  try {
+    el.focus();
+    const opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+    el.dispatchEvent(new KeyboardEvent('keydown', opts));
+    el.dispatchEvent(new KeyboardEvent('keypress', opts));
+    el.dispatchEvent(new KeyboardEvent('keyup', opts));
+    return true;
+  } catch (e) {}
+  return false;
 }
 
 function claimDispatchFill() {
@@ -343,8 +377,12 @@ function onDispatchFill(msg) {
   if (!inTopFrame() || !isDispatchSurface()) return;
   if (!msg || msg.type !== 'dispatchFill' || !msg.prompt) return;
   const run = () => {
-    if (!fillComposer(msg.prompt)) return false;
+    const el = fillComposer(msg.prompt);
+    if (!el) return false;
     claimDispatchFill();
+    // Give the site a beat to register the input (and enable its send button)
+    // before we try to submit. Off by default; opt-in via the panel toggle.
+    if (msg.send) setTimeout(() => submitComposer(el), 400);
     return true;
   };
   if (run()) return;
@@ -366,7 +404,7 @@ if (inTopFrame() && isDispatchSurface()) {
     try {
       chrome.runtime.sendMessage({ type: 'dispatchClaimFill' }, (job) => {
         if (chrome.runtime.lastError || !job || !job.prompt) return;
-        onDispatchFill({ type: 'dispatchFill', prompt: job.prompt });
+        onDispatchFill({ type: 'dispatchFill', prompt: job.prompt, send: job.send });
       });
     } catch (e) {}
   }

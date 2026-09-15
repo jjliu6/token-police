@@ -249,7 +249,7 @@
     <div>
       <span class="eyebrow" data-i18n="hero.eyebrow">Free · Open source · Chrome extension</span>
       <h1 data-i18n-html="hero.h1">Know how much AI coding quota you have <span class="hl">left</span> — at a glance.</h1>
-      <p class="lead" data-i18n="hero.lead">One side panel shows your remaining usage for Claude Code, Codex, Cursor, Grok, Grok Bot and Gemini — with reset times, burn rate and low-quota alerts. No account linking, no API keys, and nothing leaves your browser. And a little hair mascot that loses hair as you burn quota and makes you stand up now and then.</p>
+      <p class="lead" data-i18n="hero.lead">One side panel shows your remaining usage for Claude Code, Codex, Cursor, Grok, Grok Bot and Gemini — with reset times, burn rate and low-quota alerts. No account linking, no API keys, and nothing leaves your browser. From the same panel, Dispatch opens one prompt in several of them at once — pre-filled, not sent. And a little hair mascot that loses hair as you burn quota and makes you stand up now and then.</p>
 
       <div class="cta">
         <a class="btn btn-primary" id="download" href="https://github.com/jjliu6/token-police/releases/latest/download/token-police.zip">
@@ -338,10 +338,39 @@
   </div>
 </section>
 
+<!-- ============ DISPATCH ============ -->
+<section id="dispatch">
+  <div class="wrap">
+    <span class="eyebrow" data-i18n="dispatch.eyebrow">New in v1.5 · Dispatch</span>
+    <h2 data-i18n="dispatch.h2">One prompt, opened in Claude, ChatGPT, Grok, Gemini, Codex and Cursor.</h2>
+    <p class="lead" data-i18n="dispatch.lead">The Dispatch button in the footer opens a composer. Tick Chat or Code destinations and they come up as real Chrome tabs with the prompt already filled in. You still press Send.</p>
+    <div class="mascot-grid">
+      <div class="mascot-shots">
+        <figure>
+          <div class="shot"><img src="/dispatch-composer.png" width="840" height="1520" alt="Dispatch composer in the side panel: a prompt, Chat and Code chips, and an Open button" loading="lazy"></div>
+          <figcaption data-i18n="dispatch.cap1">Type a prompt, pick Chat or Code, tick the destinations.</figcaption>
+        </figure>
+        <figure>
+          <div class="shot"><img src="/dispatch-board.png" width="840" height="1520" alt="Dispatch board listing three opened agent tabs so you can jump back" loading="lazy"></div>
+          <figcaption data-i18n="dispatch.cap2">A board lists the tabs. Click a card to jump back.</figcaption>
+        </figure>
+      </div>
+      <div>
+        <ul class="checks">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="dispatch.1"><b>Prefill only, not sent.</b> Each tab opens with the prompt in the composer — you confirm Send or Start task on that site.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="dispatch.2"><b>Chat vs Code.</b> Chat opens Claude, ChatGPT, Grok and Gemini. Code opens Claude Code, Codex Cloud and Cursor Agents. Grok Bot stays on the quota cards — it has no public web composer.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="dispatch.3"><b>A board to jump back.</b> After opening, the panel keeps a tab list. Click a card to focus that tab. Live output stays on their page — we don't iframe those sites.</span></li>
+        </ul>
+        <div class="note" data-i18n-html="dispatch.note"><b>Auto-dispatch</b> picks the agent with the most leftover and skips anyone under 15%. The prompt and tab list stay in <code>chrome.storage.local</code>.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ HAIR MASCOT ============ -->
 <section id="mascot">
   <div class="wrap">
-    <span class="eyebrow" data-i18n="mascot.eyebrow">New in v1.3 · Take breaks too</span>
+    <span class="eyebrow" data-i18n="mascot.eyebrow">Take breaks too</span>
     <h2 data-i18n="mascot.h2">A hair mascot that thins while you sit, and makes you stretch.</h2>
     <p class="lead" data-i18n="mascot.lead">Quota isn't the only thing that runs out while you vibe-code. The panel now comes with a small companion that keeps an eye on you as well.</p>
     <div class="mascot-grid">
@@ -461,7 +490,7 @@
       </details>
       <details>
         <summary data-i18n="faq.2q">Is it safe? What can it access?</summary>
-        <p data-i18n="faq.2a">It only has permission for the five usage-page domains (claude.ai, chatgpt.com, grok.com, cursor.com, gemini.google.com), and it only reads the numbers displayed there. It cannot see other sites, and it makes no network requests apart from the optional daily version check.</p>
+        <p data-i18n="faq.2a">It only has permission for five domains (claude.ai, chatgpt.com, grok.com, cursor.com, gemini.google.com). It reads the usage numbers shown there, and if you use Dispatch it fills the prompt you typed into those sites' composers — it never sends the prompt for you. It cannot see other sites, and it makes no network requests apart from the optional daily version check.</p>
       </details>
       <details>
         <summary data-i18n="faq.3q">Which browsers work?</summary>
@@ -478,6 +507,10 @@
       <details>
         <summary data-i18n="faq.7q">Can I turn off the hair mascot?</summary>
         <p data-i18n="faq.7a">Yes. Open ⚙ in the panel and untick "Hair mascot". The break-time veil goes with it. The move reminder is a separate switch in the same menu, on by default.</p>
+      </details>
+      <details>
+        <summary data-i18n="faq.8q">Does Dispatch send the prompt for me?</summary>
+        <p data-i18n="faq.8a">No. It opens real Chrome tabs and fills the composer. You still confirm Send or Start task on each site. Grok Bot has no public web composer, so it stays on the quota dashboard.</p>
       </details>
       <details>
         <summary data-i18n="faq.6q">Can I get the very latest unreleased code?</summary>

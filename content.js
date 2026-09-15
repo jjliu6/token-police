@@ -289,8 +289,27 @@ function fillComposer(prompt) {
     try {
       el.focus();
       if (el.isContentEditable) {
-        el.textContent = prompt;
-        el.dispatchEvent(new Event('input', { bubbles: true }));
+        // The coding surfaces (Codex, Claude Code, Cursor) run rich-text editors
+        // (ProseMirror / Lexical). A raw textContent write bypasses their input
+        // pipeline, so the framework's model stays empty and reconciles the DOM
+        // back to a blank composer — which is why the prompt never appeared and
+        // nothing sent. Route the text through execCommand insertText instead so
+        // the editor records it; fall back to textContent only if that no-ops.
+        let ok = false;
+        try {
+          const sel = window.getSelection && window.getSelection();
+          if (sel && document.createRange) {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+          ok = !!(document.execCommand && document.execCommand('insertText', false, prompt));
+        } catch (e) { ok = false; }
+        if (!ok || !(el.textContent || '').includes(prompt)) {
+          el.textContent = prompt;
+          el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: prompt }));
+        }
         return true;
       }
       if ('value' in el) {
@@ -338,17 +357,50 @@ function fillComposer(prompt) {
 // Best-effort "press send" after a prefill. Composers differ a lot between
 // sites and many ignore synthetic Enter (isTrusted=false), so we try a real
 // send button first and fall back to a keyboard Enter.
+// A button counts only if it's actually clickable right now — a disabled or
+// aria-disabled button is the site telling us "input not registered yet", which
+// is exactly the case we must wait through rather than fall back to Enter.
+function clickableButton(b) {
+  if (!b || b.disabled) return false;
+  if (b.getAttribute && b.getAttribute('aria-disabled') === 'true') return false;
+  const r = b.getBoundingClientRect ? b.getBoundingClientRect() : { width: 1, height: 1 };
+  return r.width > 0 && r.height > 0;
+}
+
+// Explicitly send-labelled buttons only — safe to click anywhere on the page.
+const SEND_LABELLED = 'button[data-testid*="send" i],button[aria-label*="send" i],'
+  + 'button[aria-label*="发送"],button[title*="send" i],button[title*="发送"]';
+
 function findSendButton(el) {
+  // First look in the composer's own form / nearby ancestors. type="submit" is
+  // safe to trust here because we're inside the composer's own subtree.
+  const scoped = SEND_LABELLED + ',button[type="submit"]';
   const scopes = [];
   const form = el.closest ? el.closest('form') : null;
   if (form) scopes.push(form);
   let p = el.parentElement;
-  for (let i = 0; i < 5 && p; i++) { scopes.push(p); p = p.parentElement; }
-  const sel = 'button[data-testid*="send" i],button[aria-label*="send" i],'
-    + 'button[aria-label*="发送"],button[title*="send" i],button[type="submit"]';
+  for (let i = 0; i < 8 && p; i++) { scopes.push(p); p = p.parentElement; }
   for (let i = 0; i < scopes.length; i++) {
-    const b = scopes[i].querySelector && scopes[i].querySelector(sel);
-    if (b && !b.disabled) return b;
+    const found = scopes[i].querySelectorAll ? scopes[i].querySelectorAll(scoped) : [];
+    for (let j = 0; j < found.length; j++) {
+      if (clickableButton(found[j])) return found[j];
+    }
+  }
+  // Gemini and Grok keep the send button outside the composer's ancestors
+  // (sometimes inside a shadow root), so the scoped search finds nothing. Fall
+  // back to a document-wide, shadow-DOM-aware search — but only for buttons that
+  // are explicitly send-labelled, so we never fire an unrelated submit button.
+  const hits = [];
+  const collect = (root) => {
+    if (!root || !root.querySelectorAll) return;
+    const found = root.querySelectorAll(SEND_LABELLED);
+    for (let i = 0; i < found.length; i++) hits.push(found[i]);
+    const all = root.querySelectorAll('*');
+    for (let i = 0; i < all.length; i++) { if (all[i].shadowRoot) collect(all[i].shadowRoot); }
+  };
+  collect(document);
+  for (let i = 0; i < hits.length; i++) {
+    if (clickableButton(hits[i])) return hits[i];
   }
   return null;
 }
@@ -366,6 +418,23 @@ function submitComposer(el) {
     return true;
   } catch (e) {}
   return false;
+}
+
+// Poll for a clickable send button and click it as soon as the site enables it
+// (~up to 6s), then stop. Only if that window passes without one ever becoming
+// clickable do we fall back to submitComposer's synthetic Enter — a genuine
+// last resort. This is what makes auto-send land on the slow-to-enable
+// composers (Gemini, Grok) that a single early click used to miss.
+function scheduleSubmit(el) {
+  let n = 0;
+  const tick = () => {
+    n++;
+    const btn = findSendButton(el);
+    if (btn) { try { btn.click(); } catch (e) {} return; }
+    if (n >= 20) { submitComposer(el); return; }
+    setTimeout(tick, 300);
+  };
+  setTimeout(tick, 300);
 }
 
 function claimDispatchFill() {
@@ -391,9 +460,13 @@ function onDispatchFill(msg) {
     // Latch before any async work so a racing path bails instead of re-sending.
     dispatchHandled = true;
     claimDispatchFill();
-    // Give the site a beat to register the input (and enable its send button)
-    // before we try to submit. Off by default; opt-in via the panel toggle.
-    if (msg.send) setTimeout(() => submitComposer(el), 400);
+    // Submit is opt-in via the panel toggle. Don't fire once at a fixed delay:
+    // a site needs a beat to register the prefill and enable its send button,
+    // and if we click too early the button isn't there yet, so we'd fall
+    // straight through to a synthetic Enter — which most composers ignore, and
+    // the tab ends up prefilled but never sent. Instead poll for a clickable
+    // send button and click it as soon as it appears.
+    if (msg.send) scheduleSubmit(el);
     return true;
   };
   if (run()) return;

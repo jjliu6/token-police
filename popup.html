@@ -262,7 +262,10 @@
   <section class="dispatch-board" id="dispatch-board" hidden aria-labelledby="dispatch-board-title">
     <div class="hd">
       <h1 id="dispatch-board-title" style="font-size:14px;letter-spacing:.06em"></h1>
-      <button class="btn" id="dispatch-board-close" type="button"></button>
+      <div style="display:flex;gap:6px;flex:none">
+        <button class="btn" id="dispatch-board-close-tabs" type="button"></button>
+        <button class="btn" id="dispatch-board-close" type="button"></button>
+      </div>
     </div>
     <p class="note" id="dispatch-board-hint" style="text-align:left;margin:0 0 8px"></p>
     <div class="tiles" id="dispatch-tiles"></div>

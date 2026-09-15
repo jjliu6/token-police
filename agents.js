@@ -76,7 +76,12 @@ const DISPATCH_TARGETS = [
   { id: 'claude-code', name: 'Claude Code', color: '#D97757', kind: 'code', quotaId: 'claude-code' },
   { id: 'codex', name: 'Codex', color: '#5CD6B3', kind: 'code', quotaId: 'codex' },
   { id: 'cursor', name: 'Cursor', color: '#6E9BF5', kind: 'code', quotaId: 'cursor' },
-  { id: 'grok-bot', name: 'Grok Bot', color: '#F49AC1', kind: 'code', quotaId: 'grok-bot', dispatch: false },
+  // Grok's coding surface is Build Mode inside grok.com's normal composer, so it
+  // shares the SuperGrok (grok-build) quota. Separate from the chat Grok above
+  // because the content script must flip the composer into Build Mode first.
+  // Grok Bot (on Cursor's spending page) has no public composer, so it stays on
+  // the quota cards only and is not a dispatch target.
+  { id: 'grok-build-code', name: 'Grok Build', color: '#B78CF0', kind: 'code', quotaId: 'grok-build' },
 ];
 
 const AUTO_MIN_LEFT = 15;
@@ -145,6 +150,10 @@ function buildDispatch(agent, prompt, repo) {
       return { url: 'https://chatgpt.com/codex', fill: 'script' };
     case 'grok-build':
       return { url: 'https://grok.com/', fill: 'script' };
+    case 'grok-build-code':
+      // Same page as chat Grok, but the content script flips the composer's
+      // mode selector to Build before it fills and sends.
+      return { url: 'https://grok.com/', fill: 'script', mode: 'build' };
     case 'cursor':
       return { url: 'https://cursor.com/agents', fill: 'script' };
     case 'gemini':
@@ -168,6 +177,8 @@ function makeDispatchJob(agent, prompt, repo, auto, send) {
     // Auto-send only makes sense for surfaces we type into ourselves.
     // 'query' fill hands the prompt to the site via the URL, so it decides.
     send: built.fill === 'script' ? !!send : false,
+    // Composer mode the content script must select before filling (Grok Build).
+    mode: built.mode || null,
     auto: !!auto,
     at: Date.now(),
   };
@@ -176,7 +187,7 @@ function makeDispatchJob(agent, prompt, repo, auto, send) {
 function putDispatchPending(map, tabId, job) {
   const next = Object.assign({}, map && typeof map === 'object' && !Array.isArray(map) ? map : {});
   if (tabId == null || !job || !job.prompt) return next;
-  next[String(tabId)] = { prompt: job.prompt, host: job.host || '', send: !!job.send };
+  next[String(tabId)] = { prompt: job.prompt, host: job.host || '', send: !!job.send, mode: job.mode || null };
   return next;
 }
 
@@ -184,7 +195,7 @@ function takeDispatchPending(map, tabId) {
   if (!map || typeof map !== 'object') return { map: {}, job: null };
   if (map.prompt && map.tabId != null) {
     if (tabId != null && Number(map.tabId) === Number(tabId)) {
-      return { map: {}, job: { prompt: map.prompt, host: map.host || '', send: !!map.send } };
+      return { map: {}, job: { prompt: map.prompt, host: map.host || '', send: !!map.send, mode: map.mode || null } };
     }
     return { map, job: null };
   }

@@ -403,9 +403,10 @@ function openDispatchJobs(jobs) {
           prompt: job.prompt,
           host: hostFromUrl(job.url),
           send: job.send,
+          mode: job.mode,
         });
         await new Promise((done) => chrome.storage.local.set({ dispatchPending: pending }, done));
-        pingFill(tabId, job.prompt, 0, job.send);
+        pingFill(tabId, job.prompt, 0, job.send, job.mode);
       }
       resolve();
     });
@@ -416,12 +417,16 @@ function hostFromUrl(url) {
   try { return new URL(url).hostname; } catch (e) { return ''; }
 }
 
-function pingFill(tabId, prompt, attempt, send) {
+function pingFill(tabId, prompt, attempt, send, mode) {
   if (!chrome.tabs.sendMessage) return;
-  chrome.tabs.sendMessage(tabId, { type: 'dispatchFill', prompt, send: !!send }, () => {
+  chrome.tabs.sendMessage(tabId, { type: 'dispatchFill', prompt, send: !!send, mode: mode || null }, () => {
     const err = chrome.runtime.lastError;
-    if (!err || attempt >= 8) return;
-    setTimeout(() => pingFill(tabId, prompt, attempt + 1, send), 700);
+    // Keep re-delivering until the content script is listening. A slow tab can
+    // take many seconds to load content.js; ~21s of retries (was ~5.6s) covers
+    // it. The content script also claims on its own once loaded, so this is a
+    // best-effort nudge, not the only delivery path.
+    if (!err || attempt >= 30) return;
+    setTimeout(() => pingFill(tabId, prompt, attempt + 1, send, mode), 700);
   });
 }
 

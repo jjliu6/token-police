@@ -426,15 +426,61 @@ function submitComposer(el) {
 // last resort. This is what makes auto-send land on the slow-to-enable
 // composers (Gemini, Grok) that a single early click used to miss.
 function scheduleSubmit(el) {
+  // Poll generously: a slow or backgrounded tab can take 15s+ to hydrate and
+  // enable its send button, so keep looking for ~18s before giving up to the
+  // synthetic-Enter fallback. We stop the instant a real button is clicked.
   let n = 0;
   const tick = () => {
     n++;
     const btn = findSendButton(el);
     if (btn) { try { btn.click(); } catch (e) {} return; }
-    if (n >= 20) { submitComposer(el); return; }
-    setTimeout(tick, 300);
+    if (n >= 45) { submitComposer(el); return; }
+    setTimeout(tick, 400);
   };
-  setTimeout(tick, 300);
+  setTimeout(tick, 400);
+}
+
+// Grok's coding surface is "Build" mode, chosen from the composer's mode
+// dropdown (Auto / Fast / Expert / Build / Heavy). Until Build is active the
+// composer only says "Switch to Build Mode to create apps", so a coding
+// dispatch must flip that selector before filling. Best-effort and idempotent:
+// returns true once Build is active (or we just picked it), false while we're
+// still opening the menu / waiting for it to render, so the caller keeps
+// retrying. Selectors are matched by the visible mode labels, so a Grok layout
+// change may need a tweak here.
+const GROK_MODES = ['auto', 'fast', 'expert', 'build', 'heavy'];
+function seenVisible(el) {
+  if (!el || !el.getBoundingClientRect) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+function selectGrokBuildMode() {
+  if (!location.hostname.includes('grok.com')) return true;
+  const label = (el) => ((el && el.textContent) || '').trim().toLowerCase();
+  // If the mode menu is open, its "Build" entry is on screen — pick it.
+  const menuItems = document.querySelectorAll('[role="menuitem"],[role="menuitemradio"],[role="option"]');
+  for (let i = 0; i < menuItems.length; i++) {
+    if (seenVisible(menuItems[i]) && label(menuItems[i]) === 'build') {
+      try { menuItems[i].click(); } catch (e) {}
+      return true;
+    }
+  }
+  // Otherwise find the mode trigger (a short button whose label starts with the
+  // current mode word). If it's already Build we're done; if not, open it so the
+  // next pass can click the Build entry above.
+  const btns = document.querySelectorAll('button');
+  for (let i = 0; i < btns.length; i++) {
+    const b = btns[i];
+    if (!seenVisible(b)) continue;
+    const t = label(b);
+    const lead = t.split(/\s+/)[0];
+    if (GROK_MODES.indexOf(lead) >= 0 && t.length < 24) {
+      if (lead === 'build') return true;
+      try { b.click(); } catch (e) {}
+      return false;
+    }
+  }
+  return false;
 }
 
 function claimDispatchFill() {
@@ -454,7 +500,11 @@ function onDispatchFill(msg) {
   if (dispatchHandled) return;
   if (!inTopFrame() || !isDispatchSurface()) return;
   if (!msg || msg.type !== 'dispatchFill' || !msg.prompt) return;
+  const needBuild = msg.mode === 'build';
   const run = () => {
+    // Coding dispatch to Grok has to land in Build mode first — keep retrying
+    // (via the loop below) until the selector is flipped, then fill.
+    if (needBuild && !selectGrokBuildMode()) return false;
     const el = fillComposer(msg.prompt);
     if (!el) return false;
     // Latch before any async work so a racing path bails instead of re-sending.
@@ -470,12 +520,16 @@ function onDispatchFill(msg) {
     return true;
   };
   if (run()) return;
+  // The composer often isn't in the DOM yet on first message — a heavy or
+  // backgrounded page can take many seconds to render it (and, for Grok Build,
+  // to expose the mode selector). Retry for ~24s rather than ~8s so slow loads
+  // still get filled instead of silently dropping the prompt.
   let n = 0;
   const ivFill = setInterval(() => {
     n++;
-    if (dispatchHandled || run() || n > 20) {
+    if (dispatchHandled || run() || n > 60) {
       clearInterval(ivFill);
-      if (n > 20 && !dispatchHandled) claimDispatchFill();
+      if (n > 60 && !dispatchHandled) claimDispatchFill();
     }
   }, 400);
 }
@@ -488,7 +542,7 @@ if (inTopFrame() && isDispatchSurface()) {
     try {
       chrome.runtime.sendMessage({ type: 'dispatchClaimFill' }, (job) => {
         if (chrome.runtime.lastError || !job || !job.prompt) return;
-        onDispatchFill({ type: 'dispatchFill', prompt: job.prompt, send: job.send });
+        onDispatchFill({ type: 'dispatchFill', prompt: job.prompt, send: job.send, mode: job.mode });
       });
     } catch (e) {}
   }

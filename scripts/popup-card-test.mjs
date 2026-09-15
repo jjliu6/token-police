@@ -106,7 +106,33 @@ const els = {
   'logs-json': el(),
   'logs-csv': el(),
   'logs-clear': el(),
+  'dispatch-toggle': el(),
+  'dispatch-float': el({ hidden: true }),
+  'dispatch-fold': el(),
+  'dispatch-kind': el(),
+  'dispatch-prompt': el({ value: '', placeholder: '' }),
+  'dispatch-repo-row': el({ hidden: false }),
+  'dispatch-repo': el({ value: '' }),
+  'dispatch-recents': el(),
+  'dispatch-parallel': el(),
+  'dispatch-ready': el(),
+  'dispatch-chips': el(),
+  'dispatch-auto': el(),
+  'dispatch-go': el(),
+  'dispatch-note': el(),
+  'dispatch-board': el({ hidden: true }),
+  'dispatch-board-title': el(),
+  'dispatch-board-hint': el(),
+  'dispatch-board-foot': el(),
+  'dispatch-board-close': el(),
+  'dispatch-tiles': el(),
 };
+
+const kindChatBtn = el({ dataset: { kind: 'chat' }, textContent: 'Chat' });
+const kindCodeBtn = el({ dataset: { kind: 'code' }, textContent: 'Code' });
+els['dispatch-float'].querySelectorAll = (sel) => (
+  sel === '#dispatch-kind [data-kind]' ? [kindChatBtn, kindCodeBtn] : []
+);
 
 const popupCtx = {
   chrome: {
@@ -134,7 +160,12 @@ const popupCtx = {
       onChanged: { addListener: noop },
     },
     runtime: {
-      sendMessage: (msg) => { sent.push(msg); },
+      sendMessage: (msg, cb) => {
+        sent.push(msg);
+        if (msg && msg.type === 'dispatchOpen' && typeof cb === 'function') {
+          cb((msg.jobs || []).map((j, i) => Object.assign({}, j, { tabId: 501 + i })));
+        } else if (typeof cb === 'function') cb();
+      },
       getContexts: () => Promise.resolve([]),
       getURL: (p) => p,
       getManifest: () => ({ version: '1.2.1' }),
@@ -190,6 +221,9 @@ if (els.lang.textContent !== '中文') problems.push(`English UI should show a �
 if (els.refresh.textContent !== 'Refresh') problems.push(`default refresh label should be Refresh, got ${JSON.stringify(els.refresh.textContent)}`);
 if (els.share.textContent !== 'Share app') problems.push(`default share label should be Share app, got ${JSON.stringify(els.share.textContent)}`);
 if (els.logs.textContent !== 'Logs') problems.push(`default logs label should be Logs, got ${JSON.stringify(els.logs.textContent)}`);
+if (els['dispatch-toggle'].textContent !== 'Dispatch') {
+  problems.push(`default dispatch label should be Dispatch, got ${JSON.stringify(els['dispatch-toggle'].textContent)}`);
+}
 if (popupCtx.document.documentElement.lang !== 'en') {
   problems.push(`<html lang> should be en by default, got ${popupCtx.document.documentElement.lang}`);
 }
@@ -442,6 +476,89 @@ if (logsProblems.length) {
   process.exit(1);
 }
 console.log('ok  Logs view sorts, filters, escapes scraped strings, and shows its empty state');
+
+// --- Dispatch composer: kind leak, unknown quota, empty selection, board ---
+const dispatchProblems = [];
+vm.runInContext(`
+  quotaMap = {
+    'claude-code': { limits: [{ percent_left: 62 }] },
+    'codex': { limits: [{ percent_left: 78 }] },
+    'cursor': { limits: [{ percent_left: 88 }] },
+    'grok-bot': { limits: [{ percent_left: 12 }] },
+    'grok-build': { limits: [{ percent_left: 34 }] },
+    'gemini': { limits: [{ percent_left: 91 }] },
+  };
+  dispatchEnabled = {};
+  dispatchKind = 'chat';
+  dispatchSelected = ['cursor', 'gemini', 'claude-code'];
+  dispatchPrompt = 'ship it';
+  dispatchJobs = [];
+`, ctx);
+const chatSel = vm.runInContext('selectedAgents().map((a) => a.id).join(",")', ctx);
+if (chatSel !== 'gemini') dispatchProblems.push(`chat mode must ignore code chips, got ${chatSel}`);
+ctx.renderDispatch();
+if (els['dispatch-chips'].innerHTML.includes('Cursor') || els['dispatch-chips'].innerHTML.includes('Claude Code')) {
+  dispatchProblems.push(`chat chips should not list code agents: ${els['dispatch-chips'].innerHTML}`);
+}
+if (!els['dispatch-chips'].innerHTML.includes('Gemini') || !els['dispatch-chips'].innerHTML.includes('Grok')) {
+  dispatchProblems.push(`chat chips should list Gemini and Grok: ${els['dispatch-chips'].innerHTML}`);
+}
+if (els['dispatch-chips'].innerHTML.includes('>100<')) {
+  dispatchProblems.push('chips must not fake 100% leftover');
+}
+if (!els['dispatch-repo-row'].hidden) dispatchProblems.push('repo row should hide in chat mode');
+
+vm.runInContext('quotaMap = {}; dispatchKind = "code"; dispatchSelected = []; renderDispatch();', ctx);
+const autoNone = vm.runInContext('pickAutoDispatch(dispatchKind, quotaMap, dispatchEnabled)', ctx);
+if (autoNone != null) dispatchProblems.push('auto-dispatch with no quota data should be null');
+if (!els['dispatch-chips'].innerHTML.includes('—')) {
+  dispatchProblems.push(`unknown leftover should render as —, got ${els['dispatch-chips'].innerHTML}`);
+}
+
+sent.length = 0;
+els['dispatch-board'].hidden = true;
+els['dispatch-float'].hidden = true;
+vm.runInContext(`
+  dispatchKind = 'code';
+  dispatchSelected = [];
+  dispatchPrompt = 'fix login';
+  fireDispatch(selectedAgents(), false);
+`, ctx);
+if (sent.some((m) => m.type === 'dispatchOpen')) {
+  dispatchProblems.push('Dispatch with no chips selected must not open tabs');
+}
+if (els['dispatch-float'].hidden) dispatchProblems.push('empty selection should reopen the composer');
+
+sent.length = 0;
+vm.runInContext(`
+  dispatchKind = 'code';
+  dispatchSelected = ['cursor', 'gemini'];
+  dispatchPrompt = 'fix login';
+  fireDispatch(selectedAgents(), false);
+`, ctx);
+const opened = sent.filter((m) => m.type === 'dispatchOpen');
+if (opened.length !== 1) dispatchProblems.push(`expected one dispatchOpen, got ${opened.length}`);
+else {
+  const ids = (opened[0].jobs || []).map((j) => j.agentId);
+  if (ids.join() !== 'cursor') dispatchProblems.push(`code dispatch must drop Gemini, got ${ids.join()}`);
+}
+if (els['dispatch-board'].hidden) dispatchProblems.push('successful dispatch should show the board');
+if (!els['dispatch-float'].hidden) dispatchProblems.push('successful dispatch should collapse the composer');
+if (!els['dispatch-tiles'].innerHTML.includes('Cursor') || !els['dispatch-tiles'].innerHTML.includes('fix login')) {
+  dispatchProblems.push(`board tiles, got ${els['dispatch-tiles'].innerHTML}`);
+}
+
+ctx.setDispatchOpen(true);
+(docListeners.keydown || []).forEach((fn) => fn({ key: 'Escape' }));
+if (!els['dispatch-board'].hidden) dispatchProblems.push('Escape should close the dispatch board first');
+(docListeners.keydown || []).forEach((fn) => fn({ key: 'Escape' }));
+if (!els['dispatch-float'].hidden) dispatchProblems.push('second Escape should collapse the composer');
+
+if (dispatchProblems.length) {
+  console.error(dispatchProblems.join('\n'));
+  process.exit(1);
+}
+console.log('ok  Dispatch keeps Chat/Code separate, skips unknown quota, and Esc closes board then composer');
 
 // --- Failure state on cards ---
 const failProblems = [];
@@ -1060,6 +1177,18 @@ if (!/id="share-shot"/.test(htmlCss) || !/\.share-card \.shot\{/.test(htmlCss)) 
 if (!/\.share-overlay\{[^}]*z-index:\s*60/.test(htmlCss)) {
   layoutProblems.push('share overlay should sit above the mascot (z-index 40) and veil');
 }
+if (!/id="dispatch-toggle"/.test(htmlCss) || !/id="dispatch-float"[\s\S]*hidden/.test(htmlCss)) {
+  layoutProblems.push('Dispatch should be a footer button that opens a collapsed composer');
+}
+if (!/\.dispatch-float\{[^}]*z-index:\s*55/.test(htmlCss)) {
+  layoutProblems.push('dispatch composer should sit below the share overlay (z-index 60)');
+}
+if (!/\.dispatch-board\{[^}]*z-index:\s*65/.test(htmlCss)) {
+  layoutProblems.push('dispatch board should sit above share (60) and below logs (70)');
+}
+if (!/\.footer-actions\{[^}]*flex-wrap:\s*wrap/.test(htmlCss)) {
+  layoutProblems.push('footer actions should wrap so Dispatch + Logs + Share fit the panel');
+}
 if (!/\.ver\{[^}]*overflow-wrap:\s*anywhere/.test(htmlCss)) {
   layoutProblems.push('version line should wrap instead of overflowing the panel');
 }
@@ -1292,6 +1421,9 @@ if (els.lang.textContent !== 'EN') zhProblems.push(`Chinese UI should show an EN
 if (els.refresh.textContent !== '刷新') zhProblems.push(`Chinese refresh label should be 刷新, got ${JSON.stringify(els.refresh.textContent)}`);
 if (els.share.textContent !== '推荐应用') zhProblems.push(`Chinese share label should be 推荐应用, got ${JSON.stringify(els.share.textContent)}`);
 if (els.logs.textContent !== '抓取日志') zhProblems.push(`Chinese logs label should be 抓取日志, got ${JSON.stringify(els.logs.textContent)}`);
+if (els['dispatch-toggle'].textContent !== '派遣') {
+  zhProblems.push(`Chinese dispatch label should be 派遣, got ${JSON.stringify(els['dispatch-toggle'].textContent)}`);
+}
 if (els['share-title'].textContent !== '推荐 Token Police') {
   zhProblems.push(`Chinese share title, got ${JSON.stringify(els['share-title'].textContent)}`);
 }

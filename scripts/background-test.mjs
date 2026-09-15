@@ -16,6 +16,9 @@ const store = {};
 let onMessage = null;
 const removedTabs = [];
 const createdTabs = [];
+const liveTabs = {};
+const tabMessages = [];
+let autoCloseTabs = true;
 const badge = { texts: [], colors: [] };
 const alarms = { created: [], cleared: 0, listener: null, live: {} };
 const notifications = [];
@@ -70,13 +73,40 @@ const ctxObj = {
       create: (opts, cb) => {
         createdTabs.push(clone(opts));
         const id = nextTabId++;
+        const tab = { id, windowId: 1, url: opts.url, active: !!opts.active };
+        liveTabs[id] = tab;
         setTimeout(() => {
-          if (cb) cb({ id });
+          if (cb) cb(tab);
           // 标签页"抓完自动关"：马上触发 onRemoved，让 openAndWait 尽快 resolve
-          setTimeout(() => onRemovedListeners.slice().forEach((fn) => fn(id)), 0);
+          if (autoCloseTabs) {
+            setTimeout(() => {
+              delete liveTabs[id];
+              onRemovedListeners.slice().forEach((fn) => fn(id));
+            }, 0);
+          }
         }, 0);
       },
-      remove: (id, cb) => { removedTabs.push(id); if (cb) cb(); },
+      get: (id, cb) => {
+        setTimeout(() => {
+          const tab = liveTabs[id];
+          if (!tab) {
+            ctxObj.chrome.runtime.lastError = { message: 'No tab' };
+            cb();
+            ctxObj.chrome.runtime.lastError = null;
+            return;
+          }
+          cb(tab);
+        }, 0);
+      },
+      update: (id, opts, cb) => {
+        if (liveTabs[id]) Object.assign(liveTabs[id], opts);
+        setTimeout(() => { if (cb) cb(liveTabs[id]); }, 0);
+      },
+      sendMessage: (id, msg, cb) => {
+        tabMessages.push({ id, msg });
+        setTimeout(() => { if (cb) cb({ ok: true }); }, 0);
+      },
+      remove: (id, cb) => { removedTabs.push(id); delete liveTabs[id]; if (cb) cb(); },
       onRemoved: {
         addListener: (fn) => onRemovedListeners.push(fn),
         removeListener: (fn) => {
@@ -84,6 +114,9 @@ const ctxObj = {
           if (i >= 0) onRemovedListeners.splice(i, 1);
         },
       },
+    },
+    windows: {
+      update: (_id, _opts, cb) => { if (cb) cb(); },
     },
     action: {
       setBadgeText: ({ text }) => badge.texts.push(text),
@@ -374,6 +407,69 @@ if (moves().length !== 3) problems.push('a single point in the window is not eno
 await grok(82, T + 10 * H); // 窗口 [8h,10h]：86→82 只掉 4，低于阈值
 if (moves().length !== 3) problems.push('a small burn below 10% must not nudge');
 
+// 12) Dispatch opens background tabs, keeps a pending fill per tab, and focuses later
+autoCloseTabs = false;
+tabMessages.length = 0;
+const makeJob = vm.runInContext('makeDispatchJob', ctx);
+const allAgents = vm.runInContext('AGENTS', ctx);
+const cursorAgent = allAgents.find((a) => a.id === 'cursor');
+const geminiAgent = allAgents.find((a) => a.id === 'gemini');
+const grokAgent = allAgents.find((a) => a.id === 'grok-build');
+const beforeDispatch = createdTabs.length;
+let openedJobs = null;
+onMessage({
+  type: 'dispatchOpen',
+  jobs: [
+    makeJob(cursorAgent, 'ship it', '', false),
+    makeJob(geminiAgent, 'ship it', '', false),
+    makeJob(grokAgent, 'ship it', '', false),
+  ],
+}, {}, (res) => { openedJobs = res; });
+await tick(40);
+if (!Array.isArray(openedJobs) || openedJobs.length !== 3) {
+  problems.push(`dispatchOpen should return 3 jobs, got ${JSON.stringify(openedJobs)}`);
+}
+const dispatched = createdTabs.slice(beforeDispatch);
+if (dispatched.length !== 3 || dispatched.some((o) => o.active !== false)) {
+  problems.push(`dispatch tabs must open in the background, got ${JSON.stringify(dispatched)}`);
+}
+if (!dispatched[0].url.includes('cursor.com/agents') || !dispatched[1].url.includes('gemini.google.com/app')) {
+  problems.push(`dispatch URLs, got ${JSON.stringify(dispatched.map((o) => o.url))}`);
+}
+if (/[?&]q=/.test(dispatched[2].url || '')) {
+  problems.push(`Grok dispatch must not auto-submit via q=, got ${dispatched[2].url}`);
+}
+const pending = store.dispatchPending || {};
+const pendingKeys = Object.keys(pending);
+if (pendingKeys.length !== 3) {
+  problems.push(`each script-fill tab should keep its own pending prompt, got ${JSON.stringify(pending)}`);
+}
+if (pendingKeys.some((k) => pending[k].prompt !== 'ship it')) {
+  problems.push('pending fills should keep the prompt');
+}
+let fillRes = null;
+onMessage({ type: 'dispatchFillForMe' }, { tab: { id: Number(pendingKeys[0]) }, frameId: 0 }, (res) => { fillRes = res; });
+await tick(10);
+if (!fillRes || fillRes.prompt !== 'ship it') {
+  problems.push(`dispatchFillForMe should return this tab's prompt, got ${JSON.stringify(fillRes)}`);
+}
+onMessage({ type: 'dispatchFilled' }, { tab: { id: Number(pendingKeys[0]) } }, () => {});
+await tick(10);
+if (store.dispatchPending[pendingKeys[0]]) {
+  problems.push('successful fill should drop that tab from dispatchPending');
+}
+if (Object.keys(store.dispatchPending || {}).length !== 2) {
+  problems.push('filling one tab must not wipe the other pending fills');
+}
+
+let focused = null;
+onMessage({ type: 'dispatchFocus', tabId: openedJobs[1].tabId, url: openedJobs[1].url }, {}, (res) => { focused = res; });
+await tick(10);
+if (!focused || focused.ok !== true) problems.push(`dispatchFocus should succeed, got ${JSON.stringify(focused)}`);
+if (!liveTabs[openedJobs[1].tabId] || liveTabs[openedJobs[1].tabId].active !== true) {
+  problems.push('dispatchFocus should activate the existing tab');
+}
+
 if (problems.length) {
   console.error(problems.join('\n'));
   process.exit(1);
@@ -388,4 +484,5 @@ console.log('ok  Move reminder: on by default, >10% burned in 2h, 2h cooldown, o
 console.log('ok  Cursor + Grok Bot share one spending-page scrape; missing Grok Bot section is flagged, not failed');
 console.log('ok  Daily update check stores the latest release, survives failures, and is toggleable');
 console.log('ok  Alarms are not recreated on re-sync, so their countdowns are never reset');
+console.log('ok  Dispatch opens background tabs, keeps per-tab pending fills, and can refocus a tab');
 console.log('\nBackground test passed.');

@@ -1367,6 +1367,7 @@ function render() {
     if (freshnessTimer != null) clearTimeout(freshnessTimer);
     freshnessTimer = setTimeout(render, 60000);
     quotaMap = map;
+    dispatchEnabled = en;
     renderDispatch();
   });
 }
@@ -1505,6 +1506,7 @@ if (typeof document !== 'undefined' && document.addEventListener) {
 }
 
 let quotaMap = {};
+let dispatchEnabled = {};
 let dispatchKind = 'code';
 let dispatchSelected = [];
 let dispatchPrompt = '';
@@ -1589,13 +1591,15 @@ function renderDispatch() {
   const par = document.getElementById('dispatch-parallel');
   if (par) par.textContent = t('dispatchParallel');
   const readyBtn = document.getElementById('dispatch-ready');
-  const ready = pickReadyDispatch(dispatchKind, quotaMap);
+  const ready = pickReadyDispatch(dispatchKind, quotaMap, dispatchEnabled);
   if (readyBtn) readyBtn.textContent = `${t('dispatchSelectReady')}${ready.length ? ` · ${ready.length}` : ''}`;
   const chips = document.getElementById('dispatch-chips');
   if (chips) {
-    chips.innerHTML = agentsForKind(dispatchKind).map((a) => {
-      const idx = dispatchSelected.indexOf(a.id);
-      const left = leftoverOf(a, quotaMap);
+    const kindIds = agentsForKind(dispatchKind, dispatchEnabled).map((a) => a.id);
+    const selectedInKind = dispatchSelected.filter((id) => kindIds.indexOf(id) !== -1);
+    chips.innerHTML = agentsForKind(dispatchKind, dispatchEnabled).map((a) => {
+      const idx = selectedInKind.indexOf(a.id);
+      const left = leftoverLabel(a, quotaMap);
       return `<button type="button" class="chip${idx >= 0 ? ' on' : ''}" data-agent="${a.id}">
         <span class="ord">${idx >= 0 ? idx + 1 : ''}</span>
         <span class="dot" style="background:${a.color}"></span>
@@ -1605,10 +1609,11 @@ function renderDispatch() {
     }).join('');
   }
   const autoBtn = document.getElementById('dispatch-auto');
-  const picked = pickAutoDispatch(dispatchKind, quotaMap);
+  const picked = pickAutoDispatch(dispatchKind, quotaMap, dispatchEnabled);
   if (autoBtn) autoBtn.textContent = picked ? `${t('dispatchAuto')} · ${picked.name}` : t('dispatchAuto');
   const go = document.getElementById('dispatch-go');
-  if (go) go.textContent = t('dispatchMulti', { n: Math.max(dispatchSelected.length, 1) });
+  const nSel = selectedAgents().length;
+  if (go) go.textContent = t('dispatchMulti', { n: Math.max(nSel, 1) });
   const note = document.getElementById('dispatch-note');
   if (note) note.textContent = t('dispatchHint');
   renderDispatchBoard();
@@ -1662,7 +1667,7 @@ function fireDispatch(agents, auto) {
 }
 
 function selectedAgents() {
-  return dispatchSelected.map((id) => AGENTS.find((a) => a.id === id)).filter(Boolean);
+  return selectedDispatchAgents(dispatchKind, dispatchSelected, dispatchEnabled);
 }
 
 const dispatchToggle = document.getElementById('dispatch-toggle');
@@ -1692,9 +1697,9 @@ if (dispatchPromptEl && dispatchPromptEl.addEventListener) {
   dispatchPromptEl.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
-      if (dispatchSelected.length) fireDispatch(selectedAgents(), false);
+      if (selectedAgents().length) fireDispatch(selectedAgents(), false);
       else {
-        const one = pickAutoDispatch(dispatchKind, quotaMap);
+        const one = pickAutoDispatch(dispatchKind, quotaMap, dispatchEnabled);
         if (one) fireDispatch([one], true);
         else shakeDispatch();
       }
@@ -1735,7 +1740,7 @@ if (dispatchChips && dispatchChips.addEventListener) {
 const dispatchReady = document.getElementById('dispatch-ready');
 if (dispatchReady && dispatchReady.addEventListener) {
   dispatchReady.addEventListener('click', () => {
-    dispatchSelected = pickReadyDispatch(dispatchKind, quotaMap).map((a) => a.id);
+    dispatchSelected = pickReadyDispatch(dispatchKind, quotaMap, dispatchEnabled).map((a) => a.id);
     persistDispatch();
     renderDispatch();
   });
@@ -1743,7 +1748,7 @@ if (dispatchReady && dispatchReady.addEventListener) {
 const dispatchAutoBtn = document.getElementById('dispatch-auto');
 if (dispatchAutoBtn && dispatchAutoBtn.addEventListener) {
   dispatchAutoBtn.addEventListener('click', () => {
-    const one = pickAutoDispatch(dispatchKind, quotaMap);
+    const one = pickAutoDispatch(dispatchKind, quotaMap, dispatchEnabled);
     if (!one) { shakeDispatch(); return; }
     fireDispatch([one], true);
   });
@@ -1751,8 +1756,7 @@ if (dispatchAutoBtn && dispatchAutoBtn.addEventListener) {
 const dispatchGo = document.getElementById('dispatch-go');
 if (dispatchGo && dispatchGo.addEventListener) {
   dispatchGo.addEventListener('click', () => {
-    const list = selectedAgents();
-    fireDispatch(list.length ? list : pickReadyDispatch(dispatchKind, quotaMap).slice(0, 1), false);
+    fireDispatch(selectedAgents(), false);
   });
 }
 const dispatchBoardClose = document.getElementById('dispatch-board-close');

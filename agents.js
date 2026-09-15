@@ -71,24 +71,45 @@ function agentKind(agent) {
   return agent && agent.kind === 'chat' ? 'chat' : 'code';
 }
 
-function agentsForKind(kind) {
-  return AGENTS.filter((a) => agentKind(a) === kind);
+function agentEnabled(agent, enabled) {
+  return !enabled || !agent || enabled[agent.id] !== false;
+}
+
+function agentsForKind(kind, enabled) {
+  return AGENTS.filter((a) => agentKind(a) === kind && agentEnabled(a, enabled));
 }
 
 function leftoverOf(agent, map) {
   const row = map && agent && map[agent.id];
   const p = row && row.limits && row.limits[0] && row.limits[0].percent_left;
-  return p == null ? 100 : p;
+  return p == null || p === '' ? null : Number(p);
 }
 
-function pickAutoDispatch(kind, map) {
-  const pool = agentsForKind(kind).filter((a) => leftoverOf(a, map) >= AUTO_MIN_LEFT);
+function leftoverLabel(agent, map) {
+  const p = leftoverOf(agent, map);
+  return p == null || Number.isNaN(p) ? '—' : String(Math.round(p));
+}
+
+function pickAutoDispatch(kind, map, enabled) {
+  const pool = agentsForKind(kind, enabled).filter((a) => {
+    const p = leftoverOf(a, map);
+    return p != null && !Number.isNaN(p) && p >= AUTO_MIN_LEFT;
+  });
   if (!pool.length) return null;
   return pool.reduce((best, a) => (leftoverOf(a, map) > leftoverOf(best, map) ? a : best));
 }
 
-function pickReadyDispatch(kind, map) {
-  return agentsForKind(kind).filter((a) => leftoverOf(a, map) >= AUTO_MIN_LEFT);
+function pickReadyDispatch(kind, map, enabled) {
+  return agentsForKind(kind, enabled).filter((a) => {
+    const p = leftoverOf(a, map);
+    return p != null && !Number.isNaN(p) && p >= AUTO_MIN_LEFT;
+  });
+}
+
+function selectedDispatchAgents(kind, ids, enabled) {
+  const allow = {};
+  agentsForKind(kind, enabled).forEach((a) => { allow[a.id] = a; });
+  return (ids || []).map((id) => allow[id]).filter(Boolean);
 }
 
 function buildDispatch(agent, prompt, repo) {
@@ -105,13 +126,12 @@ function buildDispatch(agent, prompt, repo) {
       u.searchParams.set('prompt', text);
       return { url: u.toString(), fill: 'query' };
     }
-    case 'grok-build': {
-      const u = new URL('https://grok.com/');
-      u.searchParams.set('q', text);
-      return { url: u.toString(), fill: 'query' };
-    }
+    case 'grok-build':
+      // grok.com/?q= often auto-submits. Prefill only — never send.
+      return { url: 'https://grok.com/', fill: 'script' };
     case 'cursor':
     case 'grok-bot':
+      // Grok Bot has no public composer; both open Cursor Cloud Agents.
       return { url: 'https://cursor.com/agents', fill: 'script' };
     case 'gemini':
       return { url: 'https://gemini.google.com/app', fill: 'script' };

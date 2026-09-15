@@ -368,7 +368,62 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     focusDispatchTab(msg.tabId, msg.url).then((ok) => sendResponse({ ok }));
     return true;
   }
+  if (msg && msg.type === 'dispatchFillForMe') {
+    const tabId = sender && sender.tab && sender.tab.id;
+    const top = sender && (sender.frameId == null || sender.frameId === 0);
+    if (tabId == null || !top) { sendResponse({}); return; }
+    pendingForTab(tabId).then((item) => sendResponse(item && item.prompt ? { prompt: item.prompt } : {}));
+    return true;
+  }
+  if (msg && msg.type === 'dispatchFilled') {
+    const tabId = sender && sender.tab && sender.tab.id;
+    if (tabId != null) clearPendingTab(tabId);
+  }
 });
+
+if (chrome.tabs && chrome.tabs.onRemoved && chrome.tabs.onRemoved.addListener) {
+  chrome.tabs.onRemoved.addListener((id) => { clearPendingTab(id); });
+}
+
+function pendingBag(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  if (raw.prompt && raw.tabId != null) {
+    const one = {};
+    one[String(raw.tabId)] = { prompt: raw.prompt, host: raw.host || '', url: raw.url || '' };
+    return one;
+  }
+  return Object.assign({}, raw);
+}
+
+function mutatePending(fn) {
+  const run = () => new Promise((resolve) => {
+    chrome.storage.local.get(['dispatchPending'], (res) => {
+      const bag = pendingBag(res.dispatchPending);
+      const next = fn(bag) || bag;
+      chrome.storage.local.set({ dispatchPending: next }, resolve);
+    });
+  });
+  writeQueue = writeQueue.then(run, run);
+  return writeQueue;
+}
+
+function rememberPending(tabId, job) {
+  return mutatePending((bag) => {
+    bag[String(tabId)] = { prompt: job.prompt, host: hostFromUrl(job.url), url: job.url || '' };
+    return bag;
+  });
+}
+
+function pendingForTab(tabId) {
+  return getLocal(['dispatchPending']).then((res) => pendingBag(res.dispatchPending)[String(tabId)] || null);
+}
+
+function clearPendingTab(tabId) {
+  return mutatePending((bag) => {
+    delete bag[String(tabId)];
+    return bag;
+  });
+}
 
 function openDispatchJobs(jobs) {
   const opened = [];
@@ -377,13 +432,13 @@ function openDispatchJobs(jobs) {
       const tabId = tab && tab.id;
       const next = Object.assign({}, job, { tabId: tabId == null ? null : tabId });
       opened.push(next);
+      const done = () => resolve();
       if (tabId != null && job.fill === 'script' && job.prompt) {
-        chrome.storage.local.set({
-          dispatchPending: { tabId, prompt: job.prompt, host: hostFromUrl(job.url) },
+        rememberPending(tabId, job).then(() => {
+          pingFill(tabId, job.prompt, 0);
+          done();
         });
-        pingFill(tabId, job.prompt, 0);
-      }
-      resolve();
+      } else done();
     });
   })), Promise.resolve()).then(() => opened);
 }
@@ -394,9 +449,9 @@ function hostFromUrl(url) {
 
 function pingFill(tabId, prompt, attempt) {
   if (!chrome.tabs.sendMessage) return;
-  chrome.tabs.sendMessage(tabId, { type: 'dispatchFill', prompt }, () => {
-    const err = chrome.runtime.lastError;
-    if (!err || attempt >= 8) return;
+  chrome.tabs.sendMessage(tabId, { type: 'dispatchFill', prompt }, (res) => {
+    void chrome.runtime.lastError;
+    if ((res && res.ok) || attempt >= 8) return;
     setTimeout(() => pingFill(tabId, prompt, attempt + 1), 700);
   });
 }

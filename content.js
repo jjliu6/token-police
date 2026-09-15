@@ -235,15 +235,41 @@ if (!done) {
   }, 2000);
 }
 
+function isTopFrame() {
+  try {
+    return typeof window === 'undefined' || window === window.top;
+  } catch (e) {
+    return true;
+  }
+}
+
+function isScrapePage() {
+  try {
+    return /(?:\?|&)cawrefresh=/.test(location.search || '');
+  } catch (e) {
+    return false;
+  }
+}
+
 function fillComposer(prompt) {
-  if (!prompt) return false;
-  const visible = (el) => {
-    if (!el) return false;
-    const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 1, height: 1 };
-    return r.width > 0 && r.height > 0;
+  if (!prompt || !isTopFrame()) return false;
+  const skip = (el) => {
+    if (!el) return true;
+    const type = (el.type || '').toLowerCase();
+    if (el.tagName === 'INPUT' && type && type !== 'text' && type !== 'textarea') return true;
+    const hint = ((el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('placeholder'))) || '').toLowerCase();
+    if (/search|filter/.test(hint)) return true;
+    const role = ((el.getAttribute && el.getAttribute('role')) || '').toLowerCase();
+    if (role === 'searchbox') return true;
+    return false;
+  };
+  const areaOf = (el) => {
+    if (!el || !el.getBoundingClientRect) return 1;
+    const r = el.getBoundingClientRect();
+    return (r.width || 0) * (r.height || 0);
   };
   const trySet = (el) => {
-    if (!el || !visible(el)) return false;
+    if (!el || skip(el) || areaOf(el) < 1600) return false;
     try {
       el.focus();
       if (el.isContentEditable) {
@@ -267,36 +293,57 @@ function fillComposer(prompt) {
   const roots = [document];
   if (document.body && document.body.shadowRoot) roots.push(document.body.shadowRoot);
   const sels = 'textarea, [contenteditable="true"], [role="textbox"]';
+  let best = null;
+  let bestArea = 0;
   for (const root of roots) {
     if (!root || !root.querySelectorAll) continue;
     const nodes = root.querySelectorAll(sels);
     for (let i = 0; i < nodes.length; i++) {
-      if (trySet(nodes[i])) return true;
+      const el = nodes[i];
+      if (skip(el)) continue;
+      const area = areaOf(el);
+      if (area > bestArea) {
+        best = el;
+        bestArea = area;
+      }
     }
   }
-  return false;
+  return trySet(best);
+}
+
+function noteFilled() {
+  if (chrome.runtime && chrome.runtime.sendMessage) {
+    chrome.runtime.sendMessage({ type: 'dispatchFilled' }, () => void chrome.runtime.lastError);
+  }
 }
 
 function onDispatchFill(msg) {
-  if (!msg || msg.type !== 'dispatchFill' || !msg.prompt) return;
-  if (fillComposer(msg.prompt)) return;
+  if (!msg || msg.type !== 'dispatchFill' || !msg.prompt || !isTopFrame() || isScrapePage()) return;
+  if (fillComposer(msg.prompt)) {
+    noteFilled();
+    return;
+  }
   let n = 0;
   const ivFill = setInterval(() => {
     n++;
-    if (fillComposer(msg.prompt) || n > 20) clearInterval(ivFill);
+    if (fillComposer(msg.prompt)) {
+      clearInterval(ivFill);
+      noteFilled();
+    } else if (n > 20) clearInterval(ivFill);
   }, 400);
 }
 
 if (chrome.runtime && chrome.runtime.onMessage && chrome.runtime.onMessage.addListener) {
-  chrome.runtime.onMessage.addListener((msg) => { onDispatchFill(msg); });
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (!msg || msg.type !== 'dispatchFill') return;
+    onDispatchFill(msg);
+    if (typeof sendResponse === 'function') sendResponse({ ok: true });
+  });
 }
-if (chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-  chrome.storage.local.get(['dispatchPending'], (res) => {
-    const pending = res && res.dispatchPending;
-    if (!pending || !pending.prompt) return;
-    const host = location.hostname || '';
-    if (pending.host && host && host.indexOf(pending.host) === -1) return;
-    onDispatchFill({ type: 'dispatchFill', prompt: pending.prompt });
+if (isTopFrame() && !isScrapePage() && chrome.runtime && chrome.runtime.sendMessage) {
+  chrome.runtime.sendMessage({ type: 'dispatchFillForMe' }, (res) => {
+    void chrome.runtime.lastError;
+    if (res && res.prompt) onDispatchFill({ type: 'dispatchFill', prompt: res.prompt });
   });
 }
 

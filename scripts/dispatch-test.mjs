@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const ctx = vm.createContext({ URL });
+const ctx = vm.createContext({ URL, Number, NumberIsNaN: Number.isNaN });
+ctx.Number.isNaN = Number.isNaN;
 vm.runInContext(readFileSync(resolve(root, 'agents.js'), 'utf8'), ctx, { filename: 'agents.js' });
 
 const problems = [];
@@ -15,11 +16,16 @@ const buildDispatch = vm.runInContext('buildDispatch', ctx);
 const pickAutoDispatch = vm.runInContext('pickAutoDispatch', ctx);
 const pickReadyDispatch = vm.runInContext('pickReadyDispatch', ctx);
 const makeDispatchJob = vm.runInContext('makeDispatchJob', ctx);
+const leftoverOf = vm.runInContext('leftoverOf', ctx);
+const leftoverLabel = vm.runInContext('leftoverLabel', ctx);
+const selectedDispatchAgents = vm.runInContext('selectedDispatchAgents', ctx);
+const agentsForKind = vm.runInContext('agentsForKind', ctx);
 
 const claude = AGENTS.find((a) => a.id === 'claude-code');
 const grok = AGENTS.find((a) => a.id === 'grok-build');
 const cursor = AGENTS.find((a) => a.id === 'cursor');
 const bot = AGENTS.find((a) => a.id === 'grok-bot');
+const gemini = AGENTS.find((a) => a.id === 'gemini');
 
 const c = buildDispatch(claude, 'fix login', 'jjliu6/token-police');
 if (!c.url.includes('claude.ai/code')) problems.push('claude dispatch should open /code');
@@ -29,7 +35,8 @@ if (c.fill !== 'query') problems.push('claude should use query fill');
 
 const g = buildDispatch(grok, 'hello world');
 if (!g.url.includes('grok.com')) problems.push('grok should open grok.com');
-if (!g.url.includes('q=hello')) problems.push(`grok q param missing: ${g.url}`);
+if (/[?&]q=/.test(g.url)) problems.push(`grok must not use q= (auto-submits): ${g.url}`);
+if (g.fill !== 'script') problems.push('grok should script-fill so the prompt is not sent');
 
 const cur = buildDispatch(cursor, 'ship it');
 if (cur.url !== 'https://cursor.com/agents') problems.push(`cursor url ${cur.url}`);
@@ -53,6 +60,30 @@ if (!ready.includes('claude-code') || !ready.includes('codex') || !ready.include
   problems.push(`ready pool incomplete: ${ready.join(',')}`);
 }
 
+if (pickAutoDispatch('code', {}) != null) {
+  problems.push('auto-dispatch must not treat missing quota as 100%');
+}
+if (pickReadyDispatch('chat', {}).length) {
+  problems.push('ready pool must skip agents with no leftover data');
+}
+if (leftoverOf(claude, {}) != null) problems.push('unknown leftover should be null, not 100');
+if (leftoverLabel(claude, {}) !== '—') problems.push(`unknown leftover label, got ${leftoverLabel(claude, {})}`);
+if (leftoverLabel(cursor, map) !== '88') problems.push(`cursor leftover label, got ${leftoverLabel(cursor, map)}`);
+
+const leaked = selectedDispatchAgents('chat', ['cursor', 'gemini', 'claude-code']).map((a) => a.id);
+if (leaked.includes('cursor') || leaked.includes('claude-code')) {
+  problems.push(`chat selection must not keep code agents, got ${leaked.join(',')}`);
+}
+if (!leaked.includes('gemini')) problems.push('chat selection should keep Gemini');
+
+const disabled = pickAutoDispatch('chat', map, { gemini: false });
+if (!disabled || disabled.id !== 'grok-build') {
+  problems.push(`auto chat with Gemini off should pick Grok, got ${disabled && disabled.id}`);
+}
+if (agentsForKind('chat', { gemini: false }).some((a) => a.id === 'gemini')) {
+  problems.push('disabled Gemini must not appear in chat chips');
+}
+
 const job = makeDispatchJob(claude, '  fix login  ', 'jjliu6/token-police', false);
 if (job.prompt !== 'fix login') problems.push('job prompt should be trimmed');
 if (job.repo !== 'jjliu6/token-police') problems.push('code job should keep repo');
@@ -61,6 +92,7 @@ if (makeDispatchJob(grok, 'hi', 'jjliu6/token-police', true).repo) {
 }
 if (bot.kind !== 'code') problems.push('Grok Bot is a coding agent');
 if (grok.kind !== 'chat') problems.push('Grok is a chat agent');
+if (buildDispatch(gemini, 'hi').fill !== 'script') problems.push('gemini should script-fill');
 
 if (problems.length) {
   console.error(problems.join('\n'));

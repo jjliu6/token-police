@@ -1628,8 +1628,11 @@ function renderDispatchBoard() {
   const board = document.getElementById('dispatch-board');
   if (!board) return;
   const title = document.getElementById('dispatch-board-title');
+  // Title must reflect what actually happened: jobs on 'script'-fill surfaces
+  // carry send:true when auto-send is on, so if any tab was auto-sent, say so
+  // instead of the flat "prefill only, not sent".
   if (title) title.textContent = dispatchJobs.length
-    ? t('dispatchOpenedN', { n: dispatchJobs.length })
+    ? t(dispatchJobs.some((job) => job && job.send) ? 'dispatchOpenedNSent' : 'dispatchOpenedN', { n: dispatchJobs.length })
     : t('dispatch');
   const hint = document.getElementById('dispatch-board-hint');
   if (hint) hint.textContent = t('dispatchBoardHint');

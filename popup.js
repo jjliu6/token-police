@@ -1725,11 +1725,16 @@ function fireDispatch(agents, auto) {
     pruneDispatchJobs(() => {
       if (dispatchJobs.length <= 1) {
         const only = dispatchJobs[0] || fresh[0];
-        if (only) {
+        // Only jump to a tab we actually have an id for. If dispatchOpen failed
+        // and we fell back to the pre-open jobs (no tabId), focusing by URL would
+        // open a *second* identical tab, so just show the board instead.
+        if (only && only.tabId != null) {
           chrome.runtime.sendMessage(
             { type: 'dispatchFocus', tabId: only.tabId, url: only.url },
             () => void chrome.runtime.lastError,
           );
+        } else if (dispatchJobs.length) {
+          openDispatchBoard();
         }
       } else {
         openDispatchBoard();

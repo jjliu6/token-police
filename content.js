@@ -278,7 +278,9 @@ function isFillableComposer(el) {
 }
 
 function fillComposer(prompt) {
-  if (!prompt || !inTopFrame() || !isDispatchSurface()) return false;
+  // Always return the filled element or null (never false) — callers submit
+  // what comes back, so a mixed boolean/element return is a foot-gun.
+  if (!prompt || !inTopFrame() || !isDispatchSurface()) return null;
   const visible = (el) => {
     if (!el) return false;
     const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 1, height: 1 };
@@ -367,29 +369,61 @@ function clickableButton(b) {
   return r.width > 0 && r.height > 0;
 }
 
-// Explicitly send-labelled buttons only — safe to click anywhere on the page.
-const SEND_LABELLED = 'button[data-testid*="send" i],button[aria-label*="send" i],'
-  + 'button[aria-label*="发送"],button[title*="send" i],button[title*="发送"]';
+// Buttons whose aria-label / testid / title mentions "send" or "submit" — Grok
+// labels its send key "Submit" / "提交", not "Send". The substring match is
+// deliberately loose in CSS; isSendLabel below tightens it so we don't click
+// "Resend", "Send feedback", "Submit report", "Send to phone", "Sender", etc.
+const SEND_LABELLED = 'button[data-testid*="send" i],button[data-testid*="submit" i],'
+  + 'button[aria-label*="send" i],button[aria-label*="submit" i],'
+  + 'button[aria-label*="发送"],button[aria-label*="提交"],'
+  + 'button[title*="send" i],button[title*="submit" i],'
+  + 'button[title*="发送"],button[title*="提交"]';
+
+// A CSS "*=send*" match also catches Resend / Send feedback / Send to phone /
+// Sender — clicking any of those would fire the wrong action (and on a quota
+// product, maybe burn a request). Keep only labels that are actually the
+// composer's send control.
+function isSendLabel(raw) {
+  const t = (raw || '').trim().toLowerCase();
+  if (!t) return false;
+  if (/resend|resubmit|feedback|report|invite|share|phone|email|sms|slack|whatsapp|schedul|later/.test(t)) return false;
+  // Accept the real send control: "send", "send message", "submit", "提交",
+  // "发送", "发送消息" — but not "sender", "send to …", "submit feedback"
+  // (already excluded above). Grok's key is "Submit" / "提交".
+  return (/(^|[^a-z])(send|submit)([^a-z]|$)/.test(t) || /发送|提交/.test(t)) && !/send\s+to\b/.test(t);
+}
+
+function sendLabelOf(b) {
+  if (!b) return '';
+  const g = (n) => (b.getAttribute && b.getAttribute(n)) || '';
+  return `${g('data-testid')} ${g('aria-label')} ${g('title')} ${b.textContent || ''}`;
+}
 
 function findSendButton(el) {
-  // First look in the composer's own form / nearby ancestors. type="submit" is
-  // safe to trust here because we're inside the composer's own subtree.
-  const scoped = SEND_LABELLED + ',button[type="submit"]';
   const scopes = [];
   const form = el.closest ? el.closest('form') : null;
   if (form) scopes.push(form);
   let p = el.parentElement;
   for (let i = 0; i < 8 && p; i++) { scopes.push(p); p = p.parentElement; }
+  // Tier 1: a clickable, genuinely send-labelled button in the composer's own
+  // form / nearby ancestors. This is the safest match.
   for (let i = 0; i < scopes.length; i++) {
-    const found = scopes[i].querySelectorAll ? scopes[i].querySelectorAll(scoped) : [];
+    const found = scopes[i].querySelectorAll ? scopes[i].querySelectorAll(SEND_LABELLED) : [];
     for (let j = 0; j < found.length; j++) {
-      if (clickableButton(found[j])) return found[j];
+      if (clickableButton(found[j]) && isSendLabel(sendLabelOf(found[j]))) return found[j];
     }
   }
-  // Gemini and Grok keep the send button outside the composer's ancestors
-  // (sometimes inside a shadow root), so the scoped search finds nothing. Fall
-  // back to a document-wide, shadow-DOM-aware search — but only for buttons that
-  // are explicitly send-labelled, so we never fire an unrelated submit button.
+  // Tier 2: still nothing labelled nearby, so trust the composer form's own
+  // submit button (scoped, so it's the composer's — not a random page form).
+  for (let i = 0; i < scopes.length; i++) {
+    const subs = scopes[i].querySelectorAll ? scopes[i].querySelectorAll('button[type="submit"]') : [];
+    for (let j = 0; j < subs.length; j++) {
+      if (clickableButton(subs[j]) && !/feedback|report|resend/i.test(sendLabelOf(subs[j]))) return subs[j];
+    }
+  }
+  // Tier 3: Gemini and Grok keep the send button outside the composer's
+  // ancestors (sometimes inside a shadow root). Search the whole document and
+  // shadow DOM, but only for genuinely send-labelled buttons.
   const hits = [];
   const collect = (root) => {
     if (!root || !root.querySelectorAll) return;
@@ -400,15 +434,26 @@ function findSendButton(el) {
   };
   collect(document);
   for (let i = 0; i < hits.length; i++) {
-    if (clickableButton(hits[i])) return hits[i];
+    if (clickableButton(hits[i]) && isSendLabel(sendLabelOf(hits[i]))) return hits[i];
   }
   return null;
 }
 
-function submitComposer(el) {
-  if (!el) return false;
-  const btn = findSendButton(el);
-  if (btn) { try { btn.click(); return true; } catch (e) {} }
+// Read what's currently in the composer, so we can (a) refuse to submit a
+// composer that no longer holds our prompt and (b) tell whether a send landed.
+function composerText(el) {
+  if (!el) return '';
+  if (el.isContentEditable) return el.textContent || '';
+  if ('value' in el) return el.value || '';
+  return el.textContent || '';
+}
+function composerHasPrompt(el, prompt) {
+  return !!prompt && composerText(el).indexOf(prompt) >= 0;
+}
+
+// Synthetic Enter — a genuine last resort. Most composers ignore it
+// (isTrusted=false), which is exactly why we prefer a real button click.
+function pressEnter(el) {
   try {
     el.focus();
     const opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
@@ -420,21 +465,51 @@ function submitComposer(el) {
   return false;
 }
 
-// Poll for a clickable send button and click it as soon as the site enables it
-// (~up to 6s), then stop. Only if that window passes without one ever becoming
-// clickable do we fall back to submitComposer's synthetic Enter — a genuine
-// last resort. This is what makes auto-send land on the slow-to-enable
-// composers (Gemini, Grok) that a single early click used to miss.
-function scheduleSubmit(el) {
-  // Poll generously: a slow or backgrounded tab can take 15s+ to hydrate and
-  // enable its send button, so keep looking for ~18s before giving up to the
-  // synthetic-Enter fallback. We stop the instant a real button is clicked.
+// Submit runs at most once per page (this latch), and never treats "I clicked
+// something" as success. On a quota product a false success is the worst
+// outcome: the user thinks the prompt went out, or we fire the wrong button.
+let submitted = false;
+function scheduleSubmit(el, prompt) {
+  if (submitted) return;
+  // Bound the total sends we can ever cause: one real button click, then — only
+  // if that click didn't take — one synthetic Enter. Never a loop of clicks,
+  // which could double-send on a site that sent but didn't clear the box.
   let n = 0;
+  let clickedAt = 0;      // 0 = not yet; else the tick we clicked on
+  let triedEnter = false;
+  const succeeded = (btn) => {
+    // The send landed if the composer emptied of our prompt, or the button we
+    // clicked went disabled/away (composers do one or the other after sending).
+    if (!composerHasPrompt(el, prompt)) return true;
+    if (btn && !clickableButton(btn)) return true;
+    return false;
+  };
+  let lastBtn = null;
   const tick = () => {
+    if (submitted) return;
     n++;
+    // Verify a prior click before doing anything else.
+    if (clickedAt) {
+      if (succeeded(lastBtn)) { submitted = true; return; }
+      // Give the click ~1.2s (3 ticks) to take before deciding it was a no-op.
+      if (n - clickedAt < 3) { setTimeout(tick, 400); return; }
+      // The click did nothing. Try Enter once, then stop — don't keep clicking.
+      if (!triedEnter && composerHasPrompt(el, prompt)) { triedEnter = true; pressEnter(el); setTimeout(tick, 800); return; }
+      submitted = true; // we tried a click and an Enter; give up rather than spam
+      return;
+    }
+    // Refuse to submit a composer that no longer holds our prompt (stale draft
+    // or a cleared box) — sending an empty or old message is worse than not
+    // sending. Keep waiting in case the fill is still settling.
+    if (!composerHasPrompt(el, prompt)) {
+      if (n >= 45) { submitted = true; return; }
+      setTimeout(tick, 400); return;
+    }
     const btn = findSendButton(el);
-    if (btn) { try { btn.click(); } catch (e) {} return; }
-    if (n >= 45) { submitComposer(el); return; }
+    if (btn) { lastBtn = btn; try { btn.click(); } catch (e) {} clickedAt = n; setTimeout(tick, 400); return; }
+    // No button yet. A slow/backgrounded tab can take 15s+ to enable it, so keep
+    // looking (~18s) before the Enter fallback.
+    if (n >= 45) { if (!triedEnter && composerHasPrompt(el, prompt)) { triedEnter = true; pressEnter(el); } submitted = true; return; }
     setTimeout(tick, 400);
   };
   setTimeout(tick, 400);
@@ -516,7 +591,7 @@ function onDispatchFill(msg) {
     // straight through to a synthetic Enter — which most composers ignore, and
     // the tab ends up prefilled but never sent. Instead poll for a clickable
     // send button and click it as soon as it appears.
-    if (msg.send) scheduleSubmit(el);
+    if (msg.send) scheduleSubmit(el, msg.prompt);
     return true;
   };
   if (run()) return;

@@ -108,6 +108,27 @@ const I18N = {
     imagine: 'Img',
     voice: 'Voice',
     api: 'API',
+    dispatch: 'Dispatch',
+    dispatchOpen: 'Open dispatch',
+    dispatchFold: 'Collapse dispatch',
+    dispatchBoard: 'All',
+    dispatchChat: 'Chat',
+    dispatchCode: 'Code',
+    dispatchPlaceholder: 'Type a prompt, then tick one or more destinations…',
+    dispatchRepo: 'Repo',
+    dispatchAuto: 'Auto-dispatch',
+    dispatchMulti: 'Dispatch {n}',
+    dispatchSelectReady: 'Select ready',
+    dispatchParallel: 'Open together',
+    dispatchNeed: 'Write a prompt first',
+    dispatchEmpty: 'No agent in this class is above 15%',
+    dispatchOpenedN: 'Opened {n} tabs · prefill only, not sent',
+    dispatchBoardHint: 'Open a card to jump to that tab. All brings you back here.',
+    dispatchNoLive: 'Live output stays on their page. This panel keeps the tab list.',
+    dispatchFocus: 'Jump to tab',
+    dispatchGone: 'Tab was closed',
+    dispatchHint: 'Tick destinations, then dispatch. Ctrl+Enter auto-picks one.',
+    dispatchSoon: 'No public composer yet — quota only',
   },
   zh: {
     brand: 'TOKEN POLICE',
@@ -211,6 +232,27 @@ const I18N = {
     imagine: '绘图',
     voice: '语音',
     api: 'API',
+    dispatch: '指派',
+    dispatchOpen: '打开指派',
+    dispatchFold: '收起指派',
+    dispatchBoard: '全部',
+    dispatchChat: '对话',
+    dispatchCode: '代码',
+    dispatchPlaceholder: '输入提示词，勾选一个或多个入口…',
+    dispatchRepo: '仓库',
+    dispatchAuto: '自动指派',
+    dispatchMulti: '指派 {n} 个',
+    dispatchSelectReady: '全选可指派',
+    dispatchParallel: '同时打开',
+    dispatchNeed: '先写提示词',
+    dispatchEmpty: '这一类里没有额度 ≥15% 的',
+    dispatchOpenedN: '已打开 {n} 个标签 · 只预填，未发送',
+    dispatchBoardHint: '点卡片跳到那个标签。点「全部」收回这一页',
+    dispatchNoLive: '实时输出在对方页面。这边只留任务列表，可随时跳回去。',
+    dispatchFocus: '跳到标签',
+    dispatchGone: '标签已关',
+    dispatchHint: '勾选入口再指派。Ctrl+Enter 自动派最合适的一个。',
+    dispatchSoon: '暂无独立入口，只看额度',
   },
 };
 
@@ -251,8 +293,14 @@ function applyI18n() {
     logsBtn.textContent = t('logs');
     logsBtn.title = t('logs');
   }
+  const dispatchBtn = document.getElementById('dispatch-toggle');
+  if (dispatchBtn) {
+    dispatchBtn.textContent = t('dispatch');
+    dispatchBtn.title = t('dispatchOpen');
+  }
   if (typeof fillShareCard === 'function') fillShareCard();
   if (typeof fillLogsView === 'function') fillLogsView();
+  if (typeof renderDispatch === 'function') renderDispatch();
 }
 
 function applyStoredLang(lang) {

@@ -223,14 +223,152 @@ function tryOnce() {
   finish();
   maybeClose();
 }
-tryOnce();
-if (!done) {
-  obs = new MutationObserver(tryOnce);
-  obs.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  let n = 0;
-  iv = setInterval(() => {
-    n++;
-    tryOnce();
-    if (!done && n > 30) { done = true; finish(); maybeClose(); }
-  }, 2000);
+
+function isDispatchSurface() {
+  const h = location.hostname || '';
+  const p = location.pathname || '';
+  const q = location.search || '';
+  const hash = location.hash || '';
+  if (h.includes('cursor.com') && /^\/agents(\/|$)/.test(p)) return true;
+  if (h.includes('gemini.google.com') && /^\/app(\/|$)/.test(p)) return true;
+  if (h.includes('claude.ai') && /^\/code(\/|$)/.test(p)) return true;
+  if (h.includes('claude.ai') && /^\/new(\/|$)/.test(p) && !/settings\/usage/.test(hash)) return true;
+  if (h.includes('chatgpt.com') && /\/codex(\/|$)/.test(p) && !p.includes('/settings')) return true;
+  if (h.includes('chatgpt.com') && !p.includes('/codex') && !p.includes('/auth')) return true;
+  if (h.includes('grok.com') && !/[?&]_s=usage/.test(q)) return true;
+  return false;
 }
+
+function inTopFrame() {
+  try { return typeof window === 'undefined' || !window.top || window === window.top; }
+  catch (e) { return true; }
+}
+
+if (!isDispatchSurface()) {
+  tryOnce();
+  if (!done) {
+    obs = new MutationObserver(tryOnce);
+    obs.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    let n = 0;
+    iv = setInterval(() => {
+      n++;
+      tryOnce();
+      if (!done && n > 30) { done = true; finish(); maybeClose(); }
+    }, 2000);
+  }
+}
+
+function isFillableComposer(el) {
+  if (!el) return false;
+  const tag = (el.tagName || '').toUpperCase();
+  if (tag === 'INPUT') return false;
+  const role = ((el.getAttribute && el.getAttribute('role')) || '').toLowerCase();
+  if (role === 'searchbox') return false;
+  const label = (
+    ((el.getAttribute && (el.getAttribute('placeholder') || el.getAttribute('aria-label') || el.getAttribute('name'))) || '')
+    + ' ' + (el.id || '') + ' ' + (el.className || '')
+  ).toLowerCase();
+  if (/search|filter|查询|搜索|筛选/.test(label)) return false;
+  try {
+    if (el.closest && el.closest('nav, header, [role="search"], [role="navigation"]')) return false;
+  } catch (e) {}
+  const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 240, height: 48 };
+  if (!r || r.width < 120 || r.height < 20) return false;
+  return true;
+}
+
+function fillComposer(prompt) {
+  if (!prompt || !inTopFrame() || !isDispatchSurface()) return false;
+  const visible = (el) => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 1, height: 1 };
+    return r.width > 0 && r.height > 0;
+  };
+  const trySet = (el) => {
+    if (!el || !visible(el) || !isFillableComposer(el)) return false;
+    try {
+      el.focus();
+      if (el.isContentEditable) {
+        el.textContent = prompt;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      }
+      if ('value' in el) {
+        const proto = Object.getOwnPropertyDescriptor(el.__proto__ || {}, 'value')
+          || Object.getOwnPropertyDescriptor(HTMLTextAreaElement && HTMLTextAreaElement.prototype || {}, 'value')
+          || Object.getOwnPropertyDescriptor(HTMLInputElement && HTMLInputElement.prototype || {}, 'value');
+        if (proto && proto.set) proto.set.call(el, prompt);
+        else el.value = prompt;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  };
+  const sels = 'textarea, [contenteditable="true"], [role="textbox"]';
+  const nodes = [];
+  const walk = (root) => {
+    if (!root) return;
+    if (root.querySelectorAll) {
+      const found = root.querySelectorAll(sels);
+      for (let i = 0; i < found.length; i++) nodes.push(found[i]);
+      const all = root.querySelectorAll('*');
+      for (let i = 0; i < all.length; i++) {
+        if (all[i].shadowRoot) walk(all[i].shadowRoot);
+      }
+    }
+    if (root.shadowRoot) walk(root.shadowRoot);
+  };
+  walk(document);
+  if (document.body) walk(document.body);
+  let best = null;
+  let bestArea = 0;
+  for (let i = 0; i < nodes.length; i++) {
+    const el = nodes[i];
+    if (!isFillableComposer(el) || !visible(el)) continue;
+    const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 240, height: 48 };
+    const area = (r.width || 0) * (r.height || 0);
+    if (area >= bestArea) { best = el; bestArea = area; }
+  }
+  return best ? trySet(best) : false;
+}
+
+function claimDispatchFill() {
+  if (!chrome.runtime || !chrome.runtime.sendMessage) return;
+  try { chrome.runtime.sendMessage({ type: 'dispatchClaimFill' }); } catch (e) {}
+}
+
+function onDispatchFill(msg) {
+  if (!inTopFrame() || !isDispatchSurface()) return;
+  if (!msg || msg.type !== 'dispatchFill' || !msg.prompt) return;
+  const run = () => {
+    if (!fillComposer(msg.prompt)) return false;
+    claimDispatchFill();
+    return true;
+  };
+  if (run()) return;
+  let n = 0;
+  const ivFill = setInterval(() => {
+    n++;
+    if (run() || n > 20) {
+      clearInterval(ivFill);
+      if (n > 20) claimDispatchFill();
+    }
+  }, 400);
+}
+
+if (inTopFrame() && isDispatchSurface()) {
+  if (chrome.runtime && chrome.runtime.onMessage && chrome.runtime.onMessage.addListener) {
+    chrome.runtime.onMessage.addListener((msg) => { onDispatchFill(msg); });
+  }
+  if (chrome.runtime && chrome.runtime.sendMessage) {
+    try {
+      chrome.runtime.sendMessage({ type: 'dispatchClaimFill' }, (job) => {
+        if (chrome.runtime.lastError || !job || !job.prompt) return;
+        onDispatchFill({ type: 'dispatchFill', prompt: job.prompt });
+      });
+    } catch (e) {}
+  }
+}
+

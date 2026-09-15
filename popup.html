@@ -102,6 +102,36 @@
   .share-bar{display:flex;justify-content:center;margin:8px 0 0}
   .footer-actions{display:flex;justify-content:center;gap:7px;margin:8px 0 0}
   .btn.share{font-size:10.5px;padding:5px 12px;letter-spacing:.04em;background:#2f5d4a;color:#d9ffe9}
+  .btn.dispatch{font-size:10.5px;padding:5px 12px;letter-spacing:.04em;background:#2f5d4a;color:#d9ffe9}
+  .dispatch-float{position:fixed;z-index:55;left:12px;right:12px;bottom:52px;max-height:calc(100% - 64px);display:flex;flex-direction:column;background:var(--card2);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.45);overflow:hidden}
+  .dispatch-float .dh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px}
+  .dispatch-float .seg{display:flex;background:#2a2f3a;border-radius:8px;padding:2px}
+  .dispatch-float .seg button{border:none;background:transparent;color:var(--muted);font-size:10.5px;padding:4px 8px;border-radius:6px;cursor:pointer}
+  .dispatch-float .seg button.on{background:var(--card2);color:var(--ink)}
+  .dispatch-float .body{padding:0 10px 10px;display:flex;flex-direction:column;gap:7px;min-height:0;overflow:hidden}
+  .dispatch-float textarea{width:100%;min-height:52px;max-height:140px;resize:none;background:#14161c;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;font-size:12px;line-height:1.4}
+  .dispatch-float .repo{display:flex;align-items:center;gap:6px}
+  .dispatch-float .repo input{flex:1;min-width:0;background:#14161c;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}
+  .dispatch-float .recents button{border:1px solid var(--line);background:transparent;color:var(--ink2);border-radius:6px;padding:3px 6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;cursor:pointer}
+  .dispatch-float .recents button.on{border-color:rgba(143,227,198,.4);color:#8fe3c6}
+  .dispatch-float .chips{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .dispatch-float .chip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:#14161c;border-radius:8px;padding:6px 8px;color:var(--ink);font-size:11px;cursor:pointer;text-align:left}
+  .dispatch-float .chip.on{border-color:rgba(143,227,198,.45);background:rgba(47,93,74,.28)}
+  .dispatch-float .chip.dim{opacity:.42;filter:grayscale(.4);cursor:not-allowed}
+  .dispatch-float .chip.dim:hover{background:#14161c}
+  .dispatch-float .ord{width:14px;height:14px;flex:none;border-radius:3px;border:1px solid var(--line);font-size:9px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+  .dispatch-float .chip.on .ord{border-color:rgba(143,227,198,.5);color:#8fe3c6}
+  .dispatch-float .row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .dispatch-float .note{font-size:10px;color:var(--muted);text-align:center;min-height:14px}
+  .dispatch-board{position:fixed;inset:0;z-index:65;background:#14161c;padding:12px 13px 18px;display:flex;flex-direction:column;overflow:hidden}
+  .dispatch-board .hd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+  .dispatch-board .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;min-height:0;flex:1;overflow:hidden;align-content:start}
+  .dispatch-board .tile{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:left;color:var(--ink);cursor:pointer;min-height:0;overflow:hidden}
+  .dispatch-board .tile:hover{border-color:#3a4150}
+  .dispatch-board .tile .nm{font-size:12px;font-weight:650;display:flex;align-items:center;gap:6px}
+  .dispatch-board .tile .host{font-size:10px;color:var(--muted);margin-top:4px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .dispatch-board .tile .pr{font-size:11px;color:var(--ink2);margin-top:8px;line-height:1.35;max-height:4.1em;overflow:hidden}
+  .dispatch-board .foot{font-size:10px;color:var(--muted);text-align:center;margin-top:8px}
   .btn.logs{font-size:10.5px;padding:5px 12px;letter-spacing:.04em;background:transparent;border:1px solid #343a46;color:var(--ink2)}
   .share-overlay{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:18px 14px;background:rgba(8,10,14,.62);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
   .share-card{position:relative;width:100%;max-width:300px;background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:10px 12px 14px;box-shadow:0 14px 36px rgba(0,0,0,.45);overflow:hidden}
@@ -168,7 +198,7 @@
   <div class="bottom">
     <div class="hint" id="hint"></div>
     <div class="ver" id="ver"></div>
-    <div class="footer-actions"><button class="btn logs" id="logs" type="button">Logs</button><button class="btn share" id="share" type="button">Share app</button></div>
+    <div class="footer-actions"><button class="btn logs" id="logs" type="button">Logs</button><button class="btn dispatch" id="dispatch-toggle" type="button">Dispatch</button><button class="btn share" id="share" type="button">Share app</button></div>
     <div class="credits" id="credits"></div>
   </div>
   <div class="share-overlay" id="share-overlay" hidden>
@@ -196,6 +226,41 @@
       <button class="btn danger" id="logs-clear" type="button">Clear logs</button>
     </div>
     <div class="logs-list" id="logs-list"></div>
+  </section>
+  <section class="dispatch-float" id="dispatch-float" hidden>
+    <div class="dh">
+      <button class="btn logs" id="dispatch-fold" type="button">Dispatch</button>
+      <div class="seg" id="dispatch-kind">
+        <button type="button" data-kind="chat">Chat</button>
+        <button type="button" data-kind="code" class="on">Code</button>
+      </div>
+    </div>
+    <div class="body">
+      <textarea id="dispatch-prompt" rows="3" placeholder="Type a prompt, then tick one or more destinations…"></textarea>
+      <div class="repo" id="dispatch-repo-row">
+        <input id="dispatch-repo" type="text" placeholder="owner/repo" spellcheck="false">
+        <span class="recents" id="dispatch-recents"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span class="note" id="dispatch-parallel"></span>
+        <button class="btn logs" id="dispatch-ready" type="button" style="margin:0;padding:3px 8px"></button>
+      </div>
+      <div class="chips" id="dispatch-chips"></div>
+      <div class="row">
+        <button class="btn" id="dispatch-auto" type="button"></button>
+        <button class="btn share" id="dispatch-go" type="button"></button>
+      </div>
+      <p class="note" id="dispatch-note"></p>
+    </div>
+  </section>
+  <section class="dispatch-board" id="dispatch-board" hidden aria-labelledby="dispatch-board-title">
+    <div class="hd">
+      <h1 id="dispatch-board-title" style="font-size:14px;letter-spacing:.06em"></h1>
+      <button class="btn" id="dispatch-board-close" type="button"></button>
+    </div>
+    <p class="note" id="dispatch-board-hint" style="text-align:left;margin:0 0 8px"></p>
+    <div class="tiles" id="dispatch-tiles"></div>
+    <p class="foot" id="dispatch-board-foot"></p>
   </section>
   <div class="buddy wander" id="buddy" hidden>
     <p class="say" id="say" hidden></p>

@@ -1366,6 +1366,8 @@ function render() {
     }
     if (freshnessTimer != null) clearTimeout(freshnessTimer);
     freshnessTimer = setTimeout(render, 60000);
+    quotaMap = map;
+    renderDispatch();
   });
 }
 
@@ -1497,6 +1499,305 @@ if (typeof document !== 'undefined' && document.addEventListener) {
     const logs = document.getElementById('logs-view');
     if (logs && !logs.hidden) closeLogs();
     else if (shareOverlayOpen()) closeShare();
+    else if (dispatchBoardOpen()) closeDispatchBoard();
+    else if (dispatchFloatOpen()) setDispatchOpen(false);
+  });
+}
+
+let quotaMap = {};
+let dispatchKind = 'code';
+let dispatchSelected = [];
+let dispatchPrompt = '';
+let dispatchRepo = '';
+let dispatchRepos = [];
+let dispatchJobs = [];
+let dispatchShake = false;
+
+function dispatchFloatOpen() {
+  const el = document.getElementById('dispatch-float');
+  return !!(el && !el.hidden);
+}
+
+function dispatchBoardOpen() {
+  const el = document.getElementById('dispatch-board');
+  return !!(el && !el.hidden);
+}
+
+function setDispatchOpen(on) {
+  const el = document.getElementById('dispatch-float');
+  if (!el) return;
+  el.hidden = !on;
+  const btn = document.getElementById('dispatch-toggle');
+  if (btn) btn.title = on ? t('dispatchFold') : t('dispatchOpen');
+  if (on) renderDispatch();
+}
+
+function closeDispatchBoard() {
+  const el = document.getElementById('dispatch-board');
+  if (el) el.hidden = true;
+}
+
+function openDispatchBoard() {
+  const el = document.getElementById('dispatch-board');
+  if (el) el.hidden = false;
+  renderDispatchBoard();
+}
+
+function persistDispatch() {
+  if (!chrome.storage || !chrome.storage.local || !chrome.storage.local.set) return;
+  chrome.storage.local.set({
+    dispatchKind,
+    dispatchPrompt,
+    dispatchRepo,
+    dispatchSelected,
+    dispatchRepos,
+    dispatchJobs,
+  });
+}
+
+function hostOf(url) {
+  try { return new URL(url).host; } catch (e) { return url || ''; }
+}
+
+function renderDispatch() {
+  const box = document.getElementById('dispatch-float');
+  if (!box) return;
+  const kindBtns = box.querySelectorAll('#dispatch-kind [data-kind]');
+  kindBtns.forEach((b) => {
+    b.classList.toggle('on', b.dataset.kind === dispatchKind);
+    b.textContent = b.dataset.kind === 'chat' ? t('dispatchChat') : t('dispatchCode');
+  });
+  const fold = document.getElementById('dispatch-fold');
+  if (fold) fold.textContent = t('dispatch');
+  const area = document.getElementById('dispatch-prompt');
+  if (area && area.value !== dispatchPrompt) area.value = dispatchPrompt;
+  if (area) area.placeholder = t('dispatchPlaceholder');
+  if (dispatchShake && area) {
+    area.style.outline = '1px solid var(--bad)';
+    setTimeout(() => { area.style.outline = ''; dispatchShake = false; }, 220);
+  }
+  const repoRow = document.getElementById('dispatch-repo-row');
+  if (repoRow) repoRow.hidden = dispatchKind !== 'code';
+  const repoIn = document.getElementById('dispatch-repo');
+  if (repoIn && repoIn.value !== dispatchRepo) repoIn.value = dispatchRepo;
+  const recents = document.getElementById('dispatch-recents');
+  if (recents) {
+    recents.innerHTML = dispatchRepos.slice(0, 2).map((r) =>
+      `<button type="button" data-repo="${esc(r)}" class="${r === dispatchRepo ? 'on' : ''}">${esc((r.split('/')[1] || r))}</button>`
+    ).join('');
+  }
+  const par = document.getElementById('dispatch-parallel');
+  if (par) par.textContent = t('dispatchParallel');
+  const readyBtn = document.getElementById('dispatch-ready');
+  const ready = pickReadyDispatch(dispatchKind, quotaMap);
+  if (readyBtn) readyBtn.textContent = `${t('dispatchSelectReady')}${ready.length ? ` · ${ready.length}` : ''}`;
+  const chips = document.getElementById('dispatch-chips');
+  const kindSelected = selectedForKind(dispatchSelected, dispatchKind);
+  if (chips) {
+    chips.innerHTML = agentsForKind(dispatchKind).map((a) => {
+      const blocked = !canDispatch(a);
+      const idx = blocked ? -1 : kindSelected.indexOf(a.id);
+      const left = leftoverOf(a, quotaMap);
+      return `<button type="button" class="chip${idx >= 0 ? ' on' : ''}${blocked ? ' dim' : ''}" data-agent="${a.id}" ${blocked ? 'disabled' : ''} title="${blocked ? esc(t('dispatchSoon')) : ''}">
+        <span class="ord">${idx >= 0 ? idx + 1 : ''}</span>
+        <span class="dot" style="background:${a.color}"></span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}</span>
+        <span style="color:var(--muted);font-variant-numeric:tabular-nums">${left == null ? '—' : left}</span>
+      </button>`;
+    }).join('');
+  }
+  const autoBtn = document.getElementById('dispatch-auto');
+  const picked = pickAutoDispatch(dispatchKind, quotaMap);
+  if (autoBtn) autoBtn.textContent = picked ? `${t('dispatchAuto')} · ${picked.name}` : t('dispatchAuto');
+  const go = document.getElementById('dispatch-go');
+  if (go) go.textContent = kindSelected.length
+    ? t('dispatchMulti', { n: kindSelected.length })
+    : t('dispatch');
+  const note = document.getElementById('dispatch-note');
+  if (note) note.textContent = t('dispatchHint');
+  renderDispatchBoard();
+}
+
+function renderDispatchBoard() {
+  const board = document.getElementById('dispatch-board');
+  if (!board) return;
+  const title = document.getElementById('dispatch-board-title');
+  if (title) title.textContent = dispatchJobs.length
+    ? t('dispatchOpenedN', { n: dispatchJobs.length })
+    : t('dispatch');
+  const hint = document.getElementById('dispatch-board-hint');
+  if (hint) hint.textContent = t('dispatchBoardHint');
+  const foot = document.getElementById('dispatch-board-foot');
+  if (foot) foot.textContent = t('dispatchNoLive');
+  const close = document.getElementById('dispatch-board-close');
+  if (close) close.textContent = t('dispatchBoard');
+  const tiles = document.getElementById('dispatch-tiles');
+  if (!tiles) return;
+  tiles.innerHTML = dispatchJobs.map((job, i) => `
+    <button type="button" class="tile" data-tab="${job.tabId == null ? '' : job.tabId}" data-url="${esc(job.url)}">
+      <div class="nm"><span class="dot" style="background:${job.color}"></span>${i + 1}. ${esc(job.name)}</div>
+      <div class="host">${esc(hostOf(job.url))}${job.repo ? ` · ${esc(job.repo)}` : ''}</div>
+      <div class="pr">${esc(job.prompt)}</div>
+    </button>`).join('');
+}
+
+function shakeDispatch() {
+  dispatchShake = true;
+  setDispatchOpen(true);
+  renderDispatch();
+}
+
+function fireDispatch(agents, auto) {
+  const prompt = (dispatchPrompt || '').trim();
+  if (!prompt) { shakeDispatch(); return; }
+  if (!agents.length) { shakeDispatch(); return; }
+  if (dispatchKind === 'code' && dispatchRepo) {
+    dispatchRepos = [dispatchRepo].concat(dispatchRepos.filter((r) => r !== dispatchRepo)).slice(0, 6);
+  }
+  const jobs = agents.map((a) => makeDispatchJob(a, prompt, dispatchRepo, auto));
+  persistDispatch();
+  chrome.runtime.sendMessage({ type: 'dispatchOpen', jobs }, (opened) => {
+    void chrome.runtime.lastError;
+    dispatchJobs = Array.isArray(opened) ? opened : jobs;
+    persistDispatch();
+    setDispatchOpen(false);
+    openDispatchBoard();
+  });
+}
+
+function selectedAgents() {
+  return selectedForKind(dispatchSelected, dispatchKind)
+    .map((id) => dispatchById(id))
+    .filter(Boolean);
+}
+
+const dispatchToggle = document.getElementById('dispatch-toggle');
+if (dispatchToggle && dispatchToggle.addEventListener) {
+  dispatchToggle.addEventListener('click', () => setDispatchOpen(!dispatchFloatOpen()));
+}
+const dispatchFold = document.getElementById('dispatch-fold');
+if (dispatchFold && dispatchFold.addEventListener) {
+  dispatchFold.addEventListener('click', () => setDispatchOpen(false));
+}
+const dispatchKindEl = document.getElementById('dispatch-kind');
+if (dispatchKindEl && dispatchKindEl.addEventListener) {
+  dispatchKindEl.addEventListener('click', (e) => {
+    const k = e.target && e.target.dataset && e.target.dataset.kind;
+    if (!k) return;
+    dispatchKind = k;
+    persistDispatch();
+    renderDispatch();
+  });
+}
+const dispatchPromptEl = document.getElementById('dispatch-prompt');
+if (dispatchPromptEl && dispatchPromptEl.addEventListener) {
+  dispatchPromptEl.addEventListener('input', () => {
+    dispatchPrompt = dispatchPromptEl.value;
+    persistDispatch();
+  });
+  dispatchPromptEl.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      if (selectedAgents().length) fireDispatch(selectedAgents(), false);
+      else {
+        const one = pickAutoDispatch(dispatchKind, quotaMap);
+        if (one) fireDispatch([one], true);
+        else shakeDispatch();
+      }
+    }
+  });
+}
+const dispatchRepoEl = document.getElementById('dispatch-repo');
+if (dispatchRepoEl && dispatchRepoEl.addEventListener) {
+  dispatchRepoEl.addEventListener('input', () => {
+    dispatchRepo = dispatchRepoEl.value.trim();
+    persistDispatch();
+  });
+}
+const dispatchRecents = document.getElementById('dispatch-recents');
+if (dispatchRecents && dispatchRecents.addEventListener) {
+  dispatchRecents.addEventListener('click', (e) => {
+    const repo = e.target && e.target.dataset && e.target.dataset.repo;
+    if (!repo) return;
+    dispatchRepo = repo;
+    persistDispatch();
+    renderDispatch();
+  });
+}
+const dispatchChips = document.getElementById('dispatch-chips');
+if (dispatchChips && dispatchChips.addEventListener) {
+  dispatchChips.addEventListener('click', (e) => {
+    let n = e.target;
+    while (n && n !== e.currentTarget && !(n.dataset && n.dataset.agent)) n = n.parentNode;
+    const id = n && n.dataset && n.dataset.agent;
+    if (!id) return;
+    const agent = dispatchById(id);
+    if (!canDispatch(agent)) return;
+    dispatchSelected = dispatchSelected.includes(id)
+      ? dispatchSelected.filter((x) => x !== id)
+      : dispatchSelected.concat(id);
+    persistDispatch();
+    renderDispatch();
+  });
+}
+const dispatchReady = document.getElementById('dispatch-ready');
+if (dispatchReady && dispatchReady.addEventListener) {
+  dispatchReady.addEventListener('click', () => {
+    const keep = dispatchSelected.filter((id) => {
+      const a = dispatchById(id);
+      return a && agentKind(a) !== dispatchKind;
+    });
+    dispatchSelected = keep.concat(pickReadyDispatch(dispatchKind, quotaMap).map((a) => a.id));
+    persistDispatch();
+    renderDispatch();
+  });
+}
+const dispatchAutoBtn = document.getElementById('dispatch-auto');
+if (dispatchAutoBtn && dispatchAutoBtn.addEventListener) {
+  dispatchAutoBtn.addEventListener('click', () => {
+    const one = pickAutoDispatch(dispatchKind, quotaMap);
+    if (!one) { shakeDispatch(); return; }
+    fireDispatch([one], true);
+  });
+}
+const dispatchGo = document.getElementById('dispatch-go');
+if (dispatchGo && dispatchGo.addEventListener) {
+  dispatchGo.addEventListener('click', () => {
+    const list = selectedAgents();
+    if (!list.length) { shakeDispatch(); return; }
+    fireDispatch(list, false);
+  });
+}
+const dispatchBoardClose = document.getElementById('dispatch-board-close');
+if (dispatchBoardClose && dispatchBoardClose.addEventListener) {
+  dispatchBoardClose.addEventListener('click', closeDispatchBoard);
+}
+const dispatchTiles = document.getElementById('dispatch-tiles');
+if (dispatchTiles && dispatchTiles.addEventListener) {
+  dispatchTiles.addEventListener('click', (e) => {
+    let n = e.target;
+    while (n && n !== e.currentTarget && !(n.dataset && n.dataset.url != null)) n = n.parentNode;
+    if (!n || !n.dataset) return;
+    const tabId = n.dataset.tab ? Number(n.dataset.tab) : null;
+    chrome.runtime.sendMessage({ type: 'dispatchFocus', tabId, url: n.dataset.url }, (res) => {
+      void chrome.runtime.lastError;
+      if (res && res.ok === false) {
+        const foot = document.getElementById('dispatch-board-foot');
+        if (foot) foot.textContent = t('dispatchGone');
+      }
+    });
+  });
+}
+
+if (chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+  chrome.storage.local.get(['dispatchKind', 'dispatchPrompt', 'dispatchRepo', 'dispatchSelected', 'dispatchRepos', 'dispatchJobs'], (res) => {
+    if (res.dispatchKind === 'chat' || res.dispatchKind === 'code') dispatchKind = res.dispatchKind;
+    if (typeof res.dispatchPrompt === 'string') dispatchPrompt = res.dispatchPrompt;
+    if (typeof res.dispatchRepo === 'string') dispatchRepo = res.dispatchRepo;
+    if (Array.isArray(res.dispatchSelected)) dispatchSelected = res.dispatchSelected;
+    if (Array.isArray(res.dispatchRepos)) dispatchRepos = res.dispatchRepos;
+    if (Array.isArray(res.dispatchJobs)) dispatchJobs = res.dispatchJobs;
+    renderDispatch();
   });
 }
 

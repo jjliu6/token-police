@@ -1,12 +1,12 @@
 {
   "name": "token-police",
-  "version": "1.3.20",
+  "version": "1.5.1",
   "private": true,
   "description": "Chrome (Manifest V3) extension that shows remaining usage for Claude Code, Codex, Grok, Cursor, Grok Bot and Gemini.",
   "type": "module",
   "scripts": {
     "validate": "node scripts/validate.mjs",
-    "test": "node scripts/parse-test.mjs && node scripts/content-test.mjs && node scripts/update-test.mjs && node scripts/capture-logs-test.mjs && node scripts/popup-card-test.mjs && node scripts/background-test.mjs && node scripts/pages-test.mjs",
+    "test": "node scripts/parse-test.mjs && node scripts/content-test.mjs && node scripts/update-test.mjs && node scripts/capture-logs-test.mjs && node scripts/popup-card-test.mjs && node scripts/background-test.mjs && node scripts/pages-test.mjs && node scripts/dispatch-test.mjs",
     "build:pages": "node scripts/build-pages.mjs",
     "build": "web-ext build --source-dir . --artifacts-dir dist --overwrite-dest --ignore-files package.json package-lock.json node_modules scripts dist .gitignore docs .github .cursor",
     "start": "web-ext run --source-dir . --target chromium --chromium-binary \"$(command -v google-chrome)\" --ignore-files package.json package-lock.json node_modules scripts dist .gitignore docs .github .cursor"

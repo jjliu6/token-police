@@ -49,6 +49,7 @@ it installs the same way, just with a few extra development files in the folder.
   the extension makes — it carries no account or usage data — and you can turn it off in ⚙.
 - No API and no account linking — it reads the numbers straight off each tool's own usage page that you're already logged into.
 - Everything stays local in your browser (`chrome.storage.local`). Your usage data is never sent to any server.
+- **Dispatch** (footer): type a prompt, pick Chat vs Code, tick one or more destinations, and open them as real Chrome tabs with the prompt pre-filled (not sent). **Chat** opens Claude (`claude.ai/new`), ChatGPT (`chatgpt.com/`), Grok, and Gemini. **Code** opens Claude Code (`claude.ai/code`), Codex Cloud (`chatgpt.com/codex`), and Cursor Agents. Grok Bot stays quota-only (grayed out). Claude Code is the only official query-param prefill; the rest script-fill so nothing auto-sends. Auto-dispatch skips anyone under 15% remaining.
 
 ## Install
 
@@ -73,10 +74,10 @@ replace the folder's contents, then click the ↻ reload button on the extension
 ## Files
 
 - `manifest.json` — extension manifest (Manifest V3)
-- `agents.js` — shared registry of the six agents (names, colors, usage-page URLs)
+- `agents.js` — shared registry of the six agents (names, colors, usage-page URLs, chat vs code, dispatch URLs)
 - `update.js` — version helpers shared by background and popup (reads the version from the manifest, compares release tags)
-- `background.js` — service worker that coordinates the "Refresh" flow
-- `content.js` — content script that reads usage numbers from each product page
+- `background.js` — service worker that coordinates the "Refresh" flow and opens/focuses dispatch tabs
+- `content.js` — content script that reads usage numbers from each product page and fills a prompt on dispatch
 - `popup.html` / `popup.js` / `i18n.js` / `activities.js` — the side-panel dashboard (English / 中文) and the rest/move activity pool
 - `_locales/` — Chrome Store / `chrome://extensions` name and description
 - `icons/` — extension icons (`token-police.svg` is the source; `python3 scripts/render-icons.py` writes `mark-*.png`)

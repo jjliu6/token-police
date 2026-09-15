@@ -132,6 +132,7 @@ const I18N = {
     dispatchGone: 'Tab was closed',
     dispatchHint: 'Tick destinations, then dispatch. Ctrl+Enter auto-picks one.',
     dispatchSend: 'Auto-send after prefill — actually submits & uses quota (best effort)',
+    dispatchSendCode: 'Auto-send off for coding targets (prefill only for now)',
     dispatchSoon: 'No public composer yet — quota only',
   },
   zh: {
@@ -260,6 +261,7 @@ const I18N = {
     dispatchGone: '标签已关',
     dispatchHint: '勾选入口再指派。Ctrl+Enter 自动派最合适的一个。',
     dispatchSend: '预填后自动发送——会真正提交、消耗额度（尽力而为）',
+    dispatchSendCode: '代码类暂不支持自动发送（目前只预填）',
     dispatchSoon: '暂无独立入口，只看额度',
   },
 };

@@ -102,6 +102,16 @@ function canDispatch(agent) {
   return !!(agent && agent.dispatch !== false);
 }
 
+// Conservative gate on auto-send. For now only chat surfaces may auto-submit:
+// the coding composers (Codex, Cursor, Grok Build) have flaky submit paths —
+// rich-text editors that reconcile the prompt away, a Grok mode switch that
+// rehangs the composer — and a wrong or empty send there burns real quota. So
+// coding dispatches prefill only until that path is hardened. Chat targets that
+// script-fill (Claude, ChatGPT, Grok, Gemini) keep the opt-in toggle.
+function canAutoSend(agent) {
+  return !!agent && agentKind(agent) === 'chat';
+}
+
 function leftoverOf(agent, map) {
   const id = agent && (agent.quotaId || agent.id);
   const row = map && id && map[id];
@@ -174,9 +184,10 @@ function makeDispatchJob(agent, prompt, repo, auto, send) {
     repo: agentKind(agent) === 'code' ? (repo || '') : '',
     url: built.url,
     fill: built.fill,
-    // Auto-send only makes sense for surfaces we type into ourselves.
-    // 'query' fill hands the prompt to the site via the URL, so it decides.
-    send: built.fill === 'script' ? !!send : false,
+    // Auto-send only makes sense for surfaces we type into ourselves ('query'
+    // fill hands the prompt to the site via the URL, so it decides), AND only
+    // where the submit path is reliable — see canAutoSend.
+    send: (built.fill === 'script' && canAutoSend(agent)) ? !!send : false,
     // Composer mode the content script must select before filling (Grok Build).
     mode: built.mode || null,
     auto: !!auto,

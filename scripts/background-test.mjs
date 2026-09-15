@@ -168,6 +168,18 @@ if (store.history.filter((h) => h.id === 'codex').length !== 1) {
 await send({ type: 'closeMe' });
 if (!removedTabs.includes(7)) problems.push('closeMe should remove the sender tab');
 
+// 4b) dispatchCloseTabs 真正关闭任务板打开的标签页，并回 {ok:true}
+let closeRes = null;
+await new Promise((done) => {
+  const ret = onMessage({ type: 'dispatchCloseTabs', tabIds: [11, 12] }, {}, (r) => { closeRes = r; done(); });
+  if (ret !== true) done();
+});
+const closedFlat = removedTabs.flat ? removedTabs.flat() : [].concat(...removedTabs);
+if (!closedFlat.includes(11) || !closedFlat.includes(12)) {
+  problems.push(`dispatchCloseTabs should remove the board's tabs, got ${JSON.stringify(removedTabs)}`);
+}
+if (!closeRes || closeRes.ok !== true) problems.push('dispatchCloseTabs must reply {ok:true} so the popup clears the board');
+
 // 5) 工具栏徽章不再显示剩余%（启动时清空；写数据 / 改勾选也不再写数字）
 await tick(10);
 const badgeHasMetric = (texts) => texts.some((t) => t !== '');

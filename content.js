@@ -523,38 +523,48 @@ function scheduleSubmit(el, prompt) {
 // still opening the menu / waiting for it to render, so the caller keeps
 // retrying. Selectors are matched by the visible mode labels, so a Grok layout
 // change may need a tweak here.
-const GROK_MODES = ['auto', 'fast', 'expert', 'build', 'heavy'];
+// Mode words the trigger button / menu items start with, English + Chinese.
+const GROK_MODE_WORDS = ['auto', 'fast', 'expert', 'build', 'heavy', '自动', '快速', '专家', '构建', '重型'];
+function grokLeadMode(t) {
+  for (let i = 0; i < GROK_MODE_WORDS.length; i++) { if (t.indexOf(GROK_MODE_WORDS[i]) === 0) return GROK_MODE_WORDS[i]; }
+  return null;
+}
+function isGrokBuildWord(m) { return m === 'build' || m === '构建'; }
 function seenVisible(el) {
   if (!el || !el.getBoundingClientRect) return false;
   const r = el.getBoundingClientRect();
   return r.width > 0 && r.height > 0;
 }
+// Returns true ONLY once the trigger actually reads "Build" — never right after
+// clicking the menu entry. Switching modes rehangs the composer, so if we
+// reported success on the click, the caller would fill the outgoing Chat box
+// that's about to be torn down. Menu items are "Build\nCreate apps…", so match
+// by prefix, not exact text (the old `=== 'build'` never matched).
 function selectGrokBuildMode() {
   if (!location.hostname.includes('grok.com')) return true;
   const label = (el) => ((el && el.textContent) || '').trim().toLowerCase();
-  // If the mode menu is open, its "Build" entry is on screen — pick it.
-  const menuItems = document.querySelectorAll('[role="menuitem"],[role="menuitemradio"],[role="option"]');
-  for (let i = 0; i < menuItems.length; i++) {
-    if (seenVisible(menuItems[i]) && label(menuItems[i]) === 'build') {
-      try { menuItems[i].click(); } catch (e) {}
-      return true;
-    }
-  }
-  // Otherwise find the mode trigger (a short button whose label starts with the
-  // current mode word). If it's already Build we're done; if not, open it so the
-  // next pass can click the Build entry above.
+  // 1. Trigger already on Build? Done. Otherwise remember it to open the menu.
   const btns = document.querySelectorAll('button');
+  let trigger = null;
   for (let i = 0; i < btns.length; i++) {
     const b = btns[i];
     if (!seenVisible(b)) continue;
     const t = label(b);
-    const lead = t.split(/\s+/)[0];
-    if (GROK_MODES.indexOf(lead) >= 0 && t.length < 24) {
-      if (lead === 'build') return true;
-      try { b.click(); } catch (e) {}
-      return false;
-    }
+    if (t.length > 24) continue;
+    const m = grokLeadMode(t);
+    if (m) { if (isGrokBuildWord(m)) return true; if (!trigger) trigger = b; }
   }
+  // 2. Menu open with a Build entry? Click it, but report NOT-done — a later
+  //    pass confirms via the trigger that Build actually took before we fill.
+  const menuItems = document.querySelectorAll('[role="menuitem"],[role="menuitemradio"],[role="option"]');
+  for (let i = 0; i < menuItems.length; i++) {
+    const it = menuItems[i];
+    if (!seenVisible(it)) continue;
+    const t = label(it);
+    if (t.indexOf('build') === 0 || t.indexOf('构建') === 0) { try { it.click(); } catch (e) {} return false; }
+  }
+  // 3. Otherwise open the mode menu so the next pass can pick Build.
+  if (trigger) { try { trigger.click(); } catch (e) {} }
   return false;
 }
 
@@ -569,44 +579,46 @@ function claimDispatchFill() {
 // path schedules its own submit, so the site sees the prompt sent twice or
 // three times. This latch makes fill+submit happen exactly once per page; a
 // fresh dispatch always opens a new tab, so a new content script starts unlatched.
-let dispatchHandled = false;
+// One driver per page. The on-load claim and the background's dispatchFill ping
+// (which retries) both call onDispatchFill; fillStarted makes sure only the
+// first one runs a retry loop, so we never end up with two loops racing to fill
+// or, worse, two loops both poking Grok's mode dropdown open/closed.
+let fillStarted = false;
 
 function onDispatchFill(msg) {
-  if (dispatchHandled) return;
+  if (fillStarted) return;
   if (!inTopFrame() || !isDispatchSurface()) return;
   if (!msg || msg.type !== 'dispatchFill' || !msg.prompt) return;
+  fillStarted = true;
   const needBuild = msg.mode === 'build';
-  const run = () => {
-    // Coding dispatch to Grok has to land in Build mode first — keep retrying
-    // (via the loop below) until the selector is flipped, then fill.
-    if (needBuild && !selectGrokBuildMode()) return false;
-    const el = fillComposer(msg.prompt);
-    if (!el) return false;
-    // Latch before any async work so a racing path bails instead of re-sending.
-    dispatchHandled = true;
-    claimDispatchFill();
-    // Submit is opt-in via the panel toggle. Don't fire once at a fixed delay:
-    // a site needs a beat to register the prefill and enable its send button,
-    // and if we click too early the button isn't there yet, so we'd fall
-    // straight through to a synthetic Enter — which most composers ignore, and
-    // the tab ends up prefilled but never sent. Instead poll for a clickable
-    // send button and click it as soon as it appears.
-    if (msg.send) scheduleSubmit(el, msg.prompt);
-    return true;
-  };
-  if (run()) return;
-  // The composer often isn't in the DOM yet on first message — a heavy or
-  // backgrounded page can take many seconds to render it (and, for Grok Build,
-  // to expose the mode selector). Retry for ~24s rather than ~8s so slow loads
-  // still get filled instead of silently dropping the prompt.
+  let el = null;
+  let committedAt = 0; // the tick we first confirmed the prompt was in the box
   let n = 0;
-  const ivFill = setInterval(() => {
+  const iv = setInterval(() => {
     n++;
-    if (dispatchHandled || run() || n > 60) {
-      clearInterval(ivFill);
-      if (n > 60 && !dispatchHandled) claimDispatchFill();
+    // Grok coding dispatch must be in Build mode before we fill — the switch
+    // rehangs the composer, so wait until Build is actually active.
+    if (needBuild && !selectGrokBuildMode()) { if (n > 90) done(); return; }
+    // (Re)assert the prompt while it's missing. A raw write into a ProseMirror /
+    // Lexical editor gets reconciled away a frame later (and a Grok mode switch
+    // tears the box down), so a single fill isn't enough — but only re-fill for a
+    // short window after the first success, so we never fight the user's edits.
+    const present = el && composerHasPrompt(el, msg.prompt);
+    if (!present && (!committedAt || n <= committedAt + 5)) {
+      const filled = fillComposer(msg.prompt);
+      if (filled) el = filled;
     }
+    // Commit only once the prompt is genuinely sitting in the composer — never
+    // on "fillComposer returned an element", which the reconcile can undo.
+    if (el && composerHasPrompt(el, msg.prompt) && !committedAt) {
+      committedAt = n;
+      claimDispatchFill();
+      if (msg.send) scheduleSubmit(el, msg.prompt);
+    }
+    if (committedAt && n > committedAt + 5) return done(); // fill settled
+    if (n > 90) return done();                             // gave up (~36s)
   }, 400);
+  function done() { clearInterval(iv); if (!committedAt) claimDispatchFill(); }
 }
 
 if (inTopFrame() && isDispatchSurface()) {

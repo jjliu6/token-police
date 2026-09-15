@@ -376,7 +376,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     liveDispatchTabs(msg.tabIds).then((live) => sendResponse(live));
     return true;
   }
+  if (msg && msg.type === 'dispatchCloseTabs' && Array.isArray(msg.tabIds)) {
+    closeDispatchTabs(msg.tabIds).then((closed) => sendResponse({ ok: true, closed }));
+    return true;
+  }
 });
+
+// Close the tabs a dispatch board opened. content/popup only has the ids; the
+// service worker owns tab access, so removal happens here. Resolves with the
+// ids actually removed so the popup only clears the board on success.
+function closeDispatchTabs(tabIds) {
+  const ids = (tabIds || []).map(Number).filter((n) => !Number.isNaN(n));
+  if (!ids.length || !chrome.tabs || !chrome.tabs.remove) return Promise.resolve([]);
+  return new Promise((resolve) => {
+    chrome.tabs.remove(ids, () => { void chrome.runtime.lastError; resolve(ids); });
+  });
+}
 
 // Which of these tab ids still point at an open tab. The board accumulates
 // jobs across dispatches, so it must drop the ones the user has since closed.

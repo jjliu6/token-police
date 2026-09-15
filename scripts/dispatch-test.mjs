@@ -23,6 +23,7 @@ const selectedForKind = vm.runInContext('selectedForKind', ctx);
 const canDispatch = vm.runInContext('canDispatch', ctx);
 const putDispatchPending = vm.runInContext('putDispatchPending', ctx);
 const takeDispatchPending = vm.runInContext('takeDispatchPending', ctx);
+const mergeDispatchJobs = vm.runInContext('mergeDispatchJobs', ctx);
 
 const claude = AGENTS.find((a) => a.id === 'claude-code');
 const grok = AGENTS.find((a) => a.id === 'grok-build');
@@ -162,6 +163,17 @@ const st = takeDispatchPending(sp, 21);
 if (!st.job || st.job.send !== true) problems.push('claim must return the send flag');
 const spOff = putDispatchPending({}, 22, { prompt: 'go', host: 'grok.com' });
 if (spOff['22'].send !== false) problems.push('pending send must default false');
+
+// Accumulating the board across dispatches: newest batch first, earlier
+// still-open tabs kept, and a re-dispatched tab deduped (moved to the front).
+const prior = [{ tabId: 1, name: 'A' }, { tabId: 2, name: 'B' }];
+const merged = mergeDispatchJobs(prior, [{ tabId: 3, name: 'C' }]);
+if (merged.map((j) => j.tabId).join() !== '3,1,2') problems.push(`merge order wrong: ${merged.map((j) => j.tabId).join()}`);
+const readd = mergeDispatchJobs(prior, [{ tabId: 2, name: 'B2' }]);
+if (readd.map((j) => j.tabId).join() !== '2,1') problems.push(`re-dispatched tab must dedupe to front: ${readd.map((j) => j.tabId).join()}`);
+if (readd[0].name !== 'B2') problems.push('re-dispatched tab must take the fresh job');
+if (mergeDispatchJobs(undefined, undefined).length) problems.push('merge of nothing must be empty');
+if (mergeDispatchJobs([{ tabId: 5 }], []).map((j) => j.tabId).join() !== '5') problems.push('empty batch must keep prior tabs');
 
 if (problems.length) {
   console.error(problems.join('\n'));

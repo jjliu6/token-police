@@ -197,3 +197,13 @@ function takeDispatchPending(map, tabId) {
   if (tabId in next) delete next[tabId];
   return { map: next, job };
 }
+
+// Merge a fresh dispatch batch into the accumulated board: newest batch first,
+// earlier tabs kept, deduped by tabId (a re-dispatched tab moves to the front).
+// Closed tabs are pruned separately once the browser can be asked.
+function mergeDispatchJobs(existing, fresh) {
+  const list = Array.isArray(fresh) ? fresh : [];
+  const seen = new Set(list.map((j) => j && j.tabId));
+  const prior = (Array.isArray(existing) ? existing : []).filter((j) => j && !seen.has(j.tabId));
+  return list.concat(prior);
+}

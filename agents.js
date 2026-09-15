@@ -66,7 +66,7 @@ const AGENTS = [
   },
 ];
 
-// 派遣入口和额度卡分开：同一家产品 Chat / Code 不是同一个页面。
+// 指派入口和额度卡分开：同一家产品 Chat / Code 不是同一个页面。
 // quotaId 指向 AGENTS 里的额度卡；没有额度卡的（ChatGPT 对话）不参与 Auto。
 const DISPATCH_TARGETS = [
   { id: 'claude-chat', name: 'Claude', color: '#D97757', kind: 'chat', quotaId: 'claude-code' },

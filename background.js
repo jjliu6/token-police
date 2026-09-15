@@ -372,7 +372,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     claimDispatchFill(sender && sender.tab && sender.tab.id).then((job) => sendResponse(job || null));
     return true;
   }
+  if (msg && msg.type === 'dispatchLiveTabs' && Array.isArray(msg.tabIds)) {
+    liveDispatchTabs(msg.tabIds).then((live) => sendResponse(live));
+    return true;
+  }
 });
+
+// Which of these tab ids still point at an open tab. The board accumulates
+// jobs across dispatches, so it must drop the ones the user has since closed.
+function liveDispatchTabs(tabIds) {
+  if (!chrome.tabs || !chrome.tabs.get) return Promise.resolve([]);
+  return Promise.all(tabIds.map((id) => new Promise((resolve) => {
+    if (id == null) return resolve(null);
+    chrome.tabs.get(Number(id), (tab) => {
+      resolve(chrome.runtime.lastError || !tab ? null : Number(id));
+    });
+  }))).then((ids) => ids.filter((x) => x != null));
+}
 
 function openDispatchJobs(jobs) {
   const opened = [];

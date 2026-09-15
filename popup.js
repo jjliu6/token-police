@@ -1505,7 +1505,7 @@ if (typeof document !== 'undefined' && document.addEventListener) {
 }
 
 let quotaMap = {};
-let dispatchKind = 'code';
+let dispatchKind = 'chat';
 let dispatchSelected = [];
 let dispatchPrompt = '';
 let dispatchRepo = '';
@@ -1539,9 +1539,28 @@ function closeDispatchBoard() {
 }
 
 function openDispatchBoard() {
-  const el = document.getElementById('dispatch-board');
-  if (el) el.hidden = false;
-  renderDispatchBoard();
+  pruneDispatchJobs(() => {
+    const el = document.getElementById('dispatch-board');
+    if (el) el.hidden = false;
+    renderDispatchBoard();
+  });
+}
+
+// Drop jobs whose tab the user has closed, so the accumulated board and the
+// "Tabs · N" count only ever show tabs that are still open. Async (asks the
+// background, which owns tab access); calls back once dispatchJobs is settled.
+function pruneDispatchJobs(cb) {
+  const ids = dispatchJobs.map((j) => j && j.tabId).filter((x) => x != null);
+  if (!ids.length || !chrome.runtime || !chrome.runtime.sendMessage) { if (cb) cb(); return; }
+  chrome.runtime.sendMessage({ type: 'dispatchLiveTabs', tabIds: ids }, (live) => {
+    void chrome.runtime.lastError;
+    if (Array.isArray(live)) {
+      const set = new Set(live.map(Number));
+      const kept = dispatchJobs.filter((j) => j && j.tabId != null && set.has(Number(j.tabId)));
+      if (kept.length !== dispatchJobs.length) { dispatchJobs = kept; persistDispatch(); }
+    }
+    if (cb) cb();
+  });
 }
 
 function persistDispatch() {
@@ -1571,6 +1590,14 @@ function renderDispatch() {
   });
   const fold = document.getElementById('dispatch-fold');
   if (fold) fold.textContent = t('dispatch');
+  // Re-entry to the tab board: once a batch is open, this is the only way back
+  // to it — clicking a tile jumps to that tab and closes the popup, so on the
+  // next open the board is hidden and would otherwise be unreachable.
+  const tabsBtn = document.getElementById('dispatch-tabs');
+  if (tabsBtn) {
+    tabsBtn.hidden = dispatchJobs.length <= 1;
+    tabsBtn.textContent = t('dispatchTabs', { n: dispatchJobs.length });
+  }
   const area = document.getElementById('dispatch-prompt');
   if (area && area.value !== dispatchPrompt) area.value = dispatchPrompt;
   if (area) area.placeholder = t('dispatchPlaceholder');
@@ -1628,8 +1655,11 @@ function renderDispatchBoard() {
   const board = document.getElementById('dispatch-board');
   if (!board) return;
   const title = document.getElementById('dispatch-board-title');
+  // Title must reflect what actually happened: jobs on 'script'-fill surfaces
+  // carry send:true when auto-send is on, so if any tab was auto-sent, say so
+  // instead of the flat "prefill only, not sent".
   if (title) title.textContent = dispatchJobs.length
-    ? t('dispatchOpenedN', { n: dispatchJobs.length })
+    ? t(dispatchJobs.some((job) => job && job.send) ? 'dispatchOpenedNSent' : 'dispatchOpenedN', { n: dispatchJobs.length })
     : t('dispatch');
   const hint = document.getElementById('dispatch-board-hint');
   if (hint) hint.textContent = t('dispatchBoardHint');
@@ -1664,22 +1694,27 @@ function fireDispatch(agents, auto) {
   persistDispatch();
   chrome.runtime.sendMessage({ type: 'dispatchOpen', jobs }, (opened) => {
     void chrome.runtime.lastError;
-    dispatchJobs = Array.isArray(opened) ? opened : jobs;
+    const fresh = Array.isArray(opened) ? opened : jobs;
+    // Accumulate across dispatches: keep the tabs still open from earlier
+    // batches and prepend this batch, deduped by tabId.
+    dispatchJobs = mergeDispatchJobs(dispatchJobs, fresh);
     persistDispatch();
     setDispatchOpen(false);
-    // A single destination doesn't need the whole tab board — just jump to it.
-    // The board earns its space only when there are multiple tabs to switch between.
-    if (dispatchJobs.length <= 1) {
-      const only = dispatchJobs[0];
-      if (only) {
-        chrome.runtime.sendMessage(
-          { type: 'dispatchFocus', tabId: only.tabId, url: only.url },
-          () => void chrome.runtime.lastError,
-        );
+    // A single live destination doesn't need the whole tab board — just jump to
+    // it. Prune closed tabs first so the count reflects what's actually open.
+    pruneDispatchJobs(() => {
+      if (dispatchJobs.length <= 1) {
+        const only = dispatchJobs[0] || fresh[0];
+        if (only) {
+          chrome.runtime.sendMessage(
+            { type: 'dispatchFocus', tabId: only.tabId, url: only.url },
+            () => void chrome.runtime.lastError,
+          );
+        }
+      } else {
+        openDispatchBoard();
       }
-    } else {
-      openDispatchBoard();
-    }
+    });
   });
 }
 
@@ -1696,6 +1731,10 @@ if (dispatchToggle && dispatchToggle.addEventListener) {
 const dispatchFold = document.getElementById('dispatch-fold');
 if (dispatchFold && dispatchFold.addEventListener) {
   dispatchFold.addEventListener('click', () => setDispatchOpen(false));
+}
+const dispatchTabsBtn = document.getElementById('dispatch-tabs');
+if (dispatchTabsBtn && dispatchTabsBtn.addEventListener) {
+  dispatchTabsBtn.addEventListener('click', () => { setDispatchOpen(false); openDispatchBoard(); });
 }
 const dispatchKindEl = document.getElementById('dispatch-kind');
 if (dispatchKindEl && dispatchKindEl.addEventListener) {
@@ -1823,7 +1862,9 @@ if (chrome.storage && chrome.storage.local && chrome.storage.local.get) {
     if (Array.isArray(res.dispatchRepos)) dispatchRepos = res.dispatchRepos;
     if (Array.isArray(res.dispatchJobs)) dispatchJobs = res.dispatchJobs;
     if (typeof res.dispatchAutoSend === 'boolean') dispatchAutoSend = res.dispatchAutoSend;
-    renderDispatch();
+    // Some of those tabs may have been closed since; drop them before the
+    // "Tabs · N" re-entry button reports a stale count.
+    pruneDispatchJobs(() => renderDispatch());
   });
 }
 

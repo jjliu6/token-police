@@ -231,10 +231,13 @@
   </section>
   <section class="dispatch-float" id="dispatch-float" hidden>
     <div class="dh">
-      <button class="btn logs" id="dispatch-fold" type="button">Dispatch</button>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="btn logs" id="dispatch-fold" type="button">Dispatch</button>
+        <button class="btn logs" id="dispatch-tabs" type="button" hidden style="margin:0;padding:3px 8px"></button>
+      </div>
       <div class="seg" id="dispatch-kind">
-        <button type="button" data-kind="chat">Chat</button>
-        <button type="button" data-kind="code" class="on">Code</button>
+        <button type="button" data-kind="chat" class="on">Chat</button>
+        <button type="button" data-kind="code">Code</button>
       </div>
     </div>
     <div class="body">

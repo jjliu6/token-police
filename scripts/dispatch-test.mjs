@@ -164,6 +164,31 @@ if (!st.job || st.job.send !== true) problems.push('claim must return the send f
 const spOff = putDispatchPending({}, 22, { prompt: 'go', host: 'grok.com' });
 if (spOff['22'].send !== false) problems.push('pending send must default false');
 
+// Grok Build: a coding target that opens grok.com and carries mode:'build' so
+// the content script flips the composer's mode selector before it sends.
+const gbc = dispatchById('grok-build-code');
+if (!gbc) problems.push('Grok Build must be a dispatch target');
+if (gbc && gbc.kind !== 'code') problems.push('Grok Build must be a coding target');
+if (gbc && gbc.name !== 'Grok Build') problems.push('Grok Build target must be labelled "Grok Build"');
+if (!agentsForKind('code').some((a) => a.id === 'grok-build-code')) problems.push('Code tab must list Grok Build');
+if (dispatchById('grok-bot')) problems.push('Grok Bot must not be a dispatch target');
+if (agentsForKind('code').some((a) => a.id === 'grok-bot')) problems.push('Grok Bot must be gone from the Code tab');
+const gbcBuilt = buildDispatch(gbc, 'make a snake game');
+if (gbcBuilt.url !== 'https://grok.com/') problems.push(`Grok Build should open grok.com, got ${gbcBuilt.url}`);
+if (gbcBuilt.mode !== 'build') problems.push('Grok Build must carry mode:build');
+if (gbcBuilt.fill !== 'script') problems.push('Grok Build should script-fill');
+if (leftoverOf(gbc, { 'grok-build': { limits: [{ percent_left: 44 }] } }) !== 44) {
+  problems.push('Grok Build leftover should reuse the SuperGrok (grok-build) quota');
+}
+const gbcJob = makeDispatchJob(gbc, 'go', '', false, true);
+if (gbcJob.mode !== 'build') problems.push('Grok Build job must keep mode:build');
+if (gbcJob.send !== true) problems.push('Grok Build job must keep send=true');
+let mp = putDispatchPending({}, 31, { prompt: 'go', host: 'grok.com', send: true, mode: 'build' });
+if (mp['31'].mode !== 'build') problems.push('pending must carry the mode flag');
+const mt = takeDispatchPending(mp, 31);
+if (!mt.job || mt.job.mode !== 'build') problems.push('claim must return the mode flag');
+if (makeDispatchJob(grok, 'go', '', false, true).mode !== null) problems.push('chat Grok must not carry a mode');
+
 // Accumulating the board across dispatches: newest batch first, earlier
 // still-open tabs kept, and a re-dispatched tab deduped (moved to the front).
 const prior = [{ tabId: 1, name: 'A' }, { tabId: 2, name: 'B' }];

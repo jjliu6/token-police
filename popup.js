@@ -1538,6 +1538,19 @@ function closeDispatchBoard() {
   if (el) el.hidden = true;
 }
 
+// Close every tab this board opened in one click, then clear the board. The
+// background service worker owns tab access, so it does the actual removal; we
+// just hand it the ids and reset our local list.
+function closeDispatchTabs() {
+  const ids = dispatchJobs.map((j) => j && j.tabId).filter((x) => x != null);
+  if (ids.length && chrome.runtime && chrome.runtime.sendMessage) {
+    chrome.runtime.sendMessage({ type: 'dispatchCloseTabs', tabIds: ids }, () => void chrome.runtime.lastError);
+  }
+  dispatchJobs = [];
+  persistDispatch();
+  closeDispatchBoard();
+}
+
 function openDispatchBoard() {
   pruneDispatchJobs(() => {
     const el = document.getElementById('dispatch-board');
@@ -1667,6 +1680,13 @@ function renderDispatchBoard() {
   if (foot) foot.textContent = t('dispatchNoLive');
   const close = document.getElementById('dispatch-board-close');
   if (close) close.textContent = t('dispatchBoard');
+  const closeTabs = document.getElementById('dispatch-board-close-tabs');
+  if (closeTabs) {
+    closeTabs.textContent = t('dispatchCloseTabs');
+    // Nothing to close once every tab is gone — hide the button so the header
+    // doesn't offer a no-op.
+    closeTabs.hidden = !dispatchJobs.some((j) => j && j.tabId != null);
+  }
   const tiles = document.getElementById('dispatch-tiles');
   if (!tiles) return;
   tiles.innerHTML = dispatchJobs.map((job, i) => `
@@ -1705,11 +1725,16 @@ function fireDispatch(agents, auto) {
     pruneDispatchJobs(() => {
       if (dispatchJobs.length <= 1) {
         const only = dispatchJobs[0] || fresh[0];
-        if (only) {
+        // Only jump to a tab we actually have an id for. If dispatchOpen failed
+        // and we fell back to the pre-open jobs (no tabId), focusing by URL would
+        // open a *second* identical tab, so just show the board instead.
+        if (only && only.tabId != null) {
           chrome.runtime.sendMessage(
             { type: 'dispatchFocus', tabId: only.tabId, url: only.url },
             () => void chrome.runtime.lastError,
           );
+        } else if (dispatchJobs.length) {
+          openDispatchBoard();
         }
       } else {
         openDispatchBoard();
@@ -1835,6 +1860,10 @@ if (dispatchGo && dispatchGo.addEventListener) {
 const dispatchBoardClose = document.getElementById('dispatch-board-close');
 if (dispatchBoardClose && dispatchBoardClose.addEventListener) {
   dispatchBoardClose.addEventListener('click', closeDispatchBoard);
+}
+const dispatchBoardCloseTabs = document.getElementById('dispatch-board-close-tabs');
+if (dispatchBoardCloseTabs && dispatchBoardCloseTabs.addEventListener) {
+  dispatchBoardCloseTabs.addEventListener('click', closeDispatchTabs);
 }
 const dispatchTiles = document.getElementById('dispatch-tiles');
 if (dispatchTiles && dispatchTiles.addEventListener) {

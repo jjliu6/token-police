@@ -278,7 +278,9 @@ function isFillableComposer(el) {
 }
 
 function fillComposer(prompt) {
-  if (!prompt || !inTopFrame() || !isDispatchSurface()) return false;
+  // Always return the filled element or null (never false) — callers submit
+  // what comes back, so a mixed boolean/element return is a foot-gun.
+  if (!prompt || !inTopFrame() || !isDispatchSurface()) return null;
   const visible = (el) => {
     if (!el) return false;
     const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 1, height: 1 };
@@ -289,8 +291,27 @@ function fillComposer(prompt) {
     try {
       el.focus();
       if (el.isContentEditable) {
-        el.textContent = prompt;
-        el.dispatchEvent(new Event('input', { bubbles: true }));
+        // The coding surfaces (Codex, Claude Code, Cursor) run rich-text editors
+        // (ProseMirror / Lexical). A raw textContent write bypasses their input
+        // pipeline, so the framework's model stays empty and reconciles the DOM
+        // back to a blank composer — which is why the prompt never appeared and
+        // nothing sent. Route the text through execCommand insertText instead so
+        // the editor records it; fall back to textContent only if that no-ops.
+        let ok = false;
+        try {
+          const sel = window.getSelection && window.getSelection();
+          if (sel && document.createRange) {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+          ok = !!(document.execCommand && document.execCommand('insertText', false, prompt));
+        } catch (e) { ok = false; }
+        if (!ok || !(el.textContent || '').includes(prompt)) {
+          el.textContent = prompt;
+          el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: prompt }));
+        }
         return true;
       }
       if ('value' in el) {
@@ -338,25 +359,101 @@ function fillComposer(prompt) {
 // Best-effort "press send" after a prefill. Composers differ a lot between
 // sites and many ignore synthetic Enter (isTrusted=false), so we try a real
 // send button first and fall back to a keyboard Enter.
+// A button counts only if it's actually clickable right now — a disabled or
+// aria-disabled button is the site telling us "input not registered yet", which
+// is exactly the case we must wait through rather than fall back to Enter.
+function clickableButton(b) {
+  if (!b || b.disabled) return false;
+  if (b.getAttribute && b.getAttribute('aria-disabled') === 'true') return false;
+  const r = b.getBoundingClientRect ? b.getBoundingClientRect() : { width: 1, height: 1 };
+  return r.width > 0 && r.height > 0;
+}
+
+// Buttons whose aria-label / testid / title mentions "send" or "submit" — Grok
+// labels its send key "Submit" / "提交", not "Send". The substring match is
+// deliberately loose in CSS; isSendLabel below tightens it so we don't click
+// "Resend", "Send feedback", "Submit report", "Send to phone", "Sender", etc.
+const SEND_LABELLED = 'button[data-testid*="send" i],button[data-testid*="submit" i],'
+  + 'button[aria-label*="send" i],button[aria-label*="submit" i],'
+  + 'button[aria-label*="发送"],button[aria-label*="提交"],'
+  + 'button[title*="send" i],button[title*="submit" i],'
+  + 'button[title*="发送"],button[title*="提交"]';
+
+// A CSS "*=send*" match also catches Resend / Send feedback / Send to phone /
+// Sender — clicking any of those would fire the wrong action (and on a quota
+// product, maybe burn a request). Keep only labels that are actually the
+// composer's send control.
+function isSendLabel(raw) {
+  const t = (raw || '').trim().toLowerCase();
+  if (!t) return false;
+  if (/resend|resubmit|feedback|report|invite|share|phone|email|sms|slack|whatsapp|schedul|later/.test(t)) return false;
+  // Accept the real send control: "send", "send message", "submit", "提交",
+  // "发送", "发送消息" — but not "sender", "send to …", "submit feedback"
+  // (already excluded above). Grok's key is "Submit" / "提交".
+  return (/(^|[^a-z])(send|submit)([^a-z]|$)/.test(t) || /发送|提交/.test(t)) && !/send\s+to\b/.test(t);
+}
+
+function sendLabelOf(b) {
+  if (!b) return '';
+  const g = (n) => (b.getAttribute && b.getAttribute(n)) || '';
+  return `${g('data-testid')} ${g('aria-label')} ${g('title')} ${b.textContent || ''}`;
+}
+
 function findSendButton(el) {
   const scopes = [];
   const form = el.closest ? el.closest('form') : null;
   if (form) scopes.push(form);
   let p = el.parentElement;
-  for (let i = 0; i < 5 && p; i++) { scopes.push(p); p = p.parentElement; }
-  const sel = 'button[data-testid*="send" i],button[aria-label*="send" i],'
-    + 'button[aria-label*="发送"],button[title*="send" i],button[type="submit"]';
+  for (let i = 0; i < 8 && p; i++) { scopes.push(p); p = p.parentElement; }
+  // Tier 1: a clickable, genuinely send-labelled button in the composer's own
+  // form / nearby ancestors. This is the safest match.
   for (let i = 0; i < scopes.length; i++) {
-    const b = scopes[i].querySelector && scopes[i].querySelector(sel);
-    if (b && !b.disabled) return b;
+    const found = scopes[i].querySelectorAll ? scopes[i].querySelectorAll(SEND_LABELLED) : [];
+    for (let j = 0; j < found.length; j++) {
+      if (clickableButton(found[j]) && isSendLabel(sendLabelOf(found[j]))) return found[j];
+    }
+  }
+  // Tier 2: still nothing labelled nearby, so trust the composer form's own
+  // submit button (scoped, so it's the composer's — not a random page form).
+  for (let i = 0; i < scopes.length; i++) {
+    const subs = scopes[i].querySelectorAll ? scopes[i].querySelectorAll('button[type="submit"]') : [];
+    for (let j = 0; j < subs.length; j++) {
+      if (clickableButton(subs[j]) && !/feedback|report|resend/i.test(sendLabelOf(subs[j]))) return subs[j];
+    }
+  }
+  // Tier 3: Gemini and Grok keep the send button outside the composer's
+  // ancestors (sometimes inside a shadow root). Search the whole document and
+  // shadow DOM, but only for genuinely send-labelled buttons.
+  const hits = [];
+  const collect = (root) => {
+    if (!root || !root.querySelectorAll) return;
+    const found = root.querySelectorAll(SEND_LABELLED);
+    for (let i = 0; i < found.length; i++) hits.push(found[i]);
+    const all = root.querySelectorAll('*');
+    for (let i = 0; i < all.length; i++) { if (all[i].shadowRoot) collect(all[i].shadowRoot); }
+  };
+  collect(document);
+  for (let i = 0; i < hits.length; i++) {
+    if (clickableButton(hits[i]) && isSendLabel(sendLabelOf(hits[i]))) return hits[i];
   }
   return null;
 }
 
-function submitComposer(el) {
-  if (!el) return false;
-  const btn = findSendButton(el);
-  if (btn) { try { btn.click(); return true; } catch (e) {} }
+// Read what's currently in the composer, so we can (a) refuse to submit a
+// composer that no longer holds our prompt and (b) tell whether a send landed.
+function composerText(el) {
+  if (!el) return '';
+  if (el.isContentEditable) return el.textContent || '';
+  if ('value' in el) return el.value || '';
+  return el.textContent || '';
+}
+function composerHasPrompt(el, prompt) {
+  return !!prompt && composerText(el).indexOf(prompt) >= 0;
+}
+
+// Synthetic Enter — a genuine last resort. Most composers ignore it
+// (isTrusted=false), which is exactly why we prefer a real button click.
+function pressEnter(el) {
   try {
     el.focus();
     const opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
@@ -365,6 +462,99 @@ function submitComposer(el) {
     el.dispatchEvent(new KeyboardEvent('keyup', opts));
     return true;
   } catch (e) {}
+  return false;
+}
+
+// Submit runs at most once per page (this latch), and never treats "I clicked
+// something" as success. On a quota product a false success is the worst
+// outcome: the user thinks the prompt went out, or we fire the wrong button.
+let submitted = false;
+function scheduleSubmit(el, prompt) {
+  if (submitted) return;
+  // Bound the total sends we can ever cause: one real button click, then — only
+  // if that click didn't take — one synthetic Enter. Never a loop of clicks,
+  // which could double-send on a site that sent but didn't clear the box.
+  let n = 0;
+  let clickedAt = 0;      // 0 = not yet; else the tick we clicked on
+  let triedEnter = false;
+  const succeeded = (btn) => {
+    // The send landed if the composer emptied of our prompt, or the button we
+    // clicked went disabled/away (composers do one or the other after sending).
+    if (!composerHasPrompt(el, prompt)) return true;
+    if (btn && !clickableButton(btn)) return true;
+    return false;
+  };
+  let lastBtn = null;
+  const tick = () => {
+    if (submitted) return;
+    n++;
+    // Verify a prior click before doing anything else.
+    if (clickedAt) {
+      if (succeeded(lastBtn)) { submitted = true; return; }
+      // Give the click ~1.2s (3 ticks) to take before deciding it was a no-op.
+      if (n - clickedAt < 3) { setTimeout(tick, 400); return; }
+      // The click did nothing. Try Enter once, then stop — don't keep clicking.
+      if (!triedEnter && composerHasPrompt(el, prompt)) { triedEnter = true; pressEnter(el); setTimeout(tick, 800); return; }
+      submitted = true; // we tried a click and an Enter; give up rather than spam
+      return;
+    }
+    // Refuse to submit a composer that no longer holds our prompt (stale draft
+    // or a cleared box) — sending an empty or old message is worse than not
+    // sending. Keep waiting in case the fill is still settling.
+    if (!composerHasPrompt(el, prompt)) {
+      if (n >= 45) { submitted = true; return; }
+      setTimeout(tick, 400); return;
+    }
+    const btn = findSendButton(el);
+    if (btn) { lastBtn = btn; try { btn.click(); } catch (e) {} clickedAt = n; setTimeout(tick, 400); return; }
+    // No button yet. A slow/backgrounded tab can take 15s+ to enable it, so keep
+    // looking (~18s) before the Enter fallback.
+    if (n >= 45) { if (!triedEnter && composerHasPrompt(el, prompt)) { triedEnter = true; pressEnter(el); } submitted = true; return; }
+    setTimeout(tick, 400);
+  };
+  setTimeout(tick, 400);
+}
+
+// Grok's coding surface is "Build" mode, chosen from the composer's mode
+// dropdown (Auto / Fast / Expert / Build / Heavy). Until Build is active the
+// composer only says "Switch to Build Mode to create apps", so a coding
+// dispatch must flip that selector before filling. Best-effort and idempotent:
+// returns true once Build is active (or we just picked it), false while we're
+// still opening the menu / waiting for it to render, so the caller keeps
+// retrying. Selectors are matched by the visible mode labels, so a Grok layout
+// change may need a tweak here.
+const GROK_MODES = ['auto', 'fast', 'expert', 'build', 'heavy'];
+function seenVisible(el) {
+  if (!el || !el.getBoundingClientRect) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+function selectGrokBuildMode() {
+  if (!location.hostname.includes('grok.com')) return true;
+  const label = (el) => ((el && el.textContent) || '').trim().toLowerCase();
+  // If the mode menu is open, its "Build" entry is on screen — pick it.
+  const menuItems = document.querySelectorAll('[role="menuitem"],[role="menuitemradio"],[role="option"]');
+  for (let i = 0; i < menuItems.length; i++) {
+    if (seenVisible(menuItems[i]) && label(menuItems[i]) === 'build') {
+      try { menuItems[i].click(); } catch (e) {}
+      return true;
+    }
+  }
+  // Otherwise find the mode trigger (a short button whose label starts with the
+  // current mode word). If it's already Build we're done; if not, open it so the
+  // next pass can click the Build entry above.
+  const btns = document.querySelectorAll('button');
+  for (let i = 0; i < btns.length; i++) {
+    const b = btns[i];
+    if (!seenVisible(b)) continue;
+    const t = label(b);
+    const lead = t.split(/\s+/)[0];
+    if (GROK_MODES.indexOf(lead) >= 0 && t.length < 24) {
+      if (lead === 'build') return true;
+      try { b.click(); } catch (e) {}
+      return false;
+    }
+  }
   return false;
 }
 
@@ -385,24 +575,36 @@ function onDispatchFill(msg) {
   if (dispatchHandled) return;
   if (!inTopFrame() || !isDispatchSurface()) return;
   if (!msg || msg.type !== 'dispatchFill' || !msg.prompt) return;
+  const needBuild = msg.mode === 'build';
   const run = () => {
+    // Coding dispatch to Grok has to land in Build mode first — keep retrying
+    // (via the loop below) until the selector is flipped, then fill.
+    if (needBuild && !selectGrokBuildMode()) return false;
     const el = fillComposer(msg.prompt);
     if (!el) return false;
     // Latch before any async work so a racing path bails instead of re-sending.
     dispatchHandled = true;
     claimDispatchFill();
-    // Give the site a beat to register the input (and enable its send button)
-    // before we try to submit. Off by default; opt-in via the panel toggle.
-    if (msg.send) setTimeout(() => submitComposer(el), 400);
+    // Submit is opt-in via the panel toggle. Don't fire once at a fixed delay:
+    // a site needs a beat to register the prefill and enable its send button,
+    // and if we click too early the button isn't there yet, so we'd fall
+    // straight through to a synthetic Enter — which most composers ignore, and
+    // the tab ends up prefilled but never sent. Instead poll for a clickable
+    // send button and click it as soon as it appears.
+    if (msg.send) scheduleSubmit(el, msg.prompt);
     return true;
   };
   if (run()) return;
+  // The composer often isn't in the DOM yet on first message — a heavy or
+  // backgrounded page can take many seconds to render it (and, for Grok Build,
+  // to expose the mode selector). Retry for ~24s rather than ~8s so slow loads
+  // still get filled instead of silently dropping the prompt.
   let n = 0;
   const ivFill = setInterval(() => {
     n++;
-    if (dispatchHandled || run() || n > 20) {
+    if (dispatchHandled || run() || n > 60) {
       clearInterval(ivFill);
-      if (n > 20 && !dispatchHandled) claimDispatchFill();
+      if (n > 60 && !dispatchHandled) claimDispatchFill();
     }
   }, 400);
 }
@@ -415,7 +617,7 @@ if (inTopFrame() && isDispatchSurface()) {
     try {
       chrome.runtime.sendMessage({ type: 'dispatchClaimFill' }, (job) => {
         if (chrome.runtime.lastError || !job || !job.prompt) return;
-        onDispatchFill({ type: 'dispatchFill', prompt: job.prompt, send: job.send });
+        onDispatchFill({ type: 'dispatchFill', prompt: job.prompt, send: job.send, mode: job.mode });
       });
     } catch (e) {}
   }

@@ -125,6 +125,8 @@
   .dispatch-float .note{font-size:10px;color:var(--muted);text-align:center;min-height:14px}
   .dispatch-float .sendtog{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--ink2);cursor:pointer;user-select:none}
   .dispatch-float .sendtog input{margin:0;accent-color:#8fe3c6;cursor:pointer}
+  .dispatch-float .sendtog.dim{opacity:.45;cursor:not-allowed}
+  .dispatch-float .sendtog.dim input{cursor:not-allowed}
   .dispatch-board{position:fixed;inset:0;z-index:65;background:#14161c;padding:12px 13px 18px;display:flex;flex-direction:column;overflow:hidden}
   .dispatch-board .hd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
   .dispatch-board .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;min-height:0;flex:1;overflow:hidden;align-content:start}

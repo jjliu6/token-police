@@ -149,14 +149,22 @@ if (Object.keys(legacy.map).length) problems.push('legacy claim should clear the
 const legacyMiss = takeDispatchPending({ tabId: 9, prompt: 'old', host: 'cursor.com' }, 99);
 if (legacyMiss.job) problems.push('legacy blob must not fill a different tab');
 
-// Auto-send flag: only script-fill surfaces carry it, and it must survive
-// the pending round-trip so the content script knows whether to submit.
+// Auto-send flag: only chat script-fill surfaces carry it (coding composers are
+// gated off for now), and it must survive the pending round-trip so the content
+// script knows whether to submit.
 const sendJob = makeDispatchJob(grok, 'go', '', false, true);
-if (sendJob.send !== true) problems.push('script-fill job must keep send=true');
+if (sendJob.send !== true) problems.push('chat script-fill job must keep send=true');
 const noSendJob = makeDispatchJob(claude, 'go', 'a/b', false, true);
 if (noSendJob.send !== false) problems.push('query-fill job must never auto-send');
 const offJob = makeDispatchJob(grok, 'go', '', false, false);
 if (offJob.send !== false) problems.push('send must default off when not requested');
+// Conservative gate: coding targets never auto-send yet, even with send=true.
+if (makeDispatchJob(dispatchById('codex'), 'go', '', false, true).send !== false) {
+  problems.push('Codex (coding) must not auto-send even when requested');
+}
+if (makeDispatchJob(dispatchById('cursor'), 'go', '', false, true).send !== false) {
+  problems.push('Cursor (coding) must not auto-send even when requested');
+}
 let sp = putDispatchPending({}, 21, { prompt: 'go', host: 'grok.com', send: true });
 if (sp['21'].send !== true) problems.push('pending must carry send flag');
 const st = takeDispatchPending(sp, 21);
@@ -182,7 +190,10 @@ if (leftoverOf(gbc, { 'grok-build': { limits: [{ percent_left: 44 }] } }) !== 44
 }
 const gbcJob = makeDispatchJob(gbc, 'go', '', false, true);
 if (gbcJob.mode !== 'build') problems.push('Grok Build job must keep mode:build');
-if (gbcJob.send !== true) problems.push('Grok Build job must keep send=true');
+// Grok Build is a coding target, so auto-send is gated off for now (prefill
+// only) even though the user asked for send — its Build-mode submit isn't
+// reliable enough to burn quota on yet.
+if (gbcJob.send !== false) problems.push('Grok Build (coding) must not auto-send yet');
 let mp = putDispatchPending({}, 31, { prompt: 'go', host: 'grok.com', send: true, mode: 'build' });
 if (mp['31'].mode !== 'build') problems.push('pending must carry the mode flag');
 const mt = takeDispatchPending(mp, 31);

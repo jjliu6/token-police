@@ -49,7 +49,7 @@ it installs the same way, just with a few extra development files in the folder.
   the extension makes — it carries no account or usage data — and you can turn it off in ⚙.
 - No API and no account linking — it reads the numbers straight off each tool's own usage page that you're already logged into.
 - Everything stays local in your browser (`chrome.storage.local`). Your usage data is never sent to any server.
-- **Dispatch** (footer): type a prompt, pick Chat vs Code, tick one or more destinations, and open them as real Chrome tabs with the prompt pre-filled (not sent). **Chat** opens Claude (`claude.ai/new`), ChatGPT (`chatgpt.com/`), Grok, and Gemini. **Code** opens Claude Code (`claude.ai/code`), Codex Cloud (`chatgpt.com/codex`), and Cursor Agents. Grok Bot stays quota-only (grayed out). Claude Code is the only official query-param prefill; the rest script-fill so nothing auto-sends. Auto-dispatch skips anyone under 15% remaining.
+- **Dispatch** (footer): type a prompt, pick Chat vs Code, tick one or more destinations, and open them as real Chrome tabs with the prompt pre-filled. **Chat** opens Claude (`claude.ai/new`), ChatGPT (`chatgpt.com/`), Grok, and Gemini. **Code** opens Claude Code (`claude.ai/code`), Codex Cloud (`chatgpt.com/codex`), Cursor Agents, and Grok Build (`grok.com` in Build mode). Grok Bot stays quota-only (grayed out). Claude Code is the only official query-param prefill; the rest script-fill. By default the prompt is only pre-filled, **not sent** — an optional per-panel **Auto-send** toggle (off by default, Chat targets only for now) will actually submit and use quota. Auto-dispatch skips anyone under 15% remaining.
 
 ## Install
 

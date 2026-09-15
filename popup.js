@@ -1538,17 +1538,24 @@ function closeDispatchBoard() {
   if (el) el.hidden = true;
 }
 
-// Close every tab this board opened in one click, then clear the board. The
-// background service worker owns tab access, so it does the actual removal; we
-// just hand it the ids and reset our local list.
+// Close every tab this board opened in one click. The background service worker
+// owns tab access, so it does the actual removal; we hand it the ids and only
+// clear the board once it confirms — otherwise a failed close would leave the
+// tabs open while the board says they're gone.
 function closeDispatchTabs() {
   const ids = dispatchJobs.map((j) => j && j.tabId).filter((x) => x != null);
-  if (ids.length && chrome.runtime && chrome.runtime.sendMessage) {
-    chrome.runtime.sendMessage({ type: 'dispatchCloseTabs', tabIds: ids }, () => void chrome.runtime.lastError);
+  if (!ids.length || !chrome.runtime || !chrome.runtime.sendMessage) {
+    dispatchJobs = [];
+    persistDispatch();
+    closeDispatchBoard();
+    return;
   }
-  dispatchJobs = [];
-  persistDispatch();
-  closeDispatchBoard();
+  chrome.runtime.sendMessage({ type: 'dispatchCloseTabs', tabIds: ids }, (res) => {
+    if (chrome.runtime.lastError || !res || !res.ok) return; // keep the board; tabs may still be open
+    dispatchJobs = [];
+    persistDispatch();
+    closeDispatchBoard();
+  });
 }
 
 function openDispatchBoard() {
@@ -1655,10 +1662,18 @@ function renderDispatch() {
   if (go) go.textContent = kindSelected.length
     ? t('dispatchMulti', { n: kindSelected.length })
     : t('dispatch');
+  // Auto-send is chat-only for now (coding composers have flaky submit paths),
+  // so on the Code tab the toggle is greyed out and forced off — prefill only.
+  const sendAllowed = dispatchKind !== 'code';
   const sendTog = document.getElementById('dispatch-send');
-  if (sendTog) sendTog.checked = dispatchAutoSend;
+  if (sendTog) {
+    sendTog.disabled = !sendAllowed;
+    sendTog.checked = sendAllowed && dispatchAutoSend;
+    const wrap = sendTog.closest ? sendTog.closest('.sendtog') : null;
+    if (wrap) wrap.classList.toggle('dim', !sendAllowed);
+  }
   const sendLabel = document.getElementById('dispatch-send-label');
-  if (sendLabel) sendLabel.textContent = t('dispatchSend');
+  if (sendLabel) sendLabel.textContent = sendAllowed ? t('dispatchSend') : t('dispatchSendCode');
   const note = document.getElementById('dispatch-note');
   if (note) note.textContent = t('dispatchHint');
   renderDispatchBoard();

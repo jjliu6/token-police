@@ -197,6 +197,137 @@ Upgrade
   check(c && c.id === 'claude-code' && c.limits[0].percent_left === 70 && c.limits[1].percent_left === 90, `claude page, got ${JSON.stringify(c)}`);
 }
 
+// --- Auto-send: find the button, wait until it is armed, click once ---------
+function makeEl(tag, attrs = {}, children = []) {
+  const bag = Object.assign({}, attrs);
+  const node = {
+    nodeType: 1,
+    tagName: tag.toUpperCase(),
+    parentElement: null,
+    childNodes: [],
+    disabled: !!attrs.disabled,
+    className: attrs.className || '',
+    id: attrs.id || '',
+    clicked: 0,
+    events: [],
+    getAttribute(name) { return bag[name] == null ? null : String(bag[name]); },
+    setAttribute(name, v) { bag[name] = v; },
+    focus() {},
+    click() { node.clicked += 1; },
+    dispatchEvent(ev) { node.events.push(ev); return true; },
+    getBoundingClientRect() { return { width: attrs.width || 40, height: attrs.height || 40 }; },
+    closest(sel) {
+      let p = node;
+      while (p) {
+        if (sel === 'form' && p.tagName === 'FORM') return p;
+        p = p.parentElement;
+      }
+      return null;
+    },
+  };
+  children.forEach((c) => { c.parentElement = node; node.childNodes.push(c); });
+  return node;
+}
+
+function loadComposer() {
+  const intervals = [];
+  const ctxObj = {
+    Date,
+    setInterval: (fn) => { intervals.push(fn); return intervals.length; },
+    clearInterval: (id) => { if (id) intervals[id - 1] = null; },
+    MutationObserver: class { observe() {} disconnect() {} },
+    Event: class Event { constructor(type, init) { this.type = type; Object.assign(this, init || {}); } },
+    KeyboardEvent: class KeyboardEvent { constructor(type, init) { this.type = type; Object.assign(this, init || {}); } },
+    InputEvent: class InputEvent { constructor(type, init) { this.type = type; Object.assign(this, init || {}); } },
+    document: { body: { innerText: '', childNodes: [] }, documentElement: {}, execCommand: () => false },
+    location: { hostname: 'grok.com', pathname: '/', search: '', hash: '', href: 'https://grok.com/' },
+    chrome: { runtime: { sendMessage: (msg, cb) => { if (cb) cb(); }, lastError: null, onMessage: { addListener() {} } } },
+  };
+  const ctx = vm.createContext(ctxObj);
+  vm.runInContext(parseSrc, ctx, { filename: 'parse.js' });
+  vm.runInContext(contentSrc, ctx, { filename: 'content.js' });
+  return {
+    ctx,
+    tick: () => { intervals.forEach((fn) => fn && fn()); },
+    live: () => intervals.filter(Boolean).length,
+  };
+}
+
+{
+  const { ctx } = loadComposer();
+  const btn = makeEl('button', { 'aria-label': 'Submit' });
+  const box = makeEl('textarea', { width: 400, height: 80 });
+  makeEl('div', {}, [box, btn]);
+  check(ctx.findSendButton(box) === btn, 'Grok aria-label=Submit must match as a send button');
+  check(ctx.clickSend(box) === true && btn.clicked === 1, 'Grok Submit should be clicked');
+}
+{
+  const { ctx } = loadComposer();
+  const btn = makeEl('button', { 'aria-label': '提交' });
+  const box = makeEl('textarea', { width: 400, height: 80 });
+  makeEl('div', {}, [box, btn]);
+  check(ctx.findSendButton(box) === btn, 'Grok aria-label=提交 must match');
+}
+{
+  const { ctx } = loadComposer();
+  const btn = makeEl('button', { 'aria-label': 'Send message', className: 'send-button' });
+  const box = makeEl('div', { contenteditable: 'true', width: 400, height: 48 });
+  makeEl('div', {}, [box, btn]);
+  check(ctx.findSendButton(box) === btn, 'Gemini Send message / send-button class must match');
+}
+{
+  const { ctx } = loadComposer();
+  const btn = makeEl('button', { 'data-testid': 'send-button' });
+  const box = makeEl('textarea', { width: 400, height: 80 });
+  makeEl('form', {}, [box, btn]);
+  check(ctx.findSendButton(box) === btn, 'ChatGPT data-testid=send-button must still match');
+}
+{
+  const { ctx } = loadComposer();
+  const btn = makeEl('button', { 'aria-label': 'Submit', 'aria-disabled': 'true' });
+  const box = makeEl('textarea', { width: 400, height: 80 });
+  makeEl('div', {}, [box, btn]);
+  check(ctx.findSendButton(box) == null, 'aria-disabled send button must not be treated as usable');
+  check(ctx.submitComposer(box) === false && btn.clicked === 0, 'submit must not click an aria-disabled button or claim Enter as success');
+}
+{
+  // Gemini-like: send sits many wrappers above the contenteditable. 5 parents miss it.
+  const { ctx } = loadComposer();
+  const btn = makeEl('button', { 'aria-label': 'Send message' });
+  const box = makeEl('div', { contenteditable: 'true', width: 400, height: 48 });
+  let inner = box;
+  for (let i = 0; i < 8; i++) inner = makeEl('div', {}, [inner]);
+  makeEl('div', { className: 'composer' }, [inner, btn]);
+  check(ctx.findSendButton(box) === btn, 'send button 8 ancestors up (no form) must still be found');
+}
+{
+  const { ctx, tick, live } = loadComposer();
+  const btn = makeEl('button', { 'aria-label': 'Submit', 'aria-disabled': 'true' });
+  const box = makeEl('textarea', { width: 400, height: 80 });
+  makeEl('div', {}, [box, btn]);
+  ctx.scheduleSubmit(box);
+  check(btn.clicked === 0 && live() === 1, 'scheduleSubmit should wait, not click a disabled button');
+  tick();
+  check(btn.clicked === 0, 'still-disabled ticks must not click');
+  btn.setAttribute('aria-disabled', 'false');
+  tick();
+  check(btn.clicked === 1, 'click once when the button becomes armed');
+  check(live() === 0, 'retry loop must stop after a real click');
+  tick();
+  check(btn.clicked === 1, 'must not click a second time after success');
+  check(box.events.length === 0, 'must not fire Enter once a real send button has been clicked');
+}
+{
+  const { ctx, tick } = loadComposer();
+  const box = makeEl('textarea', { width: 400, height: 80 });
+  makeEl('div', {}, [box]);
+  ctx.scheduleSubmit(box);
+  for (let i = 0; i < 19; i++) tick();
+  check(box.events.length === 0, 'Enter fallback must wait until retries are exhausted');
+  tick();
+  check(box.events.some((e) => e.type === 'keydown' && e.key === 'Enter'), 'last resort after ~8s is a single Enter');
+}
+
 if (problems.length) {
   console.error(problems.join('\n'));
   process.exit(1);
@@ -204,4 +335,5 @@ if (problems.length) {
 console.log('ok  Cursor spending page reports Cursor (4% left) and Grok Bot (87% left) from one scrape');
 console.log('ok  Missing / late Grok Bot section: Cursor saved, page waits, closes once done');
 console.log('ok  Gemini usage page reports weekly + current usage, PRO plan');
+console.log('ok  Auto-send waits for an armed Submit/Send button instead of one 400ms shot');
 console.log('\nContent test passed.');

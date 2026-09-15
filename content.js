@@ -289,8 +289,19 @@ function fillComposer(prompt) {
     try {
       el.focus();
       if (el.isContentEditable) {
-        el.textContent = prompt;
-        el.dispatchEvent(new Event('input', { bubbles: true }));
+        let inserted = false;
+        try {
+          if (typeof document.execCommand === 'function') {
+            document.execCommand('selectAll', false, null);
+            inserted = !!document.execCommand('insertText', false, prompt);
+          }
+        } catch (e) {}
+        if (!inserted) el.textContent = prompt;
+        try {
+          el.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: prompt }));
+        } catch (e) {
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
         return true;
       }
       if ('value' in el) {
@@ -337,35 +348,127 @@ function fillComposer(prompt) {
 
 // Best-effort "press send" after a prefill. Composers differ a lot between
 // sites and many ignore synthetic Enter (isTrusted=false), so we try a real
-// send button first and fall back to a keyboard Enter.
+// send button first and only fall back to Enter after we have waited for
+// the site to enable that button. A single 400ms shot is too short: Grok
+// and Gemini often paint the composer before the send control is armed.
+function sendButtonLabel(b) {
+  if (!b || !b.getAttribute) return '';
+  const cls = b.className;
+  const clsText = typeof cls === 'string' ? cls : (cls && cls.baseVal) || '';
+  return [
+    b.getAttribute('aria-label'),
+    b.getAttribute('title'),
+    b.getAttribute('data-testid'),
+    b.getAttribute('data-test-id'),
+    b.getAttribute('name'),
+    clsText,
+  ].filter(Boolean).join(' ');
+}
+
+function isSendButton(b) {
+  if (!b) return false;
+  const tag = (b.tagName || '').toUpperCase();
+  const role = ((b.getAttribute && b.getAttribute('role')) || '').toLowerCase();
+  if (tag !== 'BUTTON' && role !== 'button') return false;
+  const type = ((b.getAttribute && b.getAttribute('type')) || '').toLowerCase();
+  if (type === 'submit') return true;
+  const label = sendButtonLabel(b);
+  // Grok uses aria-label="Submit" / "提交", not "Send". \b does not work on CJK.
+  if (/(^|[^a-z])(send|submit)([^a-z]|$)/i.test(label)) return true;
+  if (/发送|提交/.test(label)) return true;
+  if (/\bsend-button\b|\bsubmit-button\b|\bchat-submit\b/i.test(label)) return true;
+  return false;
+}
+
+function isUsableSend(b) {
+  if (!isSendButton(b) || b.disabled) return false;
+  const aria = ((b.getAttribute && b.getAttribute('aria-disabled')) || '').toLowerCase();
+  if (aria === 'true') return false;
+  const r = b.getBoundingClientRect ? b.getBoundingClientRect() : { width: 1, height: 1 };
+  if (!r || r.width < 1 || r.height < 1) return false;
+  return true;
+}
+
+function parentOrHost(el) {
+  if (!el) return null;
+  if (el.parentElement) return el.parentElement;
+  try {
+    const root = el.getRootNode && el.getRootNode();
+    return (root && root.host) || null;
+  } catch (e) { return null; }
+}
+
+function collectButtons(root, out) {
+  if (!root || out.length > 80) return;
+  const tag = (root.tagName || '').toUpperCase();
+  const role = ((root.getAttribute && root.getAttribute('role')) || '').toLowerCase();
+  if (tag === 'BUTTON' || role === 'button') out.push(root);
+  const kids = root.childNodes || [];
+  for (let i = 0; i < kids.length; i++) collectButtons(kids[i], out);
+  if (root.shadowRoot) collectButtons(root.shadowRoot, out);
+}
+
 function findSendButton(el) {
+  if (!el) return null;
   const scopes = [];
   const form = el.closest ? el.closest('form') : null;
   if (form) scopes.push(form);
-  let p = el.parentElement;
-  for (let i = 0; i < 5 && p; i++) { scopes.push(p); p = p.parentElement; }
-  const sel = 'button[data-testid*="send" i],button[aria-label*="send" i],'
-    + 'button[aria-label*="发送"],button[title*="send" i],button[type="submit"]';
+  let p = parentOrHost(el);
+  for (let i = 0; i < 12 && p; i++) {
+    const tag = (p.tagName || '').toUpperCase();
+    if (tag === 'BODY' || tag === 'HTML') break;
+    scopes.push(p);
+    p = parentOrHost(p);
+  }
   for (let i = 0; i < scopes.length; i++) {
-    const b = scopes[i].querySelector && scopes[i].querySelector(sel);
-    if (b && !b.disabled) return b;
+    const buttons = [];
+    collectButtons(scopes[i], buttons);
+    for (let j = 0; j < buttons.length; j++) {
+      if (isUsableSend(buttons[j])) return buttons[j];
+    }
   }
   return null;
 }
 
-function submitComposer(el) {
-  if (!el) return false;
+function clickSend(el) {
   const btn = findSendButton(el);
-  if (btn) { try { btn.click(); return true; } catch (e) {} }
+  if (!btn) return false;
+  try { btn.click(); return true; } catch (e) { return false; }
+}
+
+function enterFallback(el) {
   try {
     el.focus();
-    const opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+    const opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true };
     el.dispatchEvent(new KeyboardEvent('keydown', opts));
     el.dispatchEvent(new KeyboardEvent('keypress', opts));
     el.dispatchEvent(new KeyboardEvent('keyup', opts));
     return true;
   } catch (e) {}
   return false;
+}
+
+// True only when we actually clicked an enabled send button. Enter is not
+// treated as success — sites that ignore isTrusted=false would stop retries.
+function submitComposer(el) {
+  return !!(el && clickSend(el));
+}
+
+const SUBMIT_RETRY_MS = 400;
+const SUBMIT_RETRY_MAX = 20; // ~8s after fill; composer often exists before Send is armed
+
+function scheduleSubmit(el) {
+  if (!el) return;
+  if (clickSend(el)) return;
+  let n = 0;
+  const iv = setInterval(() => {
+    n++;
+    if (clickSend(el)) { clearInterval(iv); return; }
+    if (n >= SUBMIT_RETRY_MAX) {
+      clearInterval(iv);
+      enterFallback(el);
+    }
+  }, SUBMIT_RETRY_MS);
 }
 
 function claimDispatchFill() {
@@ -391,9 +494,9 @@ function onDispatchFill(msg) {
     // Latch before any async work so a racing path bails instead of re-sending.
     dispatchHandled = true;
     claimDispatchFill();
-    // Give the site a beat to register the input (and enable its send button)
-    // before we try to submit. Off by default; opt-in via the panel toggle.
-    if (msg.send) setTimeout(() => submitComposer(el), 400);
+    // The composer often exists before the site has enabled Send (Grok/Gemini
+    // are slow). Poll for an armed button instead of one 400ms shot.
+    if (msg.send) scheduleSubmit(el);
     return true;
   };
   if (run()) return;

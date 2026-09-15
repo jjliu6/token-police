@@ -154,7 +154,7 @@ function buildDispatch(agent, prompt, repo) {
   }
 }
 
-function makeDispatchJob(agent, prompt, repo, auto) {
+function makeDispatchJob(agent, prompt, repo, auto, send) {
   const built = buildDispatch(agent, prompt, repo);
   return {
     agentId: agent.id,
@@ -165,6 +165,9 @@ function makeDispatchJob(agent, prompt, repo, auto) {
     repo: agentKind(agent) === 'code' ? (repo || '') : '',
     url: built.url,
     fill: built.fill,
+    // Auto-send only makes sense for surfaces we type into ourselves.
+    // 'query' fill hands the prompt to the site via the URL, so it decides.
+    send: built.fill === 'script' ? !!send : false,
     auto: !!auto,
     at: Date.now(),
   };
@@ -173,7 +176,7 @@ function makeDispatchJob(agent, prompt, repo, auto) {
 function putDispatchPending(map, tabId, job) {
   const next = Object.assign({}, map && typeof map === 'object' && !Array.isArray(map) ? map : {});
   if (tabId == null || !job || !job.prompt) return next;
-  next[String(tabId)] = { prompt: job.prompt, host: job.host || '' };
+  next[String(tabId)] = { prompt: job.prompt, host: job.host || '', send: !!job.send };
   return next;
 }
 
@@ -181,7 +184,7 @@ function takeDispatchPending(map, tabId) {
   if (!map || typeof map !== 'object') return { map: {}, job: null };
   if (map.prompt && map.tabId != null) {
     if (tabId != null && Number(map.tabId) === Number(tabId)) {
-      return { map: {}, job: { prompt: map.prompt, host: map.host || '' } };
+      return { map: {}, job: { prompt: map.prompt, host: map.host || '', send: !!map.send } };
     }
     return { map, job: null };
   }

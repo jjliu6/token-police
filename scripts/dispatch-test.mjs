@@ -148,6 +148,21 @@ if (Object.keys(legacy.map).length) problems.push('legacy claim should clear the
 const legacyMiss = takeDispatchPending({ tabId: 9, prompt: 'old', host: 'cursor.com' }, 99);
 if (legacyMiss.job) problems.push('legacy blob must not fill a different tab');
 
+// Auto-send flag: only script-fill surfaces carry it, and it must survive
+// the pending round-trip so the content script knows whether to submit.
+const sendJob = makeDispatchJob(grok, 'go', '', false, true);
+if (sendJob.send !== true) problems.push('script-fill job must keep send=true');
+const noSendJob = makeDispatchJob(claude, 'go', 'a/b', false, true);
+if (noSendJob.send !== false) problems.push('query-fill job must never auto-send');
+const offJob = makeDispatchJob(grok, 'go', '', false, false);
+if (offJob.send !== false) problems.push('send must default off when not requested');
+let sp = putDispatchPending({}, 21, { prompt: 'go', host: 'grok.com', send: true });
+if (sp['21'].send !== true) problems.push('pending must carry send flag');
+const st = takeDispatchPending(sp, 21);
+if (!st.job || st.job.send !== true) problems.push('claim must return the send flag');
+const spOff = putDispatchPending({}, 22, { prompt: 'go', host: 'grok.com' });
+if (spOff['22'].send !== false) problems.push('pending send must default false');
+
 if (problems.length) {
   console.error(problems.join('\n'));
   process.exit(1);

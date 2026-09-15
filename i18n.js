@@ -128,6 +128,7 @@ const I18N = {
     dispatchFocus: 'Jump to tab',
     dispatchGone: 'Tab was closed',
     dispatchHint: 'Tick destinations, then dispatch. Ctrl+Enter auto-picks one.',
+    dispatchSend: 'Auto-send after prefill (best effort)',
     dispatchSoon: 'No public composer yet — quota only',
   },
   zh: {
@@ -252,6 +253,7 @@ const I18N = {
     dispatchFocus: '跳到标签',
     dispatchGone: '标签已关',
     dispatchHint: '勾选入口再指派。Ctrl+Enter 自动派最合适的一个。',
+    dispatchSend: '预填后自动发送（尽力而为）',
     dispatchSoon: '暂无独立入口，只看额度',
   },
 };

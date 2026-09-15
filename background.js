@@ -386,9 +386,10 @@ function openDispatchJobs(jobs) {
         const pending = putDispatchPending(stored.dispatchPending, tabId, {
           prompt: job.prompt,
           host: hostFromUrl(job.url),
+          send: job.send,
         });
         await new Promise((done) => chrome.storage.local.set({ dispatchPending: pending }, done));
-        pingFill(tabId, job.prompt, 0);
+        pingFill(tabId, job.prompt, 0, job.send);
       }
       resolve();
     });
@@ -399,12 +400,12 @@ function hostFromUrl(url) {
   try { return new URL(url).hostname; } catch (e) { return ''; }
 }
 
-function pingFill(tabId, prompt, attempt) {
+function pingFill(tabId, prompt, attempt, send) {
   if (!chrome.tabs.sendMessage) return;
-  chrome.tabs.sendMessage(tabId, { type: 'dispatchFill', prompt }, () => {
+  chrome.tabs.sendMessage(tabId, { type: 'dispatchFill', prompt, send: !!send }, () => {
     const err = chrome.runtime.lastError;
     if (!err || attempt >= 8) return;
-    setTimeout(() => pingFill(tabId, prompt, attempt + 1), 700);
+    setTimeout(() => pingFill(tabId, prompt, attempt + 1, send), 700);
   });
 }
 

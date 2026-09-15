@@ -373,12 +373,23 @@ function claimDispatchFill() {
   try { chrome.runtime.sendMessage({ type: 'dispatchClaimFill' }); } catch (e) {}
 }
 
+// A single dispatch reaches us through two racing paths — the on-load claim
+// and the background's dispatchFill ping (which itself retries) — and each can
+// re-enter while the fill retry loop is still spinning. Without a guard every
+// path schedules its own submit, so the site sees the prompt sent twice or
+// three times. This latch makes fill+submit happen exactly once per page; a
+// fresh dispatch always opens a new tab, so a new content script starts unlatched.
+let dispatchHandled = false;
+
 function onDispatchFill(msg) {
+  if (dispatchHandled) return;
   if (!inTopFrame() || !isDispatchSurface()) return;
   if (!msg || msg.type !== 'dispatchFill' || !msg.prompt) return;
   const run = () => {
     const el = fillComposer(msg.prompt);
     if (!el) return false;
+    // Latch before any async work so a racing path bails instead of re-sending.
+    dispatchHandled = true;
     claimDispatchFill();
     // Give the site a beat to register the input (and enable its send button)
     // before we try to submit. Off by default; opt-in via the panel toggle.
@@ -389,9 +400,9 @@ function onDispatchFill(msg) {
   let n = 0;
   const ivFill = setInterval(() => {
     n++;
-    if (run() || n > 20) {
+    if (dispatchHandled || run() || n > 20) {
       clearInterval(ivFill);
-      if (n > 20) claimDispatchFill();
+      if (n > 20 && !dispatchHandled) claimDispatchFill();
     }
   }, 400);
 }

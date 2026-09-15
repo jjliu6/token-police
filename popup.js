@@ -1505,7 +1505,7 @@ if (typeof document !== 'undefined' && document.addEventListener) {
 }
 
 let quotaMap = {};
-let dispatchKind = 'code';
+let dispatchKind = 'chat';
 let dispatchSelected = [];
 let dispatchPrompt = '';
 let dispatchRepo = '';
@@ -1571,6 +1571,14 @@ function renderDispatch() {
   });
   const fold = document.getElementById('dispatch-fold');
   if (fold) fold.textContent = t('dispatch');
+  // Re-entry to the tab board: once a batch is open, this is the only way back
+  // to it — clicking a tile jumps to that tab and closes the popup, so on the
+  // next open the board is hidden and would otherwise be unreachable.
+  const tabsBtn = document.getElementById('dispatch-tabs');
+  if (tabsBtn) {
+    tabsBtn.hidden = dispatchJobs.length <= 1;
+    tabsBtn.textContent = t('dispatchTabs', { n: dispatchJobs.length });
+  }
   const area = document.getElementById('dispatch-prompt');
   if (area && area.value !== dispatchPrompt) area.value = dispatchPrompt;
   if (area) area.placeholder = t('dispatchPlaceholder');
@@ -1699,6 +1707,10 @@ if (dispatchToggle && dispatchToggle.addEventListener) {
 const dispatchFold = document.getElementById('dispatch-fold');
 if (dispatchFold && dispatchFold.addEventListener) {
   dispatchFold.addEventListener('click', () => setDispatchOpen(false));
+}
+const dispatchTabsBtn = document.getElementById('dispatch-tabs');
+if (dispatchTabsBtn && dispatchTabsBtn.addEventListener) {
+  dispatchTabsBtn.addEventListener('click', () => { setDispatchOpen(false); openDispatchBoard(); });
 }
 const dispatchKindEl = document.getElementById('dispatch-kind');
 if (dispatchKindEl && dispatchKindEl.addEventListener) {

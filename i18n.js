@@ -133,6 +133,8 @@ const I18N = {
     dispatchHint: 'Tick destinations, then dispatch. Ctrl+Enter auto-picks one.',
     dispatchSend: 'Auto-send after prefill — actually submits & uses quota (best effort)',
     dispatchSendCode: 'Auto-send off for coding targets (prefill only for now)',
+    dispatchTile: 'Tile windows side by side',
+    dispatchTileHint: 'Opens each destination as its own window, arranged to fill the screen',
     dispatchSoon: 'No public composer yet — quota only',
   },
   zh: {
@@ -262,6 +264,8 @@ const I18N = {
     dispatchHint: '勾选入口再指派。Ctrl+Enter 自动派最合适的一个。',
     dispatchSend: '预填后自动发送——会真正提交、消耗额度（尽力而为）',
     dispatchSendCode: '代码类暂不支持自动发送（目前只预填）',
+    dispatchTile: '窗口并排铺开',
+    dispatchTileHint: '每个入口开成独立窗口，自动铺满屏幕',
     dispatchSoon: '暂无独立入口，只看额度',
   },
 };

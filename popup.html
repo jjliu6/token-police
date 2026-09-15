@@ -127,6 +127,7 @@
   .dispatch-float .sendtog input{margin:0;accent-color:#8fe3c6;cursor:pointer}
   .dispatch-float .sendtog.dim{opacity:.45;cursor:not-allowed}
   .dispatch-float .sendtog.dim input{cursor:not-allowed}
+  .dispatch-float #dispatch-tile-row{margin-top:4px}
   .dispatch-board{position:fixed;inset:0;z-index:65;background:#14161c;padding:12px 13px 18px;display:flex;flex-direction:column;overflow:hidden}
   .dispatch-board .hd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
   .dispatch-board .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;min-height:0;flex:1;overflow:hidden;align-content:start}
@@ -254,6 +255,7 @@
       </div>
       <div class="chips" id="dispatch-chips"></div>
       <label class="sendtog"><input type="checkbox" id="dispatch-send"><span id="dispatch-send-label"></span></label>
+      <label class="sendtog" id="dispatch-tile-row"><input type="checkbox" id="dispatch-tile"><span id="dispatch-tile-label"></span></label>
       <div class="row">
         <button class="btn" id="dispatch-auto" type="button"></button>
         <button class="btn share" id="dispatch-go" type="button"></button>

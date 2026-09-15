@@ -163,6 +163,12 @@ Upgrade
   check(p.agents().length === 0, 'dispatch surface should not poll-scrape');
   check(!p.closed(), 'dispatch tab must not auto-close');
 }
+{
+  const p = runPage({ host: 'grok.com', path: '/', text: 'Ask Grok' });
+  for (let i = 0; i < 31; i++) p.tick();
+  check(p.agents().length === 0, 'grok chat home should not scrape usage');
+  check(!p.closed(), 'grok chat tab must not auto-close');
+}
 
 {
   const busy = GEMINI.replace('Current usage\n0% used\nResets at 2:29 PM', 'Current usage\n42% used').replace('Weekly limit\nResets Sep 6 at 8:29 AM\n0% used', 'Weekly limit\nResets Sep 6 at 8:29 AM\n17% used');

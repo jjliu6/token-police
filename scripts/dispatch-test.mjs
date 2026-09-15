@@ -16,6 +16,7 @@ const pickAutoDispatch = vm.runInContext('pickAutoDispatch', ctx);
 const pickReadyDispatch = vm.runInContext('pickReadyDispatch', ctx);
 const makeDispatchJob = vm.runInContext('makeDispatchJob', ctx);
 const leftoverOf = vm.runInContext('leftoverOf', ctx);
+const selectedForKind = vm.runInContext('selectedForKind', ctx);
 const putDispatchPending = vm.runInContext('putDispatchPending', ctx);
 const takeDispatchPending = vm.runInContext('takeDispatchPending', ctx);
 
@@ -31,8 +32,9 @@ if (!c.url.includes('repositories=jjliu6')) problems.push(`claude repo param mis
 if (c.fill !== 'query') problems.push('claude should use query fill');
 
 const g = buildDispatch(grok, 'hello world');
-if (!g.url.includes('grok.com')) problems.push('grok should open grok.com');
-if (!g.url.includes('q=hello')) problems.push(`grok q param missing: ${g.url}`);
+if (g.url !== 'https://grok.com/') problems.push(`grok should open bare grok.com, got ${g.url}`);
+if (/[?&]q=/.test(g.url)) problems.push('grok must not use ?q= (that auto-sends)');
+if (g.fill !== 'script') problems.push('grok should script-fill so the prompt is not sent');
 
 const cur = buildDispatch(cursor, 'ship it');
 if (cur.url !== 'https://cursor.com/agents') problems.push(`cursor url ${cur.url}`);
@@ -77,9 +79,11 @@ if (!autoKnown || autoKnown.id !== 'cursor') {
 }
 if (leftoverOf(claude, {}) != null) problems.push('no data should be leftover null, not 100');
 const emptyAuto = pickAutoDispatch('code', {});
-if (!emptyAuto || emptyAuto.id !== 'claude-code') {
-  problems.push(`empty map auto should fall back to first code agent, got ${emptyAuto && emptyAuto.id}`);
-}
+if (emptyAuto) problems.push(`empty map auto must not pick anyone, got ${emptyAuto && emptyAuto.id}`);
+if (pickReadyDispatch('code', {}).length) problems.push('empty map ready pool must be empty');
+const crossed = selectedForKind(['cursor', 'grok-build', 'gemini'], 'chat');
+if (crossed.join() !== 'grok-build,gemini') problems.push(`kind filter should drop Cursor, got ${crossed.join()}`);
+if (selectedForKind(['cursor'], 'chat').length) problems.push('Cursor must not dispatch after switching to Chat');
 
 let pending = putDispatchPending({}, 11, { prompt: 'one', host: 'cursor.com' });
 pending = putDispatchPending(pending, 12, { prompt: 'two', host: 'gemini.google.com' });

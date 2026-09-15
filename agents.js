@@ -83,25 +83,23 @@ function leftoverOf(agent, map) {
 
 function isDispatchReady(agent, map) {
   const left = leftoverOf(agent, map);
-  return left == null || left >= AUTO_MIN_LEFT;
+  return left != null && left >= AUTO_MIN_LEFT;
 }
 
 function pickAutoDispatch(kind, map) {
-  const pool = agentsForKind(kind).filter((a) => isDispatchReady(a, map));
+  const pool = pickReadyDispatch(kind, map);
   if (!pool.length) return null;
-  const known = pool.filter((a) => leftoverOf(a, map) != null);
-  const ranked = known.length ? known : pool;
-  return ranked.reduce((best, a) => {
-    const bl = leftoverOf(best, map);
-    const al = leftoverOf(a, map);
-    if (al == null) return best;
-    if (bl == null) return a;
-    return al > bl ? a : best;
-  });
+  return pool.reduce((best, a) => (leftoverOf(a, map) > leftoverOf(best, map) ? a : best));
 }
 
 function pickReadyDispatch(kind, map) {
   return agentsForKind(kind).filter((a) => isDispatchReady(a, map));
+}
+
+function selectedForKind(ids, kind) {
+  const allow = {};
+  agentsForKind(kind).forEach((a) => { allow[a.id] = true; });
+  return (ids || []).filter((id) => allow[id]);
 }
 
 function buildDispatch(agent, prompt, repo) {
@@ -118,11 +116,8 @@ function buildDispatch(agent, prompt, repo) {
       u.searchParams.set('prompt', text);
       return { url: u.toString(), fill: 'query' };
     }
-    case 'grok-build': {
-      const u = new URL('https://grok.com/');
-      u.searchParams.set('q', text);
-      return { url: u.toString(), fill: 'query' };
-    }
+    case 'grok-build':
+      return { url: 'https://grok.com/', fill: 'script' };
     case 'cursor':
     case 'grok-bot':
       return { url: 'https://cursor.com/agents', fill: 'script' };

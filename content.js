@@ -232,8 +232,13 @@ function isDispatchSurface() {
   if (h.includes('gemini.google.com') && /^\/app(\/|$)/.test(p)) return true;
   if (h.includes('claude.ai') && /^\/code(\/|$)/.test(p)) return true;
   if (h.includes('chatgpt.com') && /\/codex(\/|$)/.test(p) && !p.includes('/settings')) return true;
-  if (h.includes('grok.com') && /[?&]q=/.test(q)) return true;
+  if (h.includes('grok.com') && !/[?&]_s=usage/.test(q)) return true;
   return false;
+}
+
+function inTopFrame() {
+  try { return typeof window === 'undefined' || !window.top || window === window.top; }
+  catch (e) { return true; }
 }
 
 if (!isDispatchSurface()) {
@@ -250,15 +255,34 @@ if (!isDispatchSurface()) {
   }
 }
 
+function isFillableComposer(el) {
+  if (!el) return false;
+  const tag = (el.tagName || '').toUpperCase();
+  if (tag === 'INPUT') return false;
+  const role = ((el.getAttribute && el.getAttribute('role')) || '').toLowerCase();
+  if (role === 'searchbox') return false;
+  const label = (
+    ((el.getAttribute && (el.getAttribute('placeholder') || el.getAttribute('aria-label') || el.getAttribute('name'))) || '')
+    + ' ' + (el.id || '') + ' ' + (el.className || '')
+  ).toLowerCase();
+  if (/search|filter|查询|搜索|筛选/.test(label)) return false;
+  try {
+    if (el.closest && el.closest('nav, header, [role="search"], [role="navigation"]')) return false;
+  } catch (e) {}
+  const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 240, height: 48 };
+  if (!r || r.width < 120 || r.height < 20) return false;
+  return true;
+}
+
 function fillComposer(prompt) {
-  if (!prompt) return false;
+  if (!prompt || !inTopFrame() || !isDispatchSurface()) return false;
   const visible = (el) => {
     if (!el) return false;
     const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 1, height: 1 };
     return r.width > 0 && r.height > 0;
   };
   const trySet = (el) => {
-    if (!el || !visible(el)) return false;
+    if (!el || !visible(el) || !isFillableComposer(el)) return false;
     try {
       el.focus();
       if (el.isContentEditable) {
@@ -295,10 +319,16 @@ function fillComposer(prompt) {
   };
   walk(document);
   if (document.body) walk(document.body);
+  let best = null;
+  let bestArea = 0;
   for (let i = 0; i < nodes.length; i++) {
-    if (trySet(nodes[i])) return true;
+    const el = nodes[i];
+    if (!isFillableComposer(el) || !visible(el)) continue;
+    const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 240, height: 48 };
+    const area = (r.width || 0) * (r.height || 0);
+    if (area >= bestArea) { best = el; bestArea = area; }
   }
-  return false;
+  return best ? trySet(best) : false;
 }
 
 function claimDispatchFill() {
@@ -307,6 +337,7 @@ function claimDispatchFill() {
 }
 
 function onDispatchFill(msg) {
+  if (!inTopFrame() || !isDispatchSurface()) return;
   if (!msg || msg.type !== 'dispatchFill' || !msg.prompt) return;
   const run = () => {
     if (!fillComposer(msg.prompt)) return false;
@@ -324,15 +355,17 @@ function onDispatchFill(msg) {
   }, 400);
 }
 
-if (chrome.runtime && chrome.runtime.onMessage && chrome.runtime.onMessage.addListener) {
-  chrome.runtime.onMessage.addListener((msg) => { onDispatchFill(msg); });
-}
-if (chrome.runtime && chrome.runtime.sendMessage) {
-  try {
-    chrome.runtime.sendMessage({ type: 'dispatchClaimFill' }, (job) => {
-      if (chrome.runtime.lastError || !job || !job.prompt) return;
-      onDispatchFill({ type: 'dispatchFill', prompt: job.prompt });
-    });
-  } catch (e) {}
+if (inTopFrame() && isDispatchSurface()) {
+  if (chrome.runtime && chrome.runtime.onMessage && chrome.runtime.onMessage.addListener) {
+    chrome.runtime.onMessage.addListener((msg) => { onDispatchFill(msg); });
+  }
+  if (chrome.runtime && chrome.runtime.sendMessage) {
+    try {
+      chrome.runtime.sendMessage({ type: 'dispatchClaimFill' }, (job) => {
+        if (chrome.runtime.lastError || !job || !job.prompt) return;
+        onDispatchFill({ type: 'dispatchFill', prompt: job.prompt });
+      });
+    } catch (e) {}
+  }
 }
 

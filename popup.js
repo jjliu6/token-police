@@ -1592,9 +1592,10 @@ function renderDispatch() {
   const ready = pickReadyDispatch(dispatchKind, quotaMap);
   if (readyBtn) readyBtn.textContent = `${t('dispatchSelectReady')}${ready.length ? ` · ${ready.length}` : ''}`;
   const chips = document.getElementById('dispatch-chips');
+  const kindSelected = selectedForKind(dispatchSelected, dispatchKind);
   if (chips) {
     chips.innerHTML = agentsForKind(dispatchKind).map((a) => {
-      const idx = dispatchSelected.indexOf(a.id);
+      const idx = kindSelected.indexOf(a.id);
       const left = leftoverOf(a, quotaMap);
       return `<button type="button" class="chip${idx >= 0 ? ' on' : ''}" data-agent="${a.id}">
         <span class="ord">${idx >= 0 ? idx + 1 : ''}</span>
@@ -1608,7 +1609,9 @@ function renderDispatch() {
   const picked = pickAutoDispatch(dispatchKind, quotaMap);
   if (autoBtn) autoBtn.textContent = picked ? `${t('dispatchAuto')} · ${picked.name}` : t('dispatchAuto');
   const go = document.getElementById('dispatch-go');
-  if (go) go.textContent = t('dispatchMulti', { n: Math.max(dispatchSelected.length, 1) });
+  if (go) go.textContent = kindSelected.length
+    ? t('dispatchMulti', { n: kindSelected.length })
+    : t('dispatch');
   const note = document.getElementById('dispatch-note');
   if (note) note.textContent = t('dispatchHint');
   renderDispatchBoard();
@@ -1626,7 +1629,7 @@ function renderDispatchBoard() {
   const foot = document.getElementById('dispatch-board-foot');
   if (foot) foot.textContent = t('dispatchNoLive');
   const close = document.getElementById('dispatch-board-close');
-  if (close) close.textContent = t('logsClose');
+  if (close) close.textContent = t('dispatchBoard');
   const tiles = document.getElementById('dispatch-tiles');
   if (!tiles) return;
   tiles.innerHTML = dispatchJobs.map((job, i) => `
@@ -1662,7 +1665,9 @@ function fireDispatch(agents, auto) {
 }
 
 function selectedAgents() {
-  return dispatchSelected.map((id) => AGENTS.find((a) => a.id === id)).filter(Boolean);
+  return selectedForKind(dispatchSelected, dispatchKind)
+    .map((id) => AGENTS.find((a) => a.id === id))
+    .filter(Boolean);
 }
 
 const dispatchToggle = document.getElementById('dispatch-toggle');
@@ -1692,7 +1697,7 @@ if (dispatchPromptEl && dispatchPromptEl.addEventListener) {
   dispatchPromptEl.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
-      if (dispatchSelected.length) fireDispatch(selectedAgents(), false);
+      if (selectedAgents().length) fireDispatch(selectedAgents(), false);
       else {
         const one = pickAutoDispatch(dispatchKind, quotaMap);
         if (one) fireDispatch([one], true);
@@ -1735,7 +1740,11 @@ if (dispatchChips && dispatchChips.addEventListener) {
 const dispatchReady = document.getElementById('dispatch-ready');
 if (dispatchReady && dispatchReady.addEventListener) {
   dispatchReady.addEventListener('click', () => {
-    dispatchSelected = pickReadyDispatch(dispatchKind, quotaMap).map((a) => a.id);
+    const keep = dispatchSelected.filter((id) => {
+      const a = AGENTS.find((x) => x.id === id);
+      return a && agentKind(a) !== dispatchKind;
+    });
+    dispatchSelected = keep.concat(pickReadyDispatch(dispatchKind, quotaMap).map((a) => a.id));
     persistDispatch();
     renderDispatch();
   });
@@ -1752,7 +1761,8 @@ const dispatchGo = document.getElementById('dispatch-go');
 if (dispatchGo && dispatchGo.addEventListener) {
   dispatchGo.addEventListener('click', () => {
     const list = selectedAgents();
-    fireDispatch(list.length ? list : pickReadyDispatch(dispatchKind, quotaMap).slice(0, 1), false);
+    if (!list.length) { shakeDispatch(); return; }
+    fireDispatch(list, false);
   });
 }
 const dispatchBoardClose = document.getElementById('dispatch-board-close');

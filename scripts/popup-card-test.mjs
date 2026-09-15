@@ -514,6 +514,9 @@ if (autoNone != null) dispatchProblems.push('auto-dispatch with no quota data sh
 if (!els['dispatch-chips'].innerHTML.includes('—')) {
   dispatchProblems.push(`unknown leftover should render as —, got ${els['dispatch-chips'].innerHTML}`);
 }
+if (els['dispatch-chips'].innerHTML.includes('Grok Bot')) {
+  dispatchProblems.push('Grok Bot has no web composer and must not appear as a code chip');
+}
 
 sent.length = 0;
 els['dispatch-board'].hidden = true;

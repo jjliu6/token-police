@@ -45,11 +45,13 @@ const AGENTS = [
   },
   {
     // Grok Bot 的额度和 Cursor 在同一个 spending 页上（"Grok Bot › Weekly usage"），
-    // 抓取 URL 与 Cursor 重复，background 会去重、只开一次页
+    // 抓取 URL 与 Cursor 重复，background 会去重、只开一次页。
+    // 产品本身是桌面/iOS 应用，没有可预填的网页 composer，所以不进入 Dispatch。
     id: 'grok-bot',
     name: 'Grok Bot',
     color: '#F49AC1',
     kind: 'code',
+    dispatch: false,
     page: 'https://cursor.com/dashboard/spending',
     scrape: ['https://cursor.com/dashboard/spending?cawrefresh=1'],
     foreground: true,
@@ -75,8 +77,12 @@ function agentEnabled(agent, enabled) {
   return !enabled || !agent || enabled[agent.id] !== false;
 }
 
+function agentDispatchable(agent) {
+  return !!(agent && agent.dispatch !== false);
+}
+
 function agentsForKind(kind, enabled) {
-  return AGENTS.filter((a) => agentKind(a) === kind && agentEnabled(a, enabled));
+  return AGENTS.filter((a) => agentKind(a) === kind && agentEnabled(a, enabled) && agentDispatchable(a));
 }
 
 function leftoverOf(agent, map) {
@@ -121,17 +127,17 @@ function buildDispatch(agent, prompt, repo) {
       if (repo) u.searchParams.set('repositories', repo);
       return { url: u.toString(), fill: 'query' };
     }
-    case 'codex': {
-      const u = new URL('https://chatgpt.com/codex');
-      u.searchParams.set('prompt', text);
-      return { url: u.toString(), fill: 'query' };
-    }
+    case 'codex':
+      // Codex Cloud web is chatgpt.com/codex. The documented prompt= prefill is
+      // ChatGPT chat (chatgpt.com/?prompt=) and the Codex desktop scheme
+      // (codex://new?prompt=) — not the cloud composer. Script-fill so we
+      // don't pretend an undocumented query param exists, and don't auto-send.
+      return { url: 'https://chatgpt.com/codex', fill: 'script' };
     case 'grok-build':
       // grok.com/?q= often auto-submits. Prefill only — never send.
       return { url: 'https://grok.com/', fill: 'script' };
     case 'cursor':
-    case 'grok-bot':
-      // Grok Bot has no public composer; both open Cursor Cloud Agents.
+      // Official Cloud Agents UI. No public prompt query param.
       return { url: 'https://cursor.com/agents', fill: 'script' };
     case 'gemini':
       return { url: 'https://gemini.google.com/app', fill: 'script' };

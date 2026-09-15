@@ -42,6 +42,20 @@ const cur = buildDispatch(cursor, 'ship it');
 if (cur.url !== 'https://cursor.com/agents') problems.push(`cursor url ${cur.url}`);
 if (cur.fill !== 'script') problems.push('cursor should script-fill');
 
+const codex = AGENTS.find((a) => a.id === 'codex');
+const cx = buildDispatch(codex, 'ship it');
+if (cx.url !== 'https://chatgpt.com/codex') problems.push(`codex url ${cx.url}`);
+if (/[?&]prompt=/.test(cx.url)) problems.push(`codex must not use undocumented prompt=: ${cx.url}`);
+if (cx.fill !== 'script') problems.push('codex should script-fill the cloud composer');
+
+if (agentsForKind('code').some((a) => a.id === 'grok-bot')) {
+  problems.push('Grok Bot has no web composer and must not be a dispatch destination');
+}
+if (selectedDispatchAgents('code', ['grok-bot', 'cursor']).map((a) => a.id).join() !== 'cursor') {
+  problems.push('selecting Grok Bot must not dispatch it');
+}
+if (bot.dispatch !== false) problems.push('Grok Bot should opt out of dispatch');
+
 const map = {
   'claude-code': { limits: [{ percent_left: 62 }] },
   'codex': { limits: [{ percent_left: 78 }] },
@@ -53,6 +67,14 @@ const map = {
 
 const autoCode = pickAutoDispatch('code', map);
 if (!autoCode || autoCode.id !== 'cursor') problems.push(`auto code should pick Cursor, got ${autoCode && autoCode.id}`);
+
+const highBot = Object.assign({}, map, { 'grok-bot': { limits: [{ percent_left: 99 }] } });
+if (pickAutoDispatch('code', highBot).id === 'grok-bot') {
+  problems.push('auto-dispatch must not pick Grok Bot even when its quota is highest');
+}
+if (pickReadyDispatch('code', highBot).some((a) => a.id === 'grok-bot')) {
+  problems.push('ready pool must not include Grok Bot');
+}
 
 const ready = pickReadyDispatch('code', map).map((a) => a.id);
 if (ready.includes('grok-bot')) problems.push('Grok Bot at 12% must not be in ready pool');
@@ -92,7 +114,9 @@ if (makeDispatchJob(grok, 'hi', 'jjliu6/token-police', true).repo) {
 }
 if (bot.kind !== 'code') problems.push('Grok Bot is a coding agent');
 if (grok.kind !== 'chat') problems.push('Grok is a chat agent');
-if (buildDispatch(gemini, 'hi').fill !== 'script') problems.push('gemini should script-fill');
+const gm = buildDispatch(gemini, 'hi');
+if (gm.url !== 'https://gemini.google.com/app') problems.push(`gemini url ${gm.url}`);
+if (gm.fill !== 'script') problems.push('gemini should script-fill');
 
 if (problems.length) {
   console.error(problems.join('\n'));

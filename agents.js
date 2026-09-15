@@ -78,17 +78,30 @@ function agentsForKind(kind) {
 function leftoverOf(agent, map) {
   const row = map && agent && map[agent.id];
   const p = row && row.limits && row.limits[0] && row.limits[0].percent_left;
-  return p == null ? 100 : p;
+  return typeof p === 'number' ? p : null;
+}
+
+function isDispatchReady(agent, map) {
+  const left = leftoverOf(agent, map);
+  return left == null || left >= AUTO_MIN_LEFT;
 }
 
 function pickAutoDispatch(kind, map) {
-  const pool = agentsForKind(kind).filter((a) => leftoverOf(a, map) >= AUTO_MIN_LEFT);
+  const pool = agentsForKind(kind).filter((a) => isDispatchReady(a, map));
   if (!pool.length) return null;
-  return pool.reduce((best, a) => (leftoverOf(a, map) > leftoverOf(best, map) ? a : best));
+  const known = pool.filter((a) => leftoverOf(a, map) != null);
+  const ranked = known.length ? known : pool;
+  return ranked.reduce((best, a) => {
+    const bl = leftoverOf(best, map);
+    const al = leftoverOf(a, map);
+    if (al == null) return best;
+    if (bl == null) return a;
+    return al > bl ? a : best;
+  });
 }
 
 function pickReadyDispatch(kind, map) {
-  return agentsForKind(kind).filter((a) => leftoverOf(a, map) >= AUTO_MIN_LEFT);
+  return agentsForKind(kind).filter((a) => isDispatchReady(a, map));
 }
 
 function buildDispatch(agent, prompt, repo) {
@@ -134,4 +147,29 @@ function makeDispatchJob(agent, prompt, repo, auto) {
     auto: !!auto,
     at: Date.now(),
   };
+}
+
+function putDispatchPending(map, tabId, job) {
+  const next = Object.assign({}, map && typeof map === 'object' && !Array.isArray(map) ? map : {});
+  if (tabId == null || !job || !job.prompt) return next;
+  next[String(tabId)] = { prompt: job.prompt, host: job.host || '' };
+  return next;
+}
+
+function takeDispatchPending(map, tabId) {
+  if (!map || typeof map !== 'object') return { map: {}, job: null };
+  if (map.prompt && map.tabId != null) {
+    if (tabId != null && Number(map.tabId) === Number(tabId)) {
+      return { map: {}, job: { prompt: map.prompt, host: map.host || '' } };
+    }
+    return { map, job: null };
+  }
+  if (tabId == null) return { map, job: null };
+  const key = String(tabId);
+  const job = map[key] || map[tabId] || null;
+  if (!job || !job.prompt) return { map, job: null };
+  const next = Object.assign({}, map);
+  delete next[key];
+  if (tabId in next) delete next[tabId];
+  return { map: next, job };
 }

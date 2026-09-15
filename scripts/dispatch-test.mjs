@@ -15,6 +15,9 @@ const buildDispatch = vm.runInContext('buildDispatch', ctx);
 const pickAutoDispatch = vm.runInContext('pickAutoDispatch', ctx);
 const pickReadyDispatch = vm.runInContext('pickReadyDispatch', ctx);
 const makeDispatchJob = vm.runInContext('makeDispatchJob', ctx);
+const leftoverOf = vm.runInContext('leftoverOf', ctx);
+const putDispatchPending = vm.runInContext('putDispatchPending', ctx);
+const takeDispatchPending = vm.runInContext('takeDispatchPending', ctx);
 
 const claude = AGENTS.find((a) => a.id === 'claude-code');
 const grok = AGENTS.find((a) => a.id === 'grok-build');
@@ -61,6 +64,42 @@ if (makeDispatchJob(grok, 'hi', 'jjliu6/token-police', true).repo) {
 }
 if (bot.kind !== 'code') problems.push('Grok Bot is a coding agent');
 if (grok.kind !== 'chat') problems.push('Grok is a chat agent');
+
+const mixed = {
+  'claude-code': {},
+  'codex': { limits: [{ percent_left: 78 }] },
+  'cursor': { limits: [{ percent_left: 88 }] },
+  'grok-bot': { limits: [{ percent_left: 12 }] },
+};
+const autoKnown = pickAutoDispatch('code', mixed);
+if (!autoKnown || autoKnown.id !== 'cursor') {
+  problems.push(`unknown leftover must not beat 88% Cursor, got ${autoKnown && autoKnown.id}`);
+}
+if (leftoverOf(claude, {}) != null) problems.push('no data should be leftover null, not 100');
+const emptyAuto = pickAutoDispatch('code', {});
+if (!emptyAuto || emptyAuto.id !== 'claude-code') {
+  problems.push(`empty map auto should fall back to first code agent, got ${emptyAuto && emptyAuto.id}`);
+}
+
+let pending = putDispatchPending({}, 11, { prompt: 'one', host: 'cursor.com' });
+pending = putDispatchPending(pending, 12, { prompt: 'two', host: 'gemini.google.com' });
+if (pending['11'].prompt !== 'one' || pending['12'].prompt !== 'two') {
+  problems.push('pending must keep both tab ids');
+}
+const taken = takeDispatchPending(pending, 11);
+if (!taken.job || taken.job.prompt !== 'one') problems.push('claim should return tab 11 prompt');
+if (taken.map['11']) problems.push('claimed tab must be removed');
+if (!taken.map['12'] || taken.map['12'].prompt !== 'two') problems.push('other tab pending must stay');
+const again = takeDispatchPending(taken.map, 11);
+if (again.job) problems.push('second claim of same tab must be empty');
+const closed = takeDispatchPending(taken.map, 12);
+if (!closed.job || closed.job.prompt !== 'two') problems.push('tab close should take remaining job');
+if (Object.keys(closed.map).length) problems.push('map should be empty after last take');
+const legacy = takeDispatchPending({ tabId: 9, prompt: 'old', host: 'cursor.com' }, 9);
+if (!legacy.job || legacy.job.prompt !== 'old') problems.push('legacy single-blob pending should still claim');
+if (Object.keys(legacy.map).length) problems.push('legacy claim should clear the blob');
+const legacyMiss = takeDispatchPending({ tabId: 9, prompt: 'old', host: 'cursor.com' }, 99);
+if (legacyMiss.job) problems.push('legacy blob must not fill a different tab');
 
 if (problems.length) {
   console.error(problems.join('\n'));

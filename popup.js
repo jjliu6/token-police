@@ -1600,7 +1600,7 @@ function renderDispatch() {
         <span class="ord">${idx >= 0 ? idx + 1 : ''}</span>
         <span class="dot" style="background:${a.color}"></span>
         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}</span>
-        <span style="color:var(--muted);font-variant-numeric:tabular-nums">${left}</span>
+        <span style="color:var(--muted);font-variant-numeric:tabular-nums">${left == null ? '—' : left}</span>
       </button>`;
     }).join('');
   }

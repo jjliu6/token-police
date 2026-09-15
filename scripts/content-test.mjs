@@ -155,6 +155,15 @@ Upgrade
   check(g && g.plan === 'PRO', `Gemini plan, got ${g && g.plan}`);
   check(!p.closed(), 'a page the user opened themselves (no cawrefresh) must not be closed');
 }
+
+{
+  const p = runPage({ host: 'cursor.com', path: '/agents', text: SPENDING });
+  check(p.agents().length === 0, 'dispatch surface should not scrape usage');
+  for (let i = 0; i < 31; i++) p.tick();
+  check(p.agents().length === 0, 'dispatch surface should not poll-scrape');
+  check(!p.closed(), 'dispatch tab must not auto-close');
+}
+
 {
   const busy = GEMINI.replace('Current usage\n0% used\nResets at 2:29 PM', 'Current usage\n42% used').replace('Weekly limit\nResets Sep 6 at 8:29 AM\n0% used', 'Weekly limit\nResets Sep 6 at 8:29 AM\n17% used');
   const g = runPage({ host: 'gemini.google.com', text: busy }).agents()[0];

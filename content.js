@@ -223,16 +223,31 @@ function tryOnce() {
   finish();
   maybeClose();
 }
-tryOnce();
-if (!done) {
-  obs = new MutationObserver(tryOnce);
-  obs.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  let n = 0;
-  iv = setInterval(() => {
-    n++;
-    tryOnce();
-    if (!done && n > 30) { done = true; finish(); maybeClose(); }
-  }, 2000);
+
+function isDispatchSurface() {
+  const h = location.hostname || '';
+  const p = location.pathname || '';
+  const q = location.search || '';
+  if (h.includes('cursor.com') && /^\/agents(\/|$)/.test(p)) return true;
+  if (h.includes('gemini.google.com') && /^\/app(\/|$)/.test(p)) return true;
+  if (h.includes('claude.ai') && /^\/code(\/|$)/.test(p)) return true;
+  if (h.includes('chatgpt.com') && /\/codex(\/|$)/.test(p) && !p.includes('/settings')) return true;
+  if (h.includes('grok.com') && /[?&]q=/.test(q)) return true;
+  return false;
+}
+
+if (!isDispatchSurface()) {
+  tryOnce();
+  if (!done) {
+    obs = new MutationObserver(tryOnce);
+    obs.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    let n = 0;
+    iv = setInterval(() => {
+      n++;
+      tryOnce();
+      if (!done && n > 30) { done = true; finish(); maybeClose(); }
+    }, 2000);
+  }
 }
 
 function fillComposer(prompt) {
@@ -264,39 +279,60 @@ function fillComposer(prompt) {
     } catch (e) {}
     return false;
   };
-  const roots = [document];
-  if (document.body && document.body.shadowRoot) roots.push(document.body.shadowRoot);
   const sels = 'textarea, [contenteditable="true"], [role="textbox"]';
-  for (const root of roots) {
-    if (!root || !root.querySelectorAll) continue;
-    const nodes = root.querySelectorAll(sels);
-    for (let i = 0; i < nodes.length; i++) {
-      if (trySet(nodes[i])) return true;
+  const nodes = [];
+  const walk = (root) => {
+    if (!root) return;
+    if (root.querySelectorAll) {
+      const found = root.querySelectorAll(sels);
+      for (let i = 0; i < found.length; i++) nodes.push(found[i]);
+      const all = root.querySelectorAll('*');
+      for (let i = 0; i < all.length; i++) {
+        if (all[i].shadowRoot) walk(all[i].shadowRoot);
+      }
     }
+    if (root.shadowRoot) walk(root.shadowRoot);
+  };
+  walk(document);
+  if (document.body) walk(document.body);
+  for (let i = 0; i < nodes.length; i++) {
+    if (trySet(nodes[i])) return true;
   }
   return false;
 }
 
+function claimDispatchFill() {
+  if (!chrome.runtime || !chrome.runtime.sendMessage) return;
+  try { chrome.runtime.sendMessage({ type: 'dispatchClaimFill' }); } catch (e) {}
+}
+
 function onDispatchFill(msg) {
   if (!msg || msg.type !== 'dispatchFill' || !msg.prompt) return;
-  if (fillComposer(msg.prompt)) return;
+  const run = () => {
+    if (!fillComposer(msg.prompt)) return false;
+    claimDispatchFill();
+    return true;
+  };
+  if (run()) return;
   let n = 0;
   const ivFill = setInterval(() => {
     n++;
-    if (fillComposer(msg.prompt) || n > 20) clearInterval(ivFill);
+    if (run() || n > 20) {
+      clearInterval(ivFill);
+      if (n > 20) claimDispatchFill();
+    }
   }, 400);
 }
 
 if (chrome.runtime && chrome.runtime.onMessage && chrome.runtime.onMessage.addListener) {
   chrome.runtime.onMessage.addListener((msg) => { onDispatchFill(msg); });
 }
-if (chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-  chrome.storage.local.get(['dispatchPending'], (res) => {
-    const pending = res && res.dispatchPending;
-    if (!pending || !pending.prompt) return;
-    const host = location.hostname || '';
-    if (pending.host && host && host.indexOf(pending.host) === -1) return;
-    onDispatchFill({ type: 'dispatchFill', prompt: pending.prompt });
-  });
+if (chrome.runtime && chrome.runtime.sendMessage) {
+  try {
+    chrome.runtime.sendMessage({ type: 'dispatchClaimFill' }, (job) => {
+      if (chrome.runtime.lastError || !job || !job.prompt) return;
+      onDispatchFill({ type: 'dispatchFill', prompt: job.prompt });
+    });
+  } catch (e) {}
 }
 

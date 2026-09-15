@@ -368,19 +368,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     focusDispatchTab(msg.tabId, msg.url).then((ok) => sendResponse({ ok }));
     return true;
   }
+  if (msg && msg.type === 'dispatchClaimFill') {
+    claimDispatchFill(sender && sender.tab && sender.tab.id).then((job) => sendResponse(job || null));
+    return true;
+  }
 });
 
 function openDispatchJobs(jobs) {
   const opened = [];
   return jobs.reduce((chain, job) => chain.then(() => new Promise((resolve) => {
-    chrome.tabs.create({ url: job.url, active: false }, (tab) => {
+    chrome.tabs.create({ url: job.url, active: false }, async (tab) => {
       const tabId = tab && tab.id;
       const next = Object.assign({}, job, { tabId: tabId == null ? null : tabId });
       opened.push(next);
       if (tabId != null && job.fill === 'script' && job.prompt) {
-        chrome.storage.local.set({
-          dispatchPending: { tabId, prompt: job.prompt, host: hostFromUrl(job.url) },
+        const stored = await getLocal(['dispatchPending']);
+        const pending = putDispatchPending(stored.dispatchPending, tabId, {
+          prompt: job.prompt,
+          host: hostFromUrl(job.url),
         });
+        await new Promise((done) => chrome.storage.local.set({ dispatchPending: pending }, done));
         pingFill(tabId, job.prompt, 0);
       }
       resolve();
@@ -398,6 +405,21 @@ function pingFill(tabId, prompt, attempt) {
     const err = chrome.runtime.lastError;
     if (!err || attempt >= 8) return;
     setTimeout(() => pingFill(tabId, prompt, attempt + 1), 700);
+  });
+}
+
+function claimDispatchFill(tabId) {
+  return getLocal(['dispatchPending']).then((res) => {
+    const taken = takeDispatchPending(res.dispatchPending, tabId);
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ dispatchPending: taken.map }, () => resolve(taken.job));
+    });
+  });
+}
+
+if (chrome.tabs.onRemoved && chrome.tabs.onRemoved.addListener) {
+  chrome.tabs.onRemoved.addListener((id) => {
+    claimDispatchFill(id);
   });
 }
 

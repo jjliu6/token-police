@@ -24,6 +24,7 @@ const canDispatch = vm.runInContext('canDispatch', ctx);
 const putDispatchPending = vm.runInContext('putDispatchPending', ctx);
 const takeDispatchPending = vm.runInContext('takeDispatchPending', ctx);
 const mergeDispatchJobs = vm.runInContext('mergeDispatchJobs', ctx);
+const tileRects = vm.runInContext('tileRects', ctx);
 
 const claude = AGENTS.find((a) => a.id === 'claude-code');
 const grok = AGENTS.find((a) => a.id === 'grok-build');
@@ -210,6 +211,39 @@ if (readd.map((j) => j.tabId).join() !== '2,1') problems.push(`re-dispatched tab
 if (readd[0].name !== 'B2') problems.push('re-dispatched tab must take the fresh job');
 if (mergeDispatchJobs(undefined, undefined).length) problems.push('merge of nothing must be empty');
 if (mergeDispatchJobs([{ tabId: 5 }], []).map((j) => j.tabId).join() !== '5') problems.push('empty batch must keep prior tabs');
+
+// Tiled-window layouts: rects must stay inside the work area, never overlap,
+// and cover it. Screen offset (multi-monitor) must be respected.
+const SCREEN = { left: 100, top: 50, width: 1600, height: 1000 };
+function within(r) {
+  return r.left >= SCREEN.left && r.top >= SCREEN.top
+    && r.left + r.width <= SCREEN.left + SCREEN.width + 1
+    && r.top + r.height <= SCREEN.top + SCREEN.height + 1
+    && r.width > 0 && r.height > 0;
+}
+function overlaps(a, b) {
+  return a.left < b.left + b.width && b.left < a.left + a.width
+    && a.top < b.top + b.height && b.top < a.top + a.height;
+}
+for (const n of [1, 2, 3, 4]) {
+  const rects = tileRects(n, SCREEN);
+  if (rects.length !== n) problems.push(`tileRects(${n}) should give ${n} rects, got ${rects.length}`);
+  rects.forEach((r, i) => { if (!within(r)) problems.push(`tile ${n}/${i} out of bounds: ${JSON.stringify(r)}`); });
+  for (let i = 0; i < rects.length; i += 1) {
+    for (let j = i + 1; j < rects.length; j += 1) {
+      if (overlaps(rects[i], rects[j])) problems.push(`tile ${n}: rects ${i} and ${j} overlap`);
+    }
+  }
+}
+// 3-window layout is "1 big left + 2 stacked right": job 0 is full height and
+// wider than each of the two right-hand windows.
+const three = tileRects(3, SCREEN);
+if (three[0].height !== SCREEN.height) problems.push('3-tile main should be full height');
+if (!(three[0].width >= three[1].width)) problems.push('3-tile main should be at least as wide as the stacked pair');
+if (three[1].left !== three[2].left) problems.push('3-tile right column must share a left edge');
+if (three[1].top === three[2].top) problems.push('3-tile right pair must be stacked, not overlapping');
+// A missing/garbage screen must not crash — fall back to a sane full rect.
+if (tileRects(2, null).length !== 2) problems.push('tileRects must tolerate a missing screen');
 
 if (problems.length) {
   console.error(problems.join('\n'));

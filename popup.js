@@ -1512,7 +1512,27 @@ let dispatchRepo = '';
 let dispatchRepos = [];
 let dispatchJobs = [];
 let dispatchAutoSend = false;
+let dispatchTile = false;
 let dispatchShake = false;
+
+// The screen's usable area, read from the side panel (which sees the whole
+// display, not just its own narrow strip). Handed to the background so it can
+// place tiled windows without the extension needing a "system.display"
+// permission. availLeft/availTop are non-standard but present in Chrome; they
+// keep tiling on the correct monitor in a multi-display setup.
+function screenArea() {
+  try {
+    const s = window.screen || {};
+    return {
+      left: typeof s.availLeft === 'number' ? s.availLeft : 0,
+      top: typeof s.availTop === 'number' ? s.availTop : 0,
+      width: s.availWidth || s.width || 1440,
+      height: s.availHeight || s.height || 900,
+    };
+  } catch (e) {
+    return { left: 0, top: 0, width: 1440, height: 900 };
+  }
+}
 
 function dispatchFloatOpen() {
   const el = document.getElementById('dispatch-float');
@@ -1593,6 +1613,7 @@ function persistDispatch() {
     dispatchRepos,
     dispatchJobs,
     dispatchAutoSend,
+    dispatchTile,
   });
 }
 
@@ -1674,6 +1695,14 @@ function renderDispatch() {
   }
   const sendLabel = document.getElementById('dispatch-send-label');
   if (sendLabel) sendLabel.textContent = sendAllowed ? t('dispatchSend') : t('dispatchSendCode');
+  // Tile-windows works for both Chat and Code targets, so it's always live.
+  const tileTog = document.getElementById('dispatch-tile');
+  if (tileTog) tileTog.checked = dispatchTile;
+  const tileLabel = document.getElementById('dispatch-tile-label');
+  if (tileLabel) {
+    tileLabel.textContent = t('dispatchTile');
+    tileLabel.title = t('dispatchTileHint');
+  }
   const note = document.getElementById('dispatch-note');
   if (note) note.textContent = t('dispatchHint');
   renderDispatchBoard();
@@ -1727,7 +1756,7 @@ function fireDispatch(agents, auto) {
   }
   const jobs = agents.map((a) => makeDispatchJob(a, prompt, dispatchRepo, auto, dispatchAutoSend));
   persistDispatch();
-  chrome.runtime.sendMessage({ type: 'dispatchOpen', jobs }, (opened) => {
+  chrome.runtime.sendMessage({ type: 'dispatchOpen', jobs, tile: dispatchTile, screen: screenArea() }, (opened) => {
     void chrome.runtime.lastError;
     const fresh = Array.isArray(opened) ? opened : jobs;
     // Accumulate across dispatches: keep the tabs still open from earlier
@@ -1808,6 +1837,13 @@ const dispatchSendEl = document.getElementById('dispatch-send');
 if (dispatchSendEl && dispatchSendEl.addEventListener) {
   dispatchSendEl.addEventListener('change', () => {
     dispatchAutoSend = !!dispatchSendEl.checked;
+    persistDispatch();
+  });
+}
+const dispatchTileEl = document.getElementById('dispatch-tile');
+if (dispatchTileEl && dispatchTileEl.addEventListener) {
+  dispatchTileEl.addEventListener('change', () => {
+    dispatchTile = !!dispatchTileEl.checked;
     persistDispatch();
   });
 }
@@ -1898,7 +1934,7 @@ if (dispatchTiles && dispatchTiles.addEventListener) {
 }
 
 if (chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-  chrome.storage.local.get(['dispatchKind', 'dispatchPrompt', 'dispatchRepo', 'dispatchSelected', 'dispatchRepos', 'dispatchJobs', 'dispatchAutoSend'], (res) => {
+  chrome.storage.local.get(['dispatchKind', 'dispatchPrompt', 'dispatchRepo', 'dispatchSelected', 'dispatchRepos', 'dispatchJobs', 'dispatchAutoSend', 'dispatchTile'], (res) => {
     if (res.dispatchKind === 'chat' || res.dispatchKind === 'code') dispatchKind = res.dispatchKind;
     if (typeof res.dispatchPrompt === 'string') dispatchPrompt = res.dispatchPrompt;
     if (typeof res.dispatchRepo === 'string') dispatchRepo = res.dispatchRepo;
@@ -1906,6 +1942,7 @@ if (chrome.storage && chrome.storage.local && chrome.storage.local.get) {
     if (Array.isArray(res.dispatchRepos)) dispatchRepos = res.dispatchRepos;
     if (Array.isArray(res.dispatchJobs)) dispatchJobs = res.dispatchJobs;
     if (typeof res.dispatchAutoSend === 'boolean') dispatchAutoSend = res.dispatchAutoSend;
+    if (typeof res.dispatchTile === 'boolean') dispatchTile = res.dispatchTile;
     // Some of those tabs may have been closed since; drop them before the
     // "Tabs · N" re-entry button reports a stale count.
     pruneDispatchJobs(() => renderDispatch());

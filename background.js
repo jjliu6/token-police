@@ -361,7 +361,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg && msg.type === 'refreshAll') runRefresh();
   if (msg && msg.type === 'dispatchOpen' && Array.isArray(msg.jobs)) {
-    openDispatchJobs(msg.jobs).then((opened) => sendResponse(opened));
+    openDispatchJobs(msg.jobs, { tile: !!msg.tile, screen: msg.screen }).then((opened) => sendResponse(opened));
     return true;
   }
   if (msg && msg.type === 'dispatchFocus') {
@@ -405,26 +405,50 @@ function liveDispatchTabs(tabIds) {
   }))).then((ids) => ids.filter((x) => x != null));
 }
 
-function openDispatchJobs(jobs) {
+// Open each dispatch job. Default: a background tab per job (focus stays on the
+// dashboard). Tile mode: one window per job, laid out by tileRects so they fill
+// the screen side by side (2), 1-big-left-plus-2-stacked (3), or a 2×2 grid (4).
+// Either way the prompt is prefilled/sent the same, keyed off the tab id — a
+// windowed tab has an id too, so the board can still focus and close it.
+function openDispatchJobs(jobs, opts) {
+  const tile = !!(opts && opts.tile) && chrome.windows && chrome.windows.create;
+  const rects = tile ? tileRects(jobs.length, opts && opts.screen) : null;
   const opened = [];
-  return jobs.reduce((chain, job) => chain.then(() => new Promise((resolve) => {
-    chrome.tabs.create({ url: job.url, active: false }, async (tab) => {
-      const tabId = tab && tab.id;
-      const next = Object.assign({}, job, { tabId: tabId == null ? null : tabId });
-      opened.push(next);
-      if (tabId != null && job.fill === 'script' && job.prompt) {
-        const stored = await getLocal(['dispatchPending']);
-        const pending = putDispatchPending(stored.dispatchPending, tabId, {
-          prompt: job.prompt,
-          host: hostFromUrl(job.url),
-          send: job.send,
-          mode: job.mode,
-        });
-        await new Promise((done) => chrome.storage.local.set({ dispatchPending: pending }, done));
+  const afterOpen = (job, tab, resolve) => {
+    const tabId = tab && tab.id;
+    const next = Object.assign({}, job, { tabId: tabId == null ? null : tabId });
+    opened.push(next);
+    if (tabId == null || job.fill !== 'script' || !job.prompt) { resolve(); return; }
+    getLocal(['dispatchPending']).then((stored) => {
+      const pending = putDispatchPending(stored.dispatchPending, tabId, {
+        prompt: job.prompt,
+        host: hostFromUrl(job.url),
+        send: job.send,
+        mode: job.mode,
+      });
+      chrome.storage.local.set({ dispatchPending: pending }, () => {
         pingFill(tabId, job.prompt, 0, job.send, job.mode);
-      }
-      resolve();
+        resolve();
+      });
     });
+  };
+  return jobs.reduce((chain, job, i) => chain.then(() => new Promise((resolve) => {
+    if (tile && rects && rects[i]) {
+      const r = rects[i];
+      chrome.windows.create({
+        url: job.url,
+        focused: i === jobs.length - 1,
+        left: r.left,
+        top: r.top,
+        width: r.width,
+        height: r.height,
+      }, (win) => {
+        void chrome.runtime.lastError;
+        afterOpen(job, win && win.tabs && win.tabs[0], resolve);
+      });
+      return;
+    }
+    chrome.tabs.create({ url: job.url, active: false }, (tab) => afterOpen(job, tab, resolve));
   })), Promise.resolve()).then(() => opened);
 }
 

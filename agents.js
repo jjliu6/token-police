@@ -220,6 +220,59 @@ function takeDispatchPending(map, tabId) {
   return { map: next, job };
 }
 
+// Tiled-window layout: given how many destinations are opening and the screen's
+// work area {left, top, width, height}, return one {left, top, width, height}
+// rect per window, in job order. Job 0 is the "main" slot. Layouts are tuned per
+// count so nobody gets a sliver too narrow to render a desktop site:
+//   1 → full screen
+//   2 → two columns
+//   3 → one big left (half width, full height) + two stacked on the right
+//   4 → 2×2 grid
+//   5+ → even grid fallback (shouldn't happen — dispatch tops out at 4)
+function tileRects(n, screen) {
+  const s = screen && screen.width && screen.height
+    ? screen : { left: 0, top: 0, width: 1440, height: 900 };
+  const L = Math.round(s.left || 0);
+  const T = Math.round(s.top || 0);
+  const W = Math.round(s.width);
+  const H = Math.round(s.height);
+  const halfW = Math.floor(W / 2);
+  const halfH = Math.floor(H / 2);
+  if (n <= 1) return [{ left: L, top: T, width: W, height: H }];
+  if (n === 2) {
+    return [
+      { left: L, top: T, width: halfW, height: H },
+      { left: L + halfW, top: T, width: W - halfW, height: H },
+    ];
+  }
+  if (n === 3) {
+    return [
+      { left: L, top: T, width: halfW, height: H },
+      { left: L + halfW, top: T, width: W - halfW, height: halfH },
+      { left: L + halfW, top: T + halfH, width: W - halfW, height: H - halfH },
+    ];
+  }
+  if (n === 4) {
+    return [
+      { left: L, top: T, width: halfW, height: halfH },
+      { left: L + halfW, top: T, width: W - halfW, height: halfH },
+      { left: L, top: T + halfH, width: halfW, height: H - halfH },
+      { left: L + halfW, top: T + halfH, width: W - halfW, height: H - halfH },
+    ];
+  }
+  const cols = Math.ceil(Math.sqrt(n));
+  const rows = Math.ceil(n / cols);
+  const cw = Math.floor(W / cols);
+  const ch = Math.floor(H / rows);
+  const out = [];
+  for (let i = 0; i < n; i += 1) {
+    const c = i % cols;
+    const r = Math.floor(i / cols);
+    out.push({ left: L + c * cw, top: T + r * ch, width: cw, height: ch });
+  }
+  return out;
+}
+
 // Merge a fresh dispatch batch into the accumulated board: newest batch first,
 // earlier tabs kept, deduped by tabId (a re-dispatched tab moves to the front).
 // Closed tabs are pruned separately once the browser can be asked.

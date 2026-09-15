@@ -410,9 +410,15 @@ function liveDispatchTabs(tabIds) {
 // the screen side by side (2), 1-big-left-plus-2-stacked (3), or a 2×2 grid (4).
 // Either way the prompt is prefilled/sent the same, keyed off the tab id — a
 // windowed tab has an id too, so the board can still focus and close it.
+// Tiling tops out at 4 windows — past that each pane is too cramped to read a
+// desktop site, so only the first 4 jobs get tiled windows and any extra opens
+// as a normal background tab. (Dispatch already caps a batch at 4 per kind, so
+// this is a guard, not the usual path.)
+const TILE_MAX = 4;
+
 function openDispatchJobs(jobs, opts) {
   const tile = !!(opts && opts.tile) && chrome.windows && chrome.windows.create;
-  const rects = tile ? tileRects(jobs.length, opts && opts.screen) : null;
+  const rects = tile ? tileRects(Math.min(jobs.length, TILE_MAX), opts && opts.screen) : null;
   const opened = [];
   const afterOpen = (job, tab, resolve) => {
     const tabId = tab && tab.id;

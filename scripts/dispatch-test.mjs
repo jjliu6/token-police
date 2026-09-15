@@ -41,6 +41,14 @@ const cur = buildDispatch(cursor, 'ship it');
 if (cur.url !== 'https://cursor.com/agents') problems.push(`cursor url ${cur.url}`);
 if (cur.fill !== 'script') problems.push('cursor should script-fill');
 
+const cx = buildDispatch(AGENTS.find((a) => a.id === 'codex'), 'fix tests');
+if (cx.url !== 'https://chatgpt.com/codex') problems.push(`codex should open Cloud UI, got ${cx.url}`);
+if (/[?&]prompt=/.test(cx.url)) problems.push('codex must not use ?prompt= (that is chat / desktop, not Cloud)');
+if (cx.fill !== 'script') problems.push('codex should script-fill');
+if (buildDispatch(bot, 'nope').url.includes('cursor.com/agents')) {
+  problems.push('Grok Bot must not open Cursor Agents');
+}
+
 const map = {
   'claude-code': { limits: [{ percent_left: 62 }] },
   'codex': { limits: [{ percent_left: 78 }] },

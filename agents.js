@@ -117,15 +117,13 @@ function buildDispatch(agent, prompt, repo) {
       if (repo) u.searchParams.set('repositories', repo);
       return { url: u.toString(), fill: 'query' };
     }
-    case 'codex': {
-      const u = new URL('https://chatgpt.com/codex');
-      u.searchParams.set('prompt', text);
-      return { url: u.toString(), fill: 'query' };
-    }
+    case 'codex':
+      // chatgpt.com/codex is Codex Cloud. ?prompt= is ChatGPT chat / desktop
+      // codex:// deep links — it is not a documented Cloud prefill.
+      return { url: 'https://chatgpt.com/codex', fill: 'script' };
     case 'grok-build':
       return { url: 'https://grok.com/', fill: 'script' };
     case 'cursor':
-    case 'grok-bot':
       return { url: 'https://cursor.com/agents', fill: 'script' };
     case 'gemini':
       return { url: 'https://gemini.google.com/app', fill: 'script' };

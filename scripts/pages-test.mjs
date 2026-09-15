@@ -70,6 +70,14 @@ try {
   assert.ok(zh.includes('<h2>准备好了？完全免费。</h2>'), 'body text translated');
   assert.ok(zh.includes('<span class="hl">还剩多少</span>'), 'inline HTML translations kept their tags');
   assert.ok(!zh.includes('Ready? It\'s free.'), 'no English body text left on /zh/');
+  assert.ok(en.includes('New in v1.5'), 'en dispatch section');
+  assert.ok(en.includes('Prefill only, not sent.'), 'en dispatch prefill promise');
+  assert.ok(en.includes('src="/dispatch-composer.png"') && en.includes('src="/dispatch-board.png"'), 'en dispatch screenshots');
+  assert.ok(zh.includes('v1.5 新增'), 'zh dispatch eyebrow');
+  assert.ok(zh.includes('只预填，不发送'), 'zh dispatch prefill promise');
+  assert.ok(zh.includes('「指派」会替我发出去吗？'), 'zh dispatch FAQ');
+  assert.ok(!zh.includes('New in v1.5'), 'zh has no English dispatch eyebrow');
+  assert.ok(!zh.includes('One prompt, opened in'), 'zh has no English dispatch headline');
 
   // English body text is untouched on /en/ (spot checks: first and last translatable strings).
   assert.ok(en.includes('<span>Token Police</span>'), 'first English string kept');

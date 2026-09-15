@@ -360,7 +360,73 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.tabs.remove(sender.tab.id, () => void chrome.runtime.lastError);
   }
   if (msg && msg.type === 'refreshAll') runRefresh();
+  if (msg && msg.type === 'dispatchOpen' && Array.isArray(msg.jobs)) {
+    openDispatchJobs(msg.jobs).then((opened) => sendResponse(opened));
+    return true;
+  }
+  if (msg && msg.type === 'dispatchFocus') {
+    focusDispatchTab(msg.tabId, msg.url).then((ok) => sendResponse({ ok }));
+    return true;
+  }
 });
+
+function openDispatchJobs(jobs) {
+  const opened = [];
+  return jobs.reduce((chain, job) => chain.then(() => new Promise((resolve) => {
+    chrome.tabs.create({ url: job.url, active: false }, (tab) => {
+      const tabId = tab && tab.id;
+      const next = Object.assign({}, job, { tabId: tabId == null ? null : tabId });
+      opened.push(next);
+      if (tabId != null && job.fill === 'script' && job.prompt) {
+        chrome.storage.local.set({
+          dispatchPending: { tabId, prompt: job.prompt, host: hostFromUrl(job.url) },
+        });
+        pingFill(tabId, job.prompt, 0);
+      }
+      resolve();
+    });
+  })), Promise.resolve()).then(() => opened);
+}
+
+function hostFromUrl(url) {
+  try { return new URL(url).hostname; } catch (e) { return ''; }
+}
+
+function pingFill(tabId, prompt, attempt) {
+  if (!chrome.tabs.sendMessage) return;
+  chrome.tabs.sendMessage(tabId, { type: 'dispatchFill', prompt }, () => {
+    const err = chrome.runtime.lastError;
+    if (!err || attempt >= 8) return;
+    setTimeout(() => pingFill(tabId, prompt, attempt + 1), 700);
+  });
+}
+
+function focusDispatchTab(tabId, url) {
+  return new Promise((resolve) => {
+    const focus = (tab) => {
+      if (!tab || tab.id == null) return resolve(false);
+      chrome.tabs.update(tab.id, { active: true }, () => {
+        if (tab.windowId != null && chrome.windows && chrome.windows.update) {
+          chrome.windows.update(tab.windowId, { focused: true }, () => resolve(true));
+        } else resolve(true);
+      });
+    };
+    if (tabId != null && chrome.tabs.get) {
+      chrome.tabs.get(tabId, (tab) => {
+        if (chrome.runtime.lastError || !tab) {
+          if (url) {
+            chrome.tabs.create({ url, active: true }, (created) => resolve(!!(created && created.id)));
+          } else resolve(false);
+          return;
+        }
+        focus(tab);
+      });
+      return;
+    }
+    if (url) chrome.tabs.create({ url, active: true }, (created) => resolve(!!(created && created.id)));
+    else resolve(false);
+  });
+}
 
 // 打开一个标签页，等它被 content.js 抓完自己关掉；最多等 maxMs 就强制关、继续下一个
 function openAndWait(url, active, maxMs, trigger) {

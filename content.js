@@ -234,3 +234,69 @@ if (!done) {
     if (!done && n > 30) { done = true; finish(); maybeClose(); }
   }, 2000);
 }
+
+function fillComposer(prompt) {
+  if (!prompt) return false;
+  const visible = (el) => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 1, height: 1 };
+    return r.width > 0 && r.height > 0;
+  };
+  const trySet = (el) => {
+    if (!el || !visible(el)) return false;
+    try {
+      el.focus();
+      if (el.isContentEditable) {
+        el.textContent = prompt;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      }
+      if ('value' in el) {
+        const proto = Object.getOwnPropertyDescriptor(el.__proto__ || {}, 'value')
+          || Object.getOwnPropertyDescriptor(HTMLTextAreaElement && HTMLTextAreaElement.prototype || {}, 'value')
+          || Object.getOwnPropertyDescriptor(HTMLInputElement && HTMLInputElement.prototype || {}, 'value');
+        if (proto && proto.set) proto.set.call(el, prompt);
+        else el.value = prompt;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  };
+  const roots = [document];
+  if (document.body && document.body.shadowRoot) roots.push(document.body.shadowRoot);
+  const sels = 'textarea, [contenteditable="true"], [role="textbox"]';
+  for (const root of roots) {
+    if (!root || !root.querySelectorAll) continue;
+    const nodes = root.querySelectorAll(sels);
+    for (let i = 0; i < nodes.length; i++) {
+      if (trySet(nodes[i])) return true;
+    }
+  }
+  return false;
+}
+
+function onDispatchFill(msg) {
+  if (!msg || msg.type !== 'dispatchFill' || !msg.prompt) return;
+  if (fillComposer(msg.prompt)) return;
+  let n = 0;
+  const ivFill = setInterval(() => {
+    n++;
+    if (fillComposer(msg.prompt) || n > 20) clearInterval(ivFill);
+  }, 400);
+}
+
+if (chrome.runtime && chrome.runtime.onMessage && chrome.runtime.onMessage.addListener) {
+  chrome.runtime.onMessage.addListener((msg) => { onDispatchFill(msg); });
+}
+if (chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+  chrome.storage.local.get(['dispatchPending'], (res) => {
+    const pending = res && res.dispatchPending;
+    if (!pending || !pending.prompt) return;
+    const host = location.hostname || '';
+    if (pending.host && host && host.indexOf(pending.host) === -1) return;
+    onDispatchFill({ type: 'dispatchFill', prompt: pending.prompt });
+  });
+}
+

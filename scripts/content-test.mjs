@@ -14,7 +14,7 @@ const contentSrc = readFileSync(resolve(root, 'content.js'), 'utf8');
 
 // 造一个最小的假浏览器环境：innerText 就是我们给的文本，MutationObserver / setInterval
 // 都由测试手动触发，chrome.runtime.sendMessage 记录发出的消息。
-function runPage({ host, path = '/', search = '', text }) {
+function runPage({ host, path = '/', search = '', hash = '', text }) {
   const sent = [];
   let body = { innerText: text, childNodes: [] };
   let observerCb = null;
@@ -25,7 +25,7 @@ function runPage({ host, path = '/', search = '', text }) {
     clearInterval: () => { intervalCb = null; },
     MutationObserver: class { constructor(cb) { observerCb = cb; } observe() {} disconnect() { observerCb = null; } },
     document: { body, documentElement: {} },
-    location: { hostname: host, pathname: path, search, hash: '', href: `https://${host}${path}${search}` },
+    location: { hostname: host, pathname: path, search, hash, href: `https://${host}${path}${search}${hash}` },
     chrome: { runtime: { sendMessage: (msg, cb) => { sent.push(msg); if (cb) cb(); }, lastError: null } },
   };
   const ctx = vm.createContext(ctxObj);
@@ -168,6 +168,14 @@ Upgrade
   for (let i = 0; i < 31; i++) p.tick();
   check(p.agents().length === 0, 'grok chat home should not scrape usage');
   check(!p.closed(), 'grok chat tab must not auto-close');
+}
+{
+  const p = runPage({ host: 'claude.ai', path: '/new', text: 'All models\n10% used' });
+  check(p.agents().length === 0, 'Claude chat /new should not scrape usage');
+}
+{
+  const p = runPage({ host: 'chatgpt.com', path: '/', text: 'What can I help with?' });
+  check(p.agents().length === 0, 'ChatGPT chat home should not scrape Codex usage');
 }
 
 {

@@ -16,6 +16,9 @@ const pickAutoDispatch = vm.runInContext('pickAutoDispatch', ctx);
 const pickReadyDispatch = vm.runInContext('pickReadyDispatch', ctx);
 const makeDispatchJob = vm.runInContext('makeDispatchJob', ctx);
 const leftoverOf = vm.runInContext('leftoverOf', ctx);
+const DISPATCH_TARGETS = vm.runInContext('DISPATCH_TARGETS', ctx);
+const dispatchById = vm.runInContext('dispatchById', ctx);
+const agentsForKind = vm.runInContext('agentsForKind', ctx);
 const selectedForKind = vm.runInContext('selectedForKind', ctx);
 const canDispatch = vm.runInContext('canDispatch', ctx);
 const putDispatchPending = vm.runInContext('putDispatchPending', ctx);
@@ -47,6 +50,29 @@ if (/[?&]prompt=/.test(cx.url)) problems.push('codex must not use ?prompt= (that
 if (cx.fill !== 'script') problems.push('codex should script-fill');
 if (buildDispatch(bot, 'nope').url.includes('cursor.com/agents')) {
   problems.push('Grok Bot must not open Cursor Agents');
+}
+
+const chatClaude = dispatchById('claude-chat');
+const gpt = dispatchById('chatgpt');
+const claudeChat = buildDispatch(chatClaude, 'hello');
+if (claudeChat.url !== 'https://claude.ai/new') problems.push(`Claude chat should open /new, got ${claudeChat.url}`);
+if (/[?&]q=/.test(claudeChat.url)) problems.push('Claude chat must not use ?q= (can auto-send)');
+if (claudeChat.fill !== 'script') problems.push('Claude chat should script-fill');
+const gptUrl = buildDispatch(gpt, 'hello');
+if (gptUrl.url !== 'https://chatgpt.com/') problems.push(`ChatGPT should open chatgpt.com/, got ${gptUrl.url}`);
+if (/[?&]q=/.test(gptUrl.url) || /[?&]prompt=/.test(gptUrl.url)) problems.push('ChatGPT must not auto-send via query');
+if (agentsForKind('chat').some((a) => a.id === 'claude-code')) problems.push('Claude Code must not appear in Chat');
+if (agentsForKind('code').some((a) => a.id === 'chatgpt' || a.id === 'claude-chat')) {
+  problems.push('ChatGPT / Claude chat must not appear in Code');
+}
+if (!agentsForKind('chat').some((a) => a.id === 'claude-chat') || !agentsForKind('chat').some((a) => a.id === 'chatgpt')) {
+  problems.push('Chat tab needs Claude + ChatGPT');
+}
+if (!agentsForKind('code').some((a) => a.id === 'claude-code') || !agentsForKind('code').some((a) => a.id === 'codex')) {
+  problems.push('Code tab needs Claude Code + Codex');
+}
+if (leftoverOf(chatClaude, { 'claude-code': { limits: [{ percent_left: 62 }] } }) !== 62) {
+  problems.push('Claude chat leftover should reuse Claude Code quota');
 }
 
 const map = {

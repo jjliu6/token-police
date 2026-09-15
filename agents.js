@@ -66,14 +66,31 @@ const AGENTS = [
   },
 ];
 
+// 派遣入口和额度卡分开：同一家产品 Chat / Code 不是同一个页面。
+// quotaId 指向 AGENTS 里的额度卡；没有额度卡的（ChatGPT 对话）不参与 Auto。
+const DISPATCH_TARGETS = [
+  { id: 'claude-chat', name: 'Claude', color: '#D97757', kind: 'chat', quotaId: 'claude-code' },
+  { id: 'chatgpt', name: 'ChatGPT', color: '#10A37F', kind: 'chat', quotaId: null },
+  { id: 'grok-build', name: 'Grok', color: '#B78CF0', kind: 'chat', quotaId: 'grok-build' },
+  { id: 'gemini', name: 'Gemini', color: '#3B78E7', kind: 'chat', quotaId: 'gemini' },
+  { id: 'claude-code', name: 'Claude Code', color: '#D97757', kind: 'code', quotaId: 'claude-code' },
+  { id: 'codex', name: 'Codex', color: '#5CD6B3', kind: 'code', quotaId: 'codex' },
+  { id: 'cursor', name: 'Cursor', color: '#6E9BF5', kind: 'code', quotaId: 'cursor' },
+  { id: 'grok-bot', name: 'Grok Bot', color: '#F49AC1', kind: 'code', quotaId: 'grok-bot', dispatch: false },
+];
+
 const AUTO_MIN_LEFT = 15;
+
+function dispatchById(id) {
+  return DISPATCH_TARGETS.find((a) => a.id === id) || null;
+}
 
 function agentKind(agent) {
   return agent && agent.kind === 'chat' ? 'chat' : 'code';
 }
 
 function agentsForKind(kind) {
-  return AGENTS.filter((a) => agentKind(a) === kind);
+  return DISPATCH_TARGETS.filter((a) => agentKind(a) === kind);
 }
 
 function canDispatch(agent) {
@@ -81,7 +98,8 @@ function canDispatch(agent) {
 }
 
 function leftoverOf(agent, map) {
-  const row = map && agent && map[agent.id];
+  const id = agent && (agent.quotaId || agent.id);
+  const row = map && id && map[id];
   const p = row && row.limits && row.limits[0] && row.limits[0].percent_left;
   return typeof p === 'number' ? p : null;
 }
@@ -111,6 +129,12 @@ function selectedForKind(ids, kind) {
 function buildDispatch(agent, prompt, repo) {
   const text = (prompt || '').trim();
   switch (agent && agent.id) {
+    case 'claude-chat':
+      // claude.ai/new?q= often auto-sends. Prefill only → script fill.
+      return { url: 'https://claude.ai/new', fill: 'script' };
+    case 'chatgpt':
+      // chatgpt.com/?q= often auto-sends. Prefill only → script fill.
+      return { url: 'https://chatgpt.com/', fill: 'script' };
     case 'claude-code': {
       const u = new URL('https://claude.ai/code');
       u.searchParams.set('prompt', text);
@@ -118,8 +142,6 @@ function buildDispatch(agent, prompt, repo) {
       return { url: u.toString(), fill: 'query' };
     }
     case 'codex':
-      // chatgpt.com/codex is Codex Cloud. ?prompt= is ChatGPT chat / desktop
-      // codex:// deep links — it is not a documented Cloud prefill.
       return { url: 'https://chatgpt.com/codex', fill: 'script' };
     case 'grok-build':
       return { url: 'https://grok.com/', fill: 'script' };
@@ -128,7 +150,7 @@ function buildDispatch(agent, prompt, repo) {
     case 'gemini':
       return { url: 'https://gemini.google.com/app', fill: 'script' };
     default:
-      return { url: agent && agent.page ? agent.page : 'about:blank', fill: 'script' };
+      return { url: 'about:blank', fill: 'script' };
   }
 }
 

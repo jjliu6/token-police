@@ -1667,7 +1667,7 @@ function fireDispatch(agents, auto) {
 
 function selectedAgents() {
   return selectedForKind(dispatchSelected, dispatchKind)
-    .map((id) => AGENTS.find((a) => a.id === id))
+    .map((id) => dispatchById(id))
     .filter(Boolean);
 }
 
@@ -1731,7 +1731,7 @@ if (dispatchChips && dispatchChips.addEventListener) {
     while (n && n !== e.currentTarget && !(n.dataset && n.dataset.agent)) n = n.parentNode;
     const id = n && n.dataset && n.dataset.agent;
     if (!id) return;
-    const agent = AGENTS.find((a) => a.id === id);
+    const agent = dispatchById(id);
     if (!canDispatch(agent)) return;
     dispatchSelected = dispatchSelected.includes(id)
       ? dispatchSelected.filter((x) => x !== id)
@@ -1744,7 +1744,7 @@ const dispatchReady = document.getElementById('dispatch-ready');
 if (dispatchReady && dispatchReady.addEventListener) {
   dispatchReady.addEventListener('click', () => {
     const keep = dispatchSelected.filter((id) => {
-      const a = AGENTS.find((x) => x.id === id);
+      const a = dispatchById(id);
       return a && agentKind(a) !== dispatchKind;
     });
     dispatchSelected = keep.concat(pickReadyDispatch(dispatchKind, quotaMap).map((a) => a.id));

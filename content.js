@@ -228,10 +228,13 @@ function isDispatchSurface() {
   const h = location.hostname || '';
   const p = location.pathname || '';
   const q = location.search || '';
+  const hash = location.hash || '';
   if (h.includes('cursor.com') && /^\/agents(\/|$)/.test(p)) return true;
   if (h.includes('gemini.google.com') && /^\/app(\/|$)/.test(p)) return true;
   if (h.includes('claude.ai') && /^\/code(\/|$)/.test(p)) return true;
+  if (h.includes('claude.ai') && /^\/new(\/|$)/.test(p) && !/settings\/usage/.test(hash)) return true;
   if (h.includes('chatgpt.com') && /\/codex(\/|$)/.test(p) && !p.includes('/settings')) return true;
+  if (h.includes('chatgpt.com') && !p.includes('/codex') && !p.includes('/auth')) return true;
   if (h.includes('grok.com') && !/[?&]_s=usage/.test(q)) return true;
   return false;
 }

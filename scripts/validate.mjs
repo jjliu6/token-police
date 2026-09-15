@@ -39,6 +39,12 @@ if (manifest) {
   for (const key of ['name', 'version', 'action']) {
     if (!manifest[key]) fail(`manifest.json is missing required key "${key}".`);
   }
+  if (typeof manifest.version === 'string' && /^\d+\.\d+\.\d+$/.test(manifest.version)) {
+    const patch = Number(manifest.version.split('.')[2]);
+    if (patch >= 10) {
+      fail(`version patch must stay 1–9 (got ${manifest.version}); bump minor instead, e.g. 1.6.10 → 1.7.1`);
+    }
+  }
 
   if (manifest.action?.default_popup) jsFiles.add(manifest.action.default_popup.replace(/\.html$/, '.js'));
   if (manifest.background?.service_worker) jsFiles.add(manifest.background.service_worker);

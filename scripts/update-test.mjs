@@ -19,6 +19,12 @@ const eq = (what, got, want) => { if (got !== want) problems.push(`${what}: expe
 // manifest.json 和 package.json 的版本号必须一致（发布流程两边都会改，改漏就对不上）
 eq('manifest/package version in sync', pkg.version, manifest.version);
 if (!/^\d+\.\d+\.\d+$/.test(manifest.version)) problems.push(`manifest version should look like 1.2.3, got ${manifest.version}`);
+{
+  const patch = Number(manifest.version.split('.')[2]);
+  if (patch >= 10) {
+    problems.push(`patch must stay 1–9 (got ${manifest.version}); bump minor instead, e.g. 1.6.10 → 1.7.1`);
+  }
+}
 eq('currentVersion() reads the manifest', ctx.currentVersion(), manifest.version);
 
 // tag 解析

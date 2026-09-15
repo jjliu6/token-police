@@ -128,6 +128,7 @@ const I18N = {
     dispatchFocus: 'Jump to tab',
     dispatchGone: 'Tab was closed',
     dispatchHint: 'Tick destinations, then dispatch. Ctrl+Enter auto-picks one.',
+    dispatchSoon: 'No public composer yet — quota only',
   },
   zh: {
     brand: 'TOKEN POLICE',
@@ -251,6 +252,7 @@ const I18N = {
     dispatchFocus: '跳到标签',
     dispatchGone: '标签已关',
     dispatchHint: '勾选入口再派遣。Ctrl+Enter 自动派最合适的一个。',
+    dispatchSoon: '暂无独立入口，只看额度',
   },
 };
 

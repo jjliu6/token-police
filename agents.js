@@ -50,6 +50,7 @@ const AGENTS = [
     name: 'Grok Bot',
     color: '#F49AC1',
     kind: 'code',
+    dispatch: false,
     page: 'https://cursor.com/dashboard/spending',
     scrape: ['https://cursor.com/dashboard/spending?cawrefresh=1'],
     foreground: true,
@@ -75,6 +76,10 @@ function agentsForKind(kind) {
   return AGENTS.filter((a) => agentKind(a) === kind);
 }
 
+function canDispatch(agent) {
+  return !!(agent && agent.dispatch !== false);
+}
+
 function leftoverOf(agent, map) {
   const row = map && agent && map[agent.id];
   const p = row && row.limits && row.limits[0] && row.limits[0].percent_left;
@@ -82,6 +87,7 @@ function leftoverOf(agent, map) {
 }
 
 function isDispatchReady(agent, map) {
+  if (!canDispatch(agent)) return false;
   const left = leftoverOf(agent, map);
   return left != null && left >= AUTO_MIN_LEFT;
 }
@@ -98,7 +104,7 @@ function pickReadyDispatch(kind, map) {
 
 function selectedForKind(ids, kind) {
   const allow = {};
-  agentsForKind(kind).forEach((a) => { allow[a.id] = true; });
+  agentsForKind(kind).forEach((a) => { if (canDispatch(a)) allow[a.id] = true; });
   return (ids || []).filter((id) => allow[id]);
 }
 

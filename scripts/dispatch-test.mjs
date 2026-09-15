@@ -17,6 +17,7 @@ const pickReadyDispatch = vm.runInContext('pickReadyDispatch', ctx);
 const makeDispatchJob = vm.runInContext('makeDispatchJob', ctx);
 const leftoverOf = vm.runInContext('leftoverOf', ctx);
 const selectedForKind = vm.runInContext('selectedForKind', ctx);
+const canDispatch = vm.runInContext('canDispatch', ctx);
 const putDispatchPending = vm.runInContext('putDispatchPending', ctx);
 const takeDispatchPending = vm.runInContext('takeDispatchPending', ctx);
 
@@ -84,6 +85,14 @@ if (pickReadyDispatch('code', {}).length) problems.push('empty map ready pool mu
 const crossed = selectedForKind(['cursor', 'grok-build', 'gemini'], 'chat');
 if (crossed.join() !== 'grok-build,gemini') problems.push(`kind filter should drop Cursor, got ${crossed.join()}`);
 if (selectedForKind(['cursor'], 'chat').length) problems.push('Cursor must not dispatch after switching to Chat');
+if (canDispatch(bot)) problems.push('Grok Bot has no public composer and must not dispatch');
+const fatBot = { 'grok-bot': { limits: [{ percent_left: 90 }] }, 'cursor': { limits: [{ percent_left: 40 }] } };
+if (pickReadyDispatch('code', fatBot).some((a) => a.id === 'grok-bot')) {
+  problems.push('Grok Bot must stay out of Auto / Select ready even at 90%');
+}
+if (selectedForKind(['cursor', 'grok-bot'], 'code').join() !== 'cursor') {
+  problems.push('stored Grok Bot selection must be dropped');
+}
 
 let pending = putDispatchPending({}, 11, { prompt: 'one', host: 'cursor.com' });
 pending = putDispatchPending(pending, 12, { prompt: 'two', host: 'gemini.google.com' });

@@ -1595,9 +1595,10 @@ function renderDispatch() {
   const kindSelected = selectedForKind(dispatchSelected, dispatchKind);
   if (chips) {
     chips.innerHTML = agentsForKind(dispatchKind).map((a) => {
-      const idx = kindSelected.indexOf(a.id);
+      const blocked = !canDispatch(a);
+      const idx = blocked ? -1 : kindSelected.indexOf(a.id);
       const left = leftoverOf(a, quotaMap);
-      return `<button type="button" class="chip${idx >= 0 ? ' on' : ''}" data-agent="${a.id}">
+      return `<button type="button" class="chip${idx >= 0 ? ' on' : ''}${blocked ? ' dim' : ''}" data-agent="${a.id}" ${blocked ? 'disabled' : ''} title="${blocked ? esc(t('dispatchSoon')) : ''}">
         <span class="ord">${idx >= 0 ? idx + 1 : ''}</span>
         <span class="dot" style="background:${a.color}"></span>
         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}</span>
@@ -1730,6 +1731,8 @@ if (dispatchChips && dispatchChips.addEventListener) {
     while (n && n !== e.currentTarget && !(n.dataset && n.dataset.agent)) n = n.parentNode;
     const id = n && n.dataset && n.dataset.agent;
     if (!id) return;
+    const agent = AGENTS.find((a) => a.id === id);
+    if (!canDispatch(agent)) return;
     dispatchSelected = dispatchSelected.includes(id)
       ? dispatchSelected.filter((x) => x !== id)
       : dispatchSelected.concat(id);

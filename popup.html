@@ -117,6 +117,8 @@
   .dispatch-float .chips{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .dispatch-float .chip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:#14161c;border-radius:8px;padding:6px 8px;color:var(--ink);font-size:11px;cursor:pointer;text-align:left}
   .dispatch-float .chip.on{border-color:rgba(143,227,198,.45);background:rgba(47,93,74,.28)}
+  .dispatch-float .chip.dim{opacity:.42;filter:grayscale(.4);cursor:not-allowed}
+  .dispatch-float .chip.dim:hover{background:#14161c}
   .dispatch-float .ord{width:14px;height:14px;flex:none;border-radius:3px;border:1px solid var(--line);font-size:9px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
   .dispatch-float .chip.on .ord{border-color:rgba(143,227,198,.5);color:#8fe3c6}
   .dispatch-float .row{display:grid;grid-template-columns:1fr 1fr;gap:6px}

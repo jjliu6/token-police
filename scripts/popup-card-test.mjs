@@ -221,8 +221,8 @@ if (els.lang.textContent !== '中文') problems.push(`English UI should show a �
 if (els.refresh.textContent !== 'Refresh') problems.push(`default refresh label should be Refresh, got ${JSON.stringify(els.refresh.textContent)}`);
 if (els.share.textContent !== 'Share app') problems.push(`default share label should be Share app, got ${JSON.stringify(els.share.textContent)}`);
 if (els.logs.textContent !== 'Logs') problems.push(`default logs label should be Logs, got ${JSON.stringify(els.logs.textContent)}`);
-if (els['dispatch-toggle'].textContent !== 'Dispatch') {
-  problems.push(`default dispatch label should be Dispatch, got ${JSON.stringify(els['dispatch-toggle'].textContent)}`);
+if (els['dispatch-toggle'].textContent !== 'Open') {
+  problems.push(`default open-in label should be Open, got ${JSON.stringify(els['dispatch-toggle'].textContent)}`);
 }
 if (popupCtx.document.documentElement.lang !== 'en') {
   problems.push(`<html lang> should be en by default, got ${popupCtx.document.documentElement.lang}`);
@@ -502,6 +502,12 @@ if (els['dispatch-chips'].innerHTML.includes('Cursor') || els['dispatch-chips'].
 }
 if (!els['dispatch-chips'].innerHTML.includes('Gemini') || !els['dispatch-chips'].innerHTML.includes('Grok')) {
   dispatchProblems.push(`chat chips should list Gemini and Grok: ${els['dispatch-chips'].innerHTML}`);
+}
+if (els['dispatch-go'].textContent !== 'Open 1') {
+  dispatchProblems.push(`chat go button should say Open 1, got ${JSON.stringify(els['dispatch-go'].textContent)}`);
+}
+if (!els['dispatch-auto'].textContent.startsWith('Auto-open')) {
+  dispatchProblems.push(`auto button should say Auto-open, got ${JSON.stringify(els['dispatch-auto'].textContent)}`);
 }
 if (els['dispatch-chips'].innerHTML.includes('>100<')) {
   dispatchProblems.push('chips must not fake 100% leftover');
@@ -1424,8 +1430,14 @@ if (els.lang.textContent !== 'EN') zhProblems.push(`Chinese UI should show an EN
 if (els.refresh.textContent !== '刷新') zhProblems.push(`Chinese refresh label should be 刷新, got ${JSON.stringify(els.refresh.textContent)}`);
 if (els.share.textContent !== '推荐应用') zhProblems.push(`Chinese share label should be 推荐应用, got ${JSON.stringify(els.share.textContent)}`);
 if (els.logs.textContent !== '抓取日志') zhProblems.push(`Chinese logs label should be 抓取日志, got ${JSON.stringify(els.logs.textContent)}`);
-if (els['dispatch-toggle'].textContent !== '派遣') {
-  zhProblems.push(`Chinese dispatch label should be 派遣, got ${JSON.stringify(els['dispatch-toggle'].textContent)}`);
+if (els['dispatch-toggle'].textContent !== '带到') {
+  zhProblems.push(`Chinese open-in label should be 带到, got ${JSON.stringify(els['dispatch-toggle'].textContent)}`);
+}
+if (!els['dispatch-go'].textContent.includes('带到')) {
+  zhProblems.push(`Chinese go button should say 带到, got ${JSON.stringify(els['dispatch-go'].textContent)}`);
+}
+if (!els['dispatch-auto'].textContent.includes('自动带到')) {
+  zhProblems.push(`Chinese auto button should say 自动带到, got ${JSON.stringify(els['dispatch-auto'].textContent)}`);
 }
 if (els['share-title'].textContent !== '推荐 Token Police') {
   zhProblems.push(`Chinese share title, got ${JSON.stringify(els['share-title'].textContent)}`);

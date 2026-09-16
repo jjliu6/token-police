@@ -1444,10 +1444,14 @@ if (actsEl && actsEl.addEventListener) {
     }
   });
 }
-const langBtn = document.getElementById('lang');
-if (langBtn) {
-  langBtn.addEventListener('click', () => {
-    setLang(nextLang(currentLang()), render);
+const langsEl = document.getElementById('langs');
+if (langsEl) {
+  langsEl.addEventListener('click', (e) => {
+    let n = e.target;
+    while (n && n !== e.currentTarget && !(n.dataset && n.dataset.lang)) n = n.parentNode;
+    const lang = n && n.dataset && n.dataset.lang;
+    if (!lang) return;
+    setLang(lang, render);
   });
 }
 const shareBtn = document.getElementById('share');

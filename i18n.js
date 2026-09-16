@@ -3,12 +3,6 @@ let uiLang = 'en';
 
 const UI_LANGS = ['en', 'fr', 'zh'];
 const LANG_HTML = { en: 'en', fr: 'fr', zh: 'zh' };
-const LANG_CYCLE = { en: 'fr', fr: 'zh', zh: 'en' };
-const LANG_BTN = {
-  en: { label: 'FR', title: 'Passer en français' },
-  fr: { label: '中文', title: '切换到中文' },
-  zh: { label: 'EN', title: 'Switch to English' },
-};
 
 function knownLang(lang) {
   return UI_LANGS.indexOf(lang) >= 0 ? lang : 'en';
@@ -16,10 +10,6 @@ function knownLang(lang) {
 
 function currentLang() {
   return knownLang(uiLang);
-}
-
-function nextLang(lang) {
-  return LANG_CYCLE[knownLang(lang)] || 'en';
 }
 
 const I18N = {
@@ -32,7 +22,7 @@ const I18N = {
     pctLeft: '{n}% left',
     thisPeriod: 'This period',
     empty: 'No data yet — click "Refresh", or open its usage page in a normal tab.',
-    firstTime: 'First time? Click "Refresh" to fetch data.',
+    firstTime: 'First time? Click "Refresh" to pull your numbers.',
     updated: 'Updated {time}',
     fetchingHint: 'Fetching… tabs may flash open and close. Results stay in this side panel.',
     justNow: 'just now',
@@ -66,7 +56,7 @@ const I18N = {
     builtBy: 'Built by {name} at {org} · MIT License · {src}',
     creditsSrc: 'Source on GitHub',
     disclaimer: 'Unofficial. Not affiliated with Anthropic, OpenAI, xAI, Cursor or Google. It only reads usage numbers already shown on each product\'s own page.',
-    share: 'Share app',
+    share: 'Share',
     shareTitle: 'Share Token Police',
     sharePitch: 'Remaining Claude Code, Codex, Cursor, Grok & Gemini quota in one Chrome side panel. Free, open source — nothing leaves your browser.',
     sharePrivacy: 'Only the product link is shared. Your quota, logs, and account data are never included.',
@@ -131,7 +121,7 @@ const I18N = {
     dispatchBoard: 'All',
     dispatchChat: 'Chat',
     dispatchCode: 'Code',
-    dispatchPlaceholder: 'Type a prompt, then tick one or more destinations…',
+    dispatchPlaceholder: 'Type a prompt, then pick where it goes…',
     dispatchRepo: 'Repo',
     dispatchAuto: 'Auto-dispatch',
     dispatchMulti: 'Dispatch {n}',
@@ -147,7 +137,7 @@ const I18N = {
     dispatchNoLive: 'Live output stays on their page. This panel keeps the tab list.',
     dispatchFocus: 'Jump to tab',
     dispatchGone: 'Tab was closed',
-    dispatchHint: 'Tick destinations, then dispatch. Ctrl+Enter auto-picks one.',
+    dispatchHint: 'Type a prompt, pick where it goes. Ctrl+Enter auto-picks one.',
     dispatchSend: 'Auto-send after prefill — actually submits & uses quota (best effort)',
     dispatchSendCode: 'Auto-send off for coding targets (prefill only for now)',
     dispatchTile: 'Tile windows side by side',
@@ -262,7 +252,7 @@ const I18N = {
     dispatchBoard: 'Tout',
     dispatchChat: 'Chat',
     dispatchCode: 'Code',
-    dispatchPlaceholder: 'Écris un prompt, puis coche une ou plusieurs destinations…',
+    dispatchPlaceholder: 'Écris un prompt, puis coche où ça part…',
     dispatchRepo: 'Dépôt',
     dispatchAuto: 'Dispatch auto',
     dispatchMulti: 'Dispatcher {n}',
@@ -278,7 +268,7 @@ const I18N = {
     dispatchNoLive: 'La sortie live reste sur leur page. Ici, juste la liste d’onglets.',
     dispatchFocus: 'Aller à l’onglet',
     dispatchGone: 'Onglet fermé',
-    dispatchHint: 'Coche des destinations, puis dispatch. Ctrl+Entrée en choisit une toute seule.',
+    dispatchHint: 'Écris un prompt, coche où ça part. Ctrl+Entrée en choisit une toute seule.',
     dispatchSend: 'Envoi auto après préremplissage — ça soumet vraiment et ça consomme du quota (best effort)',
     dispatchSendCode: 'Pas d’envoi auto pour le code (préremplissage seulement, pour l’instant)',
     dispatchTile: 'Fenêtres côte à côte',
@@ -294,7 +284,7 @@ const I18N = {
     pctLeft: '剩 {n}%',
     thisPeriod: '本周期',
     empty: '暂无数据 — 点「刷新」，或在普通标签页打开对应额度页面。',
-    firstTime: '第一次用？点「刷新」拉取数据。',
+    firstTime: '第一次用？点「刷新」把数字拉下来。',
     updated: '{time} 更新',
     fetchingHint: '正在抓取… 标签页会闪一下自动开关，结果会留在这个侧边栏里。',
     justNow: '刚刚',
@@ -328,7 +318,7 @@ const I18N = {
     builtBy: '由 {name} @ {org} 构建 · MIT 协议 · {src}',
     creditsSrc: 'GitHub 源码',
     disclaimer: '非官方项目，与 Anthropic、OpenAI、xAI、Cursor、Google 均无关联。它只读取各产品页面上已经展示的用量数字。',
-    share: '推荐应用',
+    share: '分享',
     shareTitle: '推荐 Token Police',
     sharePitch: '一个 Chrome 侧边栏看清 Claude Code、Codex、Cursor、Grok、Gemini 还剩多少额度。免费开源，数据不出浏览器。',
     sharePrivacy: '仅分享产品介绍和链接，不会包含你的额度、日志或账户数据。',
@@ -338,7 +328,7 @@ const I18N = {
     shareClose: '关闭',
     shareTweet: 'Token Police：一个 Chrome 侧边栏看清 Claude、Codex、Cursor、Grok、Gemini 还剩多少额度。{url}',
     shareShotAlt: 'Token Police 面板预览',
-    logs: '抓取日志',
+    logs: '日志',
     logsClose: '关闭',
     logsAll: '全部',
     logsSuccess: '成功',
@@ -346,7 +336,7 @@ const I18N = {
     logsJson: '导出 JSON',
     logsCsv: '导出 CSV',
     logsClear: '清除日志',
-    logsEmpty: '暂无抓取日志。',
+    logsEmpty: '暂无日志。',
     logManual: '手动',
     logAutomatic: '自动',
     logPage: '页面',
@@ -393,7 +383,7 @@ const I18N = {
     dispatchBoard: '全部',
     dispatchChat: '对话',
     dispatchCode: '代码',
-    dispatchPlaceholder: '输入提示词，勾选一个或多个入口…',
+    dispatchPlaceholder: '输入提示词，勾选要打开的…',
     dispatchRepo: '仓库',
     dispatchAuto: '自动指派',
     dispatchMulti: '指派 {n} 个',
@@ -409,7 +399,7 @@ const I18N = {
     dispatchNoLive: '实时输出在对方页面。这边只留任务列表，可随时跳回去。',
     dispatchFocus: '跳到标签',
     dispatchGone: '标签已关',
-    dispatchHint: '勾选入口再指派。Ctrl+Enter 自动派最合适的一个。',
+    dispatchHint: '输入提示词，勾选要打开的。Ctrl+Enter 自动派最合适的一个。',
     dispatchSend: '预填后自动发送——会真正提交、消耗额度（尽力而为）',
     dispatchSendCode: '代码类暂不支持自动发送（目前只预填）',
     dispatchTile: '窗口并排铺开',
@@ -438,11 +428,12 @@ function applyI18n() {
   if (legend) legend.textContent = t('legend');
   const btn = document.getElementById('refresh');
   if (btn && !btn.disabled) btn.textContent = t('refresh');
-  const langBtn = document.getElementById('lang');
-  if (langBtn) {
-    const next = LANG_BTN[currentLang()] || LANG_BTN.en;
-    langBtn.textContent = next.label;
-    langBtn.title = next.title;
+  const langBtns = document.querySelectorAll('#langs [data-lang]');
+  for (let i = 0; i < langBtns.length; i++) {
+    const b = langBtns[i];
+    const on = b.dataset.lang === currentLang();
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
   const gearBtn = document.getElementById('gear');
   if (gearBtn) gearBtn.title = t('gearTitle');

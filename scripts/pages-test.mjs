@@ -76,10 +76,10 @@ try {
   assert.ok(zh.includes('<span class="hl">还剩多少</span>'), 'inline HTML translations kept their tags');
   assert.ok(!zh.includes('Ready? It\'s free.'), 'no English body text left on /zh/');
   assert.ok(en.includes('New in v1.5'), 'en dispatch section');
-  assert.ok(en.includes('Prefill by default, not sent for you.'), 'en dispatch prefill promise');
+  assert.ok(en.includes('Filled in, not sent.'), 'en dispatch prefill promise');
   assert.ok(en.includes('src="/dispatch-composer.png"') && en.includes('src="/dispatch-board.png"'), 'en dispatch screenshots');
   assert.ok(zh.includes('v1.5 新增'), 'zh dispatch eyebrow');
-  assert.ok(zh.includes('默认只预填，不替你发送'), 'zh dispatch prefill promise');
+  assert.ok(zh.includes('只填进去，不替你发出去'), 'zh dispatch prefill promise');
   assert.ok(zh.includes('「指派」会替我发出去吗？'), 'zh dispatch FAQ');
   assert.ok(!zh.includes('New in v1.5'), 'zh has no English dispatch eyebrow');
   assert.ok(!zh.includes('One prompt, opened in'), 'zh has no English dispatch headline');
@@ -97,7 +97,7 @@ try {
   assert.ok(fr.includes('<span class="hl">d’un coup d’œil</span>') || fr.includes('d’un coup d’œil'), 'fr inline HTML translations kept their tags');
   assert.ok(!fr.includes('Ready? It\'s free.'), 'no English body text left on /fr/');
   assert.ok(fr.includes('Nouveau en v1.5'), 'fr dispatch eyebrow');
-  assert.ok(fr.includes('Prérempli par défaut'), 'fr dispatch prefill promise');
+  assert.ok(fr.includes('Collé, pas envoyé'), 'fr dispatch prefill promise');
   assert.ok(fr.includes('Dispatch envoie le prompt à ma place'), 'fr dispatch FAQ');
   assert.ok(!fr.includes('New in v1.5'), 'fr has no English dispatch eyebrow');
   assert.ok(!fr.includes('One prompt, opened in'), 'fr has no English dispatch headline');
@@ -118,15 +118,15 @@ try {
     assert.ok(html.includes('function shareHref('), `${name}: share URLs are filled in the page script`);
     assert.ok(html.includes('via=jjl13579'), `${name}: X intent credits the author`);
   }
-  assert.ok(en.includes('Like it? Spread the word.'), 'en share prompt');
+  assert.ok(en.includes('Useful? Send it to a friend.'), 'en share prompt');
   assert.ok(en.includes('Copy link'), 'en copy label');
   assert.ok(en.includes('title="Share this page"'), 'en header share title');
-  assert.ok(en.includes('see remaining Claude Code'), 'en share text');
+  assert.ok(en.includes('remaining AI coding quota'), 'en share text');
   assert.ok(zh.includes('觉得有用？发给朋友吧。'), 'zh share prompt');
   assert.ok(zh.includes('复制链接'), 'zh copy label');
   assert.ok(zh.includes('title="分享这个页面"'), 'zh header share title');
   assert.ok(zh.includes('一眼看清 Claude Code、Codex、Cursor、Grok、Gemini 还剩多少额度'), 'zh share text');
-  assert.ok(!zh.includes('Like it? Spread the word.'), 'zh has no English share prompt');
+  assert.ok(!zh.includes('Useful? Send it to a friend.'), 'zh has no English share prompt');
   assert.ok(zh.includes('>复制链接</span>') && !zh.includes('>Copy link</span>'), 'zh copy button is translated');
 
   assert.ok(fr.includes('Ça t’aide ? Passe-le.') || fr.includes("Ça t’aide"), 'fr share prompt');

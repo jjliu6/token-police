@@ -64,7 +64,7 @@ it installs the same way, just with a few extra development files in the folder.
 5. Click **Load unpacked** and select the unzipped folder (the one that contains `manifest.json`).
 6. Click the toolbar icon. The dashboard opens in the **side panel** so it stays visible while Refresh scrapes.
 7. Click **Refresh** (or open a product's usage page in a normal tab) to populate the data.
-8. The dashboard defaults to **English**. Click **FR** / **中文** / **EN** in the header to cycle French, Chinese and English; the choice is stored locally (`uiLang`) and does not follow Chrome's UI language.
+8. The dashboard defaults to **English**. The header shows **FR**, **EN** and **中文** as three buttons — click one to switch; the choice is stored locally (`uiLang`) and does not follow Chrome's UI language.
 
 To update later: when the bottom of the panel says a new version is available (or the version on the
 Download button above is higher than the `vX.Y.Z` at the bottom of your panel), download the zip again,

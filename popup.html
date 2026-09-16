@@ -61,6 +61,10 @@
   @media (max-width:500px){.leg{display:none}}
   @media (max-width:380px){.upd{display:none}}
   .btn:hover{background:#333a46}
+  .langs{display:inline-flex;align-items:center;background:#2a2f3a;border-radius:8px;padding:2px;gap:1px;flex:none}
+  .langs .btn.lang{min-width:0;padding:4px 7px;border-radius:6px;background:transparent;font-size:10px}
+  .langs .btn.lang.on{background:#3a4250;color:#8fe3c6;font-weight:600}
+  .langs .btn.lang:hover{background:#333a46}
   .btn.lang{padding:5px 8px;min-width:40px}
   .grid{display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:8px;align-items:start}
   .stats{overflow:hidden}
@@ -193,7 +197,7 @@
 <body>
   <div class="top">
     <span class="brand"><span class="s">✦</span> <span id="brand-name">TOKEN POLICE</span></span>
-    <div class="right"><span class="upd" id="upd"></span><span class="leg" id="legend">number = remaining</span><button class="btn lang" id="lang" type="button" title="Passer en français">FR</button><button class="btn lang" id="gear" type="button" title="Choose tracked agents">⚙</button><button class="btn" id="refresh">Refresh</button></div>
+    <div class="right"><span class="upd" id="upd"></span><span class="leg" id="legend">number = remaining</span><div class="langs" id="langs" role="group" aria-label="Language"><button class="btn lang" type="button" data-lang="fr" title="Français">FR</button><button class="btn lang on" type="button" data-lang="en" title="English" aria-pressed="true">EN</button><button class="btn lang" type="button" data-lang="zh" title="中文">中文</button></div><button class="btn lang" id="gear" type="button" title="Choose tracked agents">⚙</button><button class="btn" id="refresh">Refresh</button></div>
   </div>
   <div class="settings" id="settings" hidden></div>
   <div class="stage" id="stage">
@@ -203,7 +207,7 @@
   <div class="bottom">
     <div class="hint" id="hint"></div>
     <div class="ver" id="ver"></div>
-    <div class="footer-actions"><button class="btn logs" id="logs" type="button">Logs</button><button class="btn dispatch" id="dispatch-toggle" type="button">Dispatch</button><button class="btn share" id="share" type="button">Share app</button></div>
+    <div class="footer-actions"><button class="btn logs" id="logs" type="button">Logs</button><button class="btn dispatch" id="dispatch-toggle" type="button">Dispatch</button><button class="btn share" id="share" type="button">Share</button></div>
     <div class="credits" id="credits"></div>
   </div>
   <div class="share-overlay" id="share-overlay" hidden>
@@ -244,7 +248,7 @@
       </div>
     </div>
     <div class="body">
-      <textarea id="dispatch-prompt" rows="3" placeholder="Type a prompt, then tick one or more destinations…"></textarea>
+      <textarea id="dispatch-prompt" rows="3" placeholder="Type a prompt, then pick where it goes…"></textarea>
       <div class="repo" id="dispatch-repo-row">
         <input id="dispatch-repo" type="text" placeholder="owner/repo" spellcheck="false">
         <span class="recents" id="dispatch-recents"></span>

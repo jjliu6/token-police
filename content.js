@@ -685,12 +685,48 @@ function claimDispatchFill() {
 // or, worse, two loops both poking Grok's mode dropdown open/closed.
 let fillStarted = false;
 
+function attachMarkdownFile(name, text) {
+  if (!name || text == null) return false;
+  if (typeof File === 'undefined' || typeof DataTransfer === 'undefined') return false;
+  const inputs = [];
+  const collect = (root) => {
+    if (!root || !root.querySelectorAll) return;
+    const found = root.querySelectorAll('input[type="file"]');
+    for (let i = 0; i < found.length; i++) inputs.push(found[i]);
+    const all = root.querySelectorAll('*');
+    for (let i = 0; i < all.length; i++) { if (all[i].shadowRoot) collect(all[i].shadowRoot); }
+  };
+  collect(document);
+  if (!inputs.length) return false;
+  try {
+    const file = new File([text], name, { type: 'text/markdown' });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    let ok = false;
+    for (let i = 0; i < inputs.length; i++) {
+      const input = inputs[i];
+      try {
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        ok = true;
+      } catch (e) {}
+    }
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 function onDispatchFill(msg) {
   if (fillStarted) return;
   if (!inTopFrame() || !isDispatchSurface()) return;
   if (!msg || msg.type !== 'dispatchFill' || !msg.prompt) return;
   fillStarted = true;
   const needBuild = msg.mode === 'build';
+  const attachName = msg.attachName || null;
+  const attachText = msg.attachText || null;
+  let attached = false;
   let el = null;
   let committedAt = 0; // the tick we first confirmed the prompt was in the box
   let n = 0;
@@ -708,6 +744,9 @@ function onDispatchFill(msg) {
       const filled = fillComposer(msg.prompt);
       if (filled) el = filled;
     }
+    if (el && attachName && attachText && !attached) {
+      attached = !!attachMarkdownFile(attachName, attachText);
+    }
     // Commit only once the prompt is genuinely sitting in the composer — never
     // on "fillComposer returned an element", which the reconcile can undo.
     if (el && composerHasPrompt(el, msg.prompt) && !committedAt) {
@@ -721,15 +760,33 @@ function onDispatchFill(msg) {
   function done() { clearInterval(iv); if (!committedAt) claimDispatchFill(); }
 }
 
-if (inTopFrame() && isDispatchSurface()) {
+if (inTopFrame()) {
   if (chrome.runtime && chrome.runtime.onMessage && chrome.runtime.onMessage.addListener) {
-    chrome.runtime.onMessage.addListener((msg) => { onDispatchFill(msg); });
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      if (msg && msg.type === 'captureConversation') {
+        const run = (typeof extractConversation === 'function')
+          ? extractConversation()
+          : Promise.resolve({ ok: false, reason: 'unsupported' });
+        Promise.resolve(run)
+          .then((res) => { try { sendResponse(res); } catch (e) {} })
+          .catch(() => { try { sendResponse({ ok: false, reason: 'error' }); } catch (e) {} });
+        return true;
+      }
+      onDispatchFill(msg);
+    });
   }
-  if (chrome.runtime && chrome.runtime.sendMessage) {
+  if (isDispatchSurface() && chrome.runtime && chrome.runtime.sendMessage) {
     try {
       chrome.runtime.sendMessage({ type: 'dispatchClaimFill' }, (job) => {
         if (chrome.runtime.lastError || !job || !job.prompt) return;
-        onDispatchFill({ type: 'dispatchFill', prompt: job.prompt, send: job.send, mode: job.mode });
+        onDispatchFill({
+          type: 'dispatchFill',
+          prompt: job.prompt,
+          send: job.send,
+          mode: job.mode,
+          attachName: job.attachName,
+          attachText: job.attachText,
+        });
       });
     } catch (e) {}
   }

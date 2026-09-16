@@ -143,6 +143,29 @@ const I18N = {
     dispatchTile: 'Tile windows side by side',
     dispatchTileHint: 'Opens each destination as its own window, arranged to fill the screen',
     dispatchSoon: 'No public composer yet — quota only',
+    crosscheck: 'Cross-check',
+    crosscheckOpen: 'Open Cross-check',
+    crosscheckFold: 'Collapse Cross-check',
+    crosscheckNeedSource: 'Open a ChatGPT conversation (chatgpt.com/c/…) in this window first. v1 only reads that page.',
+    crosscheckUnsupported: 'v1 Cross-check reads ChatGPT chats only. Codex, Claude, Grok, Cursor and Gemini extractors are not in this version.',
+    crosscheckEmpty: 'No messages on this ChatGPT page yet — send something, then try again.',
+    crosscheckError: 'Could not read this tab. Reload the ChatGPT page and keep Token Police open.',
+    crosscheckReady: 'ChatGPT · {summary}',
+    crosscheckCapturing: 'Reading the ChatGPT transcript…',
+    crosscheckPrivacy: 'Token Police does not upload this. Confirming sends the current ChatGPT session to the reviewer you pick — into that product\'s own tab.',
+    crosscheckConfirm: 'I understand — send this session to the reviewer (prefill only, not auto-sent)',
+    crosscheckNeedConfirm: 'Confirm the privacy note first',
+    crosscheckNeedReviewer: 'Pick a reviewer',
+    crosscheckReset: 'Reset to default',
+    crosscheckGo: 'Prefill {name}',
+    crosscheckGoNeed: 'Prefill reviewer',
+    crosscheckHint: 'Prefill only. You hit send on the reviewer\'s page. Long sessions download conversation.md instead of stuffing the composer.',
+    crosscheckLong: 'This session is long — conversation.md will download, and the reviewer composer gets the instruction plus the file if it accepts attachments.',
+    crosscheckCodeWarn: 'This is a coding agent. It can open a linked repo; it may not have the original chat\'s files.',
+    crosscheckChatWarn: 'This reviewer can only read the conversation, not run the project.',
+    crosscheckOpened: 'Opened {name} · prefill only, not sent',
+    crosscheckPromptLabel: 'Review instruction',
+    crosscheckPromptDefault: 'Below is a full development session between another coding agent and a user. Independently review whether it correctly understood and completed the user\'s request. Check its code changes, PR, test results and completion claims. Do not assume the previous agent\'s conclusions are correct. Point out omissions, errors, potential regressions, and anything still unverified.',
   },
   fr: {
     brand: 'TOKEN POLICE',
@@ -274,6 +297,29 @@ const I18N = {
     dispatchTile: 'Fenêtres côte à côte',
     dispatchTileHint: 'Ouvre chaque destination dans sa propre fenêtre, toutes calées pour remplir l’écran',
     dispatchSoon: 'Pas encore de compositeur public — quota seulement',
+    crosscheck: 'Contre-expertise',
+    crosscheckOpen: 'Ouvrir Contre-expertise',
+    crosscheckFold: 'Replier Contre-expertise',
+    crosscheckNeedSource: 'Ouvre d’abord une conversation ChatGPT (chatgpt.com/c/…) dans cette fenêtre. La v1 ne lit que cette page.',
+    crosscheckUnsupported: 'La v1 de Contre-expertise ne lit que les chats ChatGPT. Codex, Claude, Grok, Cursor et Gemini n’ont pas encore d’extracteur.',
+    crosscheckEmpty: 'Pas encore de messages sur cette page ChatGPT — envoie quelque chose, puis réessaie.',
+    crosscheckError: 'Impossible de lire cet onglet. Recharge la page ChatGPT et garde Token Police ouvert.',
+    crosscheckReady: 'ChatGPT · {summary}',
+    crosscheckCapturing: 'Lecture de la transcription ChatGPT…',
+    crosscheckPrivacy: 'Token Police n’envoie rien sur ses serveurs. Confirmer envoie la session ChatGPT actuelle au reviewer choisi — dans l’onglet de ce produit.',
+    crosscheckConfirm: 'Je comprends — envoyer cette session au reviewer (préremplissage seulement, pas d’envoi auto)',
+    crosscheckNeedConfirm: 'Coche d’abord la note de confidentialité',
+    crosscheckNeedReviewer: 'Choisis un reviewer',
+    crosscheckReset: 'Réinitialiser',
+    crosscheckGo: 'Préremplir {name}',
+    crosscheckGoNeed: 'Préremplir le reviewer',
+    crosscheckHint: 'Préremplissage seulement. C’est toi qui envoies sur la page du reviewer. Les longues sessions téléchargent conversation.md au lieu de tout coller dans le compositeur.',
+    crosscheckLong: 'Session trop longue — conversation.md va se télécharger, et le compositeur du reviewer reçoit l’instruction plus le fichier s’il accepte les pièces jointes.',
+    crosscheckCodeWarn: 'C’est un agent de code. Il peut ouvrir un dépôt lié ; il n’aura peut-être pas les fichiers du chat d’origine.',
+    crosscheckChatWarn: 'Ce reviewer peut seulement lire la conversation, pas lancer le projet.',
+    crosscheckOpened: '{name} ouvert · prérempli seulement, pas envoyé',
+    crosscheckPromptLabel: 'Consigne de relecture',
+    crosscheckPromptDefault: 'Voici une session complète entre un autre agent de code et un utilisateur. Vérifie indépendamment s’il a bien compris et mené à bien la demande. Contrôle les changements de code, la PR, les tests et les affirmations de fin. Ne prends pas les conclusions de l’agent précédent pour argent comptant. Signale les oublis, les erreurs, les régressions possibles et tout ce qui n’est pas encore vérifié.',
   },
   zh: {
     brand: 'TOKEN POLICE',
@@ -405,6 +451,29 @@ const I18N = {
     dispatchTile: '窗口并排铺开',
     dispatchTileHint: '每个入口开成独立窗口，自动铺满屏幕',
     dispatchSoon: '暂无独立入口，只看额度',
+    crosscheck: '交叉检查',
+    crosscheckOpen: '打开交叉检查',
+    crosscheckFold: '收起交叉检查',
+    crosscheckNeedSource: '先在这个窗口打开一个 ChatGPT 对话（chatgpt.com/c/…）。v1 只读那一页。',
+    crosscheckUnsupported: 'v1 交叉检查只读 ChatGPT 对话。Codex、Claude、Grok、Cursor、Gemini 的提取器还不在这个版本。',
+    crosscheckEmpty: '这个 ChatGPT 页面还没有消息——先发一条再试。',
+    crosscheckError: '读不了这个标签。请刷新 ChatGPT 页面，并保持 Token Police 开着。',
+    crosscheckReady: 'ChatGPT · {summary}',
+    crosscheckCapturing: '正在读取 ChatGPT 对话…',
+    crosscheckPrivacy: 'Token Police 不会上传到自己的服务器。确认后，会把当前 ChatGPT 会话交给你选的审查方——写进对方自己的标签页。',
+    crosscheckConfirm: '我明白——把这次会话交给审查方（只预填，不自动发送）',
+    crosscheckNeedConfirm: '请先确认隐私说明',
+    crosscheckNeedReviewer: '请选择审查方',
+    crosscheckReset: '恢复默认',
+    crosscheckGo: '预填 {name}',
+    crosscheckGoNeed: '预填审查方',
+    crosscheckHint: '只预填。你在审查方的页面自己点发送。会话太长会下载 conversation.md，而不是塞进输入框。',
+    crosscheckLong: '这次会话很长——会下载 conversation.md；审查方输入框里是审查说明，能传附件的话会带上这个文件。',
+    crosscheckCodeWarn: '这是代码代理。它可以打开链接里的仓库，但不一定有原对话里的文件。',
+    crosscheckChatWarn: '这位审查方只能看对话，不能真正跑项目。',
+    crosscheckOpened: '已打开 {name} · 只预填，未发送',
+    crosscheckPromptLabel: '审查说明',
+    crosscheckPromptDefault: '下面是另一位编程助手与用户的完整会话。请独立审查它是否正确理解并完成了用户的请求。核对代码改动、PR、测试结果以及“已经完成”的说法。不要默认前一位助手的结论是对的。指出遗漏、错误、潜在回归，以及任何尚未核实的部分。',
   },
 };
 
@@ -452,9 +521,15 @@ function applyI18n() {
     dispatchBtn.textContent = t('dispatch');
     dispatchBtn.title = t('dispatchOpen');
   }
+  const crosscheckBtn = document.getElementById('crosscheck-toggle');
+  if (crosscheckBtn) {
+    crosscheckBtn.textContent = t('crosscheck');
+    crosscheckBtn.title = t('crosscheckOpen');
+  }
   if (typeof fillShareCard === 'function') fillShareCard();
   if (typeof fillLogsView === 'function') fillLogsView();
   if (typeof renderDispatch === 'function') renderDispatch();
+  if (typeof renderCrosscheck === 'function') renderCrosscheck();
 }
 
 function applyStoredLang(lang) {

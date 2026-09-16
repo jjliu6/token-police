@@ -150,9 +150,9 @@
   .credits{font-size:10px;color:var(--faint);text-align:center;margin:8px 0 0;padding:0;line-height:1.45}
   .credits a{color:var(--muted);text-decoration:none}
   .share-bar{display:flex;justify-content:center;margin:8px 0 0}
-  .footer-actions{display:flex;justify-content:center;gap:7px;margin:8px 0 0}
-  .btn.share,.btn.dispatch{font-size:11px;padding:6px 12px;letter-spacing:.04em;background:var(--accent-fill);color:var(--on-accent);border-color:transparent;font-weight:650}
-  .btn.share:hover,.btn.dispatch:hover{background:var(--accent-fill-hover)}
+  .footer-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:7px;margin:8px 0 0}
+  .btn.share,.btn.dispatch,.btn.crosscheck{font-size:11px;padding:6px 12px;letter-spacing:.04em;background:var(--accent-fill);color:var(--on-accent);border-color:transparent;font-weight:650}
+  .btn.share:hover,.btn.dispatch:hover,.btn.crosscheck:hover{background:var(--accent-fill-hover)}
   .dispatch-float{position:fixed;z-index:55;left:12px;right:12px;bottom:52px;max-height:calc(100% - 64px);display:flex;flex-direction:column;background:var(--card2);border:1px solid var(--line-strong);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
   .dispatch-float .dh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line)}
   .dispatch-float .seg{display:flex;background:var(--btn);border:1px solid var(--line);border-radius:8px;padding:2px}
@@ -256,7 +256,7 @@
   <div class="bottom">
     <div class="hint" id="hint"></div>
     <div class="ver" id="ver"></div>
-    <div class="footer-actions"><button class="btn logs" id="logs" type="button">Logs</button><button class="btn dispatch" id="dispatch-toggle" type="button">Dispatch</button><button class="btn share" id="share" type="button">Share</button></div>
+    <div class="footer-actions"><button class="btn logs" id="logs" type="button">Logs</button><button class="btn dispatch" id="dispatch-toggle" type="button">Dispatch</button><button class="btn crosscheck" id="crosscheck-toggle" type="button">Cross-check</button><button class="btn share" id="share" type="button">Share</button></div>
     <div class="credits" id="credits"></div>
   </div>
   <div class="share-overlay" id="share-overlay" hidden>
@@ -328,6 +328,25 @@
     <div class="tiles" id="dispatch-tiles"></div>
     <p class="foot" id="dispatch-board-foot"></p>
   </section>
+  <section class="dispatch-float" id="crosscheck-float" hidden>
+    <div class="dh">
+      <button class="btn logs" id="crosscheck-fold" type="button">Cross-check</button>
+    </div>
+    <div class="body">
+      <p class="note" id="crosscheck-status" style="text-align:left;min-height:28px"></p>
+      <p class="note" id="crosscheck-privacy" style="text-align:left"></p>
+      <label class="sendtog"><input type="checkbox" id="crosscheck-confirm"><span id="crosscheck-confirm-label"></span></label>
+      <label class="note" id="crosscheck-prompt-label" style="text-align:left" for="crosscheck-prompt"></label>
+      <textarea id="crosscheck-prompt" rows="4"></textarea>
+      <div style="display:flex;justify-content:flex-end">
+        <button class="btn logs" id="crosscheck-reset" type="button" style="margin:0;padding:3px 8px"></button>
+      </div>
+      <p class="note" id="crosscheck-warn" hidden style="text-align:left;color:var(--warn)"></p>
+      <div class="chips" id="crosscheck-chips"></div>
+      <button class="btn share" id="crosscheck-go" type="button"></button>
+      <p class="note" id="crosscheck-note"></p>
+    </div>
+  </section>
   <div class="buddy wander" id="buddy" hidden>
     <p class="say" id="say" hidden></p>
     <span class="mascot" id="hair" hidden></span>
@@ -338,6 +357,7 @@
   <script src="update.js"></script>
   <script src="capture-logs.js"></script>
   <script src="i18n.js"></script>
+  <script src="review.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

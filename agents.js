@@ -198,7 +198,12 @@ function makeDispatchJob(agent, prompt, repo, auto, send) {
 function putDispatchPending(map, tabId, job) {
   const next = Object.assign({}, map && typeof map === 'object' && !Array.isArray(map) ? map : {});
   if (tabId == null || !job || !job.prompt) return next;
-  next[String(tabId)] = { prompt: job.prompt, host: job.host || '', send: !!job.send, mode: job.mode || null };
+  const row = { prompt: job.prompt, host: job.host || '', send: !!job.send, mode: job.mode || null };
+  if (job.attachName && job.attachText) {
+    row.attachName = job.attachName;
+    row.attachText = job.attachText;
+  }
+  next[String(tabId)] = row;
   return next;
 }
 

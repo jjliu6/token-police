@@ -5,7 +5,7 @@
 // - 只刷新用户在面板里勾选的产品（enabledAgents，缺省全开）。
 // - 刷新结束后按 agent 记录成/败（refresh.results），面板据此提示"没抓到，可能未登录"。
 
-importScripts('agents.js', 'i18n.js', 'update.js', 'capture-logs.js');
+importScripts('agents.js', 'i18n.js', 'update.js', 'capture-logs.js', 'review.js');
 
 let refreshing = false;
 
@@ -380,6 +380,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     closeDispatchTabs(msg.tabIds).then((closed) => sendResponse({ ok: true, closed }));
     return true;
   }
+  if (msg && msg.type === 'captureConversation') {
+    captureConversation(msg.tabId).then((res) => sendResponse(res));
+    return true;
+  }
+  if (msg && msg.type === 'reviewOpen' && msg.job) {
+    openDispatchJobs([msg.job], { tile: false }).then((opened) => sendResponse(opened));
+    return true;
+  }
 });
 
 // Close the tabs a dispatch board opened. content/popup only has the ids; the
@@ -431,9 +439,11 @@ function openDispatchJobs(jobs, opts) {
         host: hostFromUrl(job.url),
         send: job.send,
         mode: job.mode,
+        attachName: job.attachName,
+        attachText: job.attachText,
       });
       chrome.storage.local.set({ dispatchPending: pending }, () => {
-        pingFill(tabId, job.prompt, 0, job.send, job.mode);
+        pingFill(tabId, job.prompt, 0, job.send, job.mode, job.attachName, job.attachText);
         resolve();
       });
     });
@@ -462,16 +472,38 @@ function hostFromUrl(url) {
   try { return new URL(url).hostname; } catch (e) { return ''; }
 }
 
-function pingFill(tabId, prompt, attempt, send, mode) {
+function pingFill(tabId, prompt, attempt, send, mode, attachName, attachText) {
   if (!chrome.tabs.sendMessage) return;
-  chrome.tabs.sendMessage(tabId, { type: 'dispatchFill', prompt, send: !!send, mode: mode || null }, () => {
+  chrome.tabs.sendMessage(tabId, {
+    type: 'dispatchFill',
+    prompt,
+    send: !!send,
+    mode: mode || null,
+    attachName: attachName || null,
+    attachText: attachText || null,
+  }, () => {
     const err = chrome.runtime.lastError;
     // Keep re-delivering until the content script is listening. A slow tab can
     // take many seconds to load content.js; ~21s of retries (was ~5.6s) covers
     // it. The content script also claims on its own once loaded, so this is a
     // best-effort nudge, not the only delivery path.
     if (!err || attempt >= 30) return;
-    setTimeout(() => pingFill(tabId, prompt, attempt + 1, send, mode), 700);
+    setTimeout(() => pingFill(tabId, prompt, attempt + 1, send, mode, attachName, attachText), 700);
+  });
+}
+
+function captureConversation(tabId) {
+  if (tabId == null || !chrome.tabs || !chrome.tabs.sendMessage) {
+    return Promise.resolve({ ok: false, reason: 'error' });
+  }
+  return new Promise((resolve) => {
+    chrome.tabs.sendMessage(Number(tabId), { type: 'captureConversation' }, (res) => {
+      if (chrome.runtime.lastError) {
+        resolve({ ok: false, reason: 'error' });
+        return;
+      }
+      resolve(res || { ok: false, reason: 'empty' });
+    });
   });
 }
 

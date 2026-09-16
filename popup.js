@@ -320,9 +320,9 @@ function hairHead(pct) {
     <path d="M26 76 C26 70 31 68 40 72 C49 68 54 70 54 76 L52 96 H28 Z" fill="#3a4c68" stroke="#2a3548" stroke-width="1.8" stroke-linejoin="round"/>
     <path d="M34 78 C36 83 44 83 46 78" fill="none" stroke="#2a3548" stroke-width="1.4" stroke-linecap="round"/>
     <path d="M28.5 77.5 C31 72.5 34.5 70.5 40 74 C45.5 70.5 49 72.5 51.5 77.5" fill="none" stroke="#5CD6B3" stroke-width="2.3" stroke-linecap="round"/>
-    <circle cx="40" cy="86" r="5.2" fill="#14161c"/>
+    <circle cx="40" cy="86" r="5.2" fill="#101218"/>
     <circle cx="40" cy="86" r="4.15" fill="#5CD6B3"/>
-    <path fill="#14161c" d="M40 82.4l1.5 3.3 3.3 1.5-3.3 1.5-1.5 3.3-1.5-3.3-3.3-1.5 3.3-1.5z"/>
+    <path fill="#101218" d="M40 82.4l1.5 3.3 3.3 1.5-3.3 1.5-1.5 3.3-1.5-3.3-3.3-1.5 3.3-1.5z"/>
     <path d="M35 71 h10 v9 H35 Z" fill="#f3c29a"/>
     <ellipse cx="20" cy="52" rx="5.2" ry="7.2" fill="#f3c29a" stroke="#c47a4a" stroke-width="1.8"/>
     <ellipse cx="60" cy="52" rx="5.2" ry="7.2" fill="#f3c29a" stroke="#c47a4a" stroke-width="1.8"/>
@@ -989,7 +989,7 @@ function card(id, a, hist, fail, latestAttempt) {
     : breakdownBar(a.breakdown);
 
   let burn = '';
-  if (est) burn = `<div style="font-size:10.5px;margin-top:9px;color:${est.color}">🔥 ${est.text}</div>`;
+  if (est) burn = `<div class="burn" style="color:${est.color}">🔥 ${est.text}</div>`;
   const failLine = fail
     ? `<div class="fail">⚠ ${failText(fail)} ${openLink(id)}</div>`
     : '';

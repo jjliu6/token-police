@@ -186,7 +186,7 @@ if (els['brand-name'].textContent !== 'TOKEN POLICE') {
 if (els.legend.textContent !== 'number = remaining') {
   problems.push(`default legend should be English, got ${JSON.stringify(els.legend.textContent)}`);
 }
-if (els.lang.textContent !== '中文') problems.push(`English UI should show a 中文 button, got ${JSON.stringify(els.lang.textContent)}`);
+if (els.lang.textContent !== 'FR') problems.push(`English UI should show a FR button, got ${JSON.stringify(els.lang.textContent)}`);
 if (els.refresh.textContent !== 'Refresh') problems.push(`default refresh label should be Refresh, got ${JSON.stringify(els.refresh.textContent)}`);
 if (els.share.textContent !== 'Share app') problems.push(`default share label should be Share app, got ${JSON.stringify(els.share.textContent)}`);
 if (els.logs.textContent !== 'Logs') problems.push(`default logs label should be Logs, got ${JSON.stringify(els.logs.textContent)}`);
@@ -1171,7 +1171,7 @@ console.log('ok  Dragging the mascot follows the cursor instead of the 7.2s wand
 // --- Occasional mouth blurts, stage + language aware ---
 const sayProblems = [];
 ['high', 'mid', 'low', 'due', 'regrow'].forEach((stage) => {
-  ['zh', 'en'].forEach((lang) => {
+  ['zh', 'en', 'fr'].forEach((lang) => {
     const pool = ctx.sayPool(stage, lang);
     if (pool.length < 8) sayProblems.push(`${stage}/${lang} should have ≥8 lines, got ${pool.length}`);
     if (new Set(pool).size !== pool.length) sayProblems.push(`${stage}/${lang} has duplicate lines`);
@@ -1180,6 +1180,9 @@ const sayProblems = [];
     }
     if (lang === 'en' && pool.some((s) => /[\u4e00-\u9fff]/.test(s) || !s.trim())) {
       sayProblems.push(`${stage}/en should be English-only spoken lines`);
+    }
+    if (lang === 'fr' && pool.some((s) => /[\u4e00-\u9fff]/.test(s) || !s.trim() || !/[éèêëàâùûôîïçœæÉÈÀÙÇ'’ ]/.test(s) && !/[a-z]/i.test(s))) {
+      sayProblems.push(`${stage}/fr should be spoken French: ${JSON.stringify(pool)}`);
     }
   });
 });
@@ -1201,7 +1204,7 @@ if (els.say.hidden) sayProblems.push('blurtSay should unhide the bubble');
 if (els.say.textContent !== said) sayProblems.push(`bubble text should match, got ${JSON.stringify(els.say.textContent)}`);
 if (els.say.textContent.includes('<')) sayProblems.push('say must use textContent, not HTML');
 ctx.blurtSay(10, false, () => 0);
-if (ctx.sayPool('low', 'en').indexOf(els.say.textContent) === -1 && ctx.sayPool('low', 'zh').indexOf(els.say.textContent) === -1) {
+if (ctx.sayPool('low', 'en').indexOf(els.say.textContent) === -1 && ctx.sayPool('low', 'zh').indexOf(els.say.textContent) === -1 && ctx.sayPool('low', 'fr').indexOf(els.say.textContent) === -1) {
   sayProblems.push(`10% hair should pick a low-stage line, got ${JSON.stringify(els.say.textContent)}`);
 }
 const grewLine = ctx.blurtSay(100, false, () => 0, 'regrow');
@@ -1325,13 +1328,42 @@ if (zhProblems.length) {
 }
 console.log('ok  中文 toggle switches dashboard strings and persists uiLang=zh');
 
+ctx.setLang('fr');
+if (store.uiLang !== 'fr' || ctx.currentLang() !== 'fr') {
+  console.error('expected uiLang/currentLang fr, got', store.uiLang, ctx.currentLang());
+  process.exit(1);
+}
+const htmlFr = ctx.card('grok-build', grok, []);
+const frProblems = [];
+if (!htmlFr.includes('>restant<')) frProblems.push('French card should say restant');
+if (htmlFr.includes('>left<') || htmlFr.includes('>剩余<')) frProblems.push('French card should not say left/剩余');
+if (els.lang.textContent !== '中文') frProblems.push(`French UI should show a 中文 button, got ${JSON.stringify(els.lang.textContent)}`);
+if (els.refresh.textContent !== 'Actualiser') frProblems.push(`French refresh, got ${JSON.stringify(els.refresh.textContent)}`);
+if (els.share.textContent !== 'Partager') frProblems.push(`French share, got ${JSON.stringify(els.share.textContent)}`);
+if (els.logs.textContent !== 'Journaux') frProblems.push(`French logs, got ${JSON.stringify(els.logs.textContent)}`);
+if (popupCtx.document.documentElement.lang !== 'fr') {
+  frProblems.push(`<html lang> should be fr after toggle, got ${popupCtx.document.documentElement.lang}`);
+}
+if (els['share-shot'].src !== 'icons/share-preview-en.webp') {
+  frProblems.push(`French share card reuses the English screenshot, got ${JSON.stringify(els['share-shot'].src)}`);
+}
+if (ctx.nextLang('en') !== 'fr' || ctx.nextLang('fr') !== 'zh' || ctx.nextLang('zh') !== 'en') {
+  frProblems.push(`language cycle should be en→fr→zh→en, got ${ctx.nextLang('en')}/${ctx.nextLang('fr')}/${ctx.nextLang('zh')}`);
+}
+if (frProblems.length) {
+  console.error(htmlFr);
+  console.error(frProblems.join('\n'));
+  process.exit(1);
+}
+console.log('ok  FR toggle switches dashboard strings and persists uiLang=fr');
+
 ctx.setLang('en');
 if (ctx.currentLang() !== 'en' || store.uiLang !== 'en') {
   console.error('switching back to English failed', ctx.currentLang(), store.uiLang);
   process.exit(1);
 }
-if (els.lang.textContent !== '中文') {
-  console.error('English UI should show 中文 again, got', els.lang.textContent);
+if (els.lang.textContent !== 'FR') {
+  console.error('English UI should show FR again, got', els.lang.textContent);
   process.exit(1);
 }
 console.log('ok  EN toggle restores English');

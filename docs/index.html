@@ -3,10 +3,12 @@
   TEMPLATE — do not deploy this file as-is.
   scripts/build-pages.mjs renders it once per language into dist/site/:
     /       English + a tiny script that sends Chinese readers to /zh/
+            and French readers to /fr/
     /en/    English
+    /fr/    French (strings from docs/i18n/fr.mjs)
     /zh/    Chinese (strings from docs/i18n/zh.mjs)
   {{placeholders}} and data-i18n* attributes are filled in at build time.
-  Asset paths are absolute (/icon-128.png) because /en/ and /zh/ live one
+  Asset paths are absolute (/icon-128.png) because /en/, /fr/ and /zh/ live one
   folder deep. Preview with: npm run build:pages && npx serve dist/site
 -->
 <html lang="{{htmlLang}}">
@@ -18,9 +20,7 @@
 <meta name="description" data-i18n-content="meta.description" content="A free, open-source Chrome extension that shows how much usage you have left for Claude Code, Codex, Grok, Cursor, Grok Bot and Gemini — with reset times, burn rate and low-quota alerts. No account, nothing leaves your browser.">
 <link rel="icon" href="/icon-128.png">
 <link rel="canonical" href="{{canonical}}">
-<link rel="alternate" hreflang="en" href="https://token-police.philosophie.ai/en/">
-<link rel="alternate" hreflang="zh-CN" href="https://token-police.philosophie.ai/zh/">
-<link rel="alternate" hreflang="x-default" href="https://token-police.philosophie.ai/en/">
+{{hreflangLinks}}
 <meta property="og:title" data-i18n-content="meta.ogTitle" content="Token Police — your AI coding quota, at a glance">
 <meta property="og:description" data-i18n-content="meta.ogDescription" content="Free Chrome extension: remaining usage for Claude Code, Codex, Cursor, Grok and Gemini in one side panel. Download the latest release.">
 <!-- 1200×630. X / Slack drop the preview if this is the 128px favicon. -->
@@ -32,6 +32,7 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="{{canonical}}">
 <meta property="og:locale" content="{{ogLocale}}">
+{{ogLocaleAlternates}}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" data-i18n-content="meta.ogTitle" content="Token Police — your AI coding quota, at a glance">
 <meta name="twitter:description" data-i18n-content="meta.ogDescription" content="Free Chrome extension: remaining usage for Claude Code, Codex, Cursor, Grok and Gemini in one side panel. Download the latest release.">
@@ -97,6 +98,8 @@
   nav.links a:hover { color: var(--fg); text-decoration: none; }
   .lang, #header-share { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; border: 1px solid var(--line); background: var(--bg-elev); color: var(--fg); border-radius: 999px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
   .lang:hover, #header-share:hover { border-color: var(--fg-faint); text-decoration: none; color: var(--fg); }
+  .langs { display: inline-flex; align-items: center; gap: 6px; }
+  .langs .lang[aria-current="page"] { background: var(--accent-soft); color: var(--accent-strong); border-color: transparent; font-weight: 600; pointer-events: none; }
   #header-share { font: inherit; font-size: 13px; font-weight: 500; appearance: none; }
   #header-share svg { width: 14px; height: 14px; flex: none; }
   .header-tools { display: flex; align-items: center; gap: 8px; }
@@ -238,7 +241,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
         <span data-i18n="nav.share">Share</span>
       </button>
-      <a class="lang" id="lang" href="{{altHref}}" hreflang="{{altHtmlLang}}" lang="{{altHtmlLang}}" title="{{altTitle}}">{{altLabel}}</a>
+      <nav class="langs" aria-label="Language">{{langLinks}}</nav>
     </div>
   </div>
 </header>
@@ -277,7 +280,7 @@
     </div>
 
     <div class="shot-frame">
-      <div class="shot"><img src="/shot-panel-{{lang}}.png" width="840" height="1520" alt="The side panel showing remaining quota for six coding agents, with the hair mascot floating over the cards" loading="eager"></div>
+      <div class="shot"><img src="/shot-panel-{{assetLang}}.png" width="840" height="1520" alt="The side panel showing remaining quota for six coding agents, with the hair mascot floating over the cards" loading="eager"></div>
       <p class="sample" data-i18n="hero.sample">The real panel, with sample data.</p>
     </div>
   </div>
@@ -376,11 +379,11 @@
     <div class="mascot-grid">
       <div class="mascot-shots">
         <figure>
-          <div class="shot"><img src="/shot-panel-{{lang}}.png" width="840" height="1520" alt="The panel with the hair mascot floating over the quota cards, showing 51% hair left" loading="lazy"></div>
+          <div class="shot"><img src="/shot-panel-{{assetLang}}.png" width="840" height="1520" alt="The panel with the hair mascot floating over the quota cards, showing 51% hair left" loading="lazy"></div>
           <figcaption data-i18n="mascot.cap1">Hair falls over the sit clock; remaining quota is a ceiling.</figcaption>
         </figure>
         <figure>
-          <div class="shot"><img src="/shot-break-{{lang}}.png" width="840" height="1520" alt="Break time: the quota cards are frosted over and the mascot offers three short activities with a Done button" loading="lazy"></div>
+          <div class="shot"><img src="/shot-break-{{assetLang}}.png" width="840" height="1520" alt="Break time: the quota cards are frosted over and the mascot offers three short activities with a Done button" loading="lazy"></div>
           <figcaption data-i18n="mascot.cap2">Break time: cards frost over until you finish one activity.</figcaption>
         </figure>
       </div>
@@ -434,7 +437,7 @@
       <div class="step">
         <div>
           <h3 data-i18n="install.s5h">Click the icon, then Refresh</h3>
-          <p data-i18n="install.s5p">The dashboard opens in Chrome's side panel. Press Refresh to fetch your numbers — a few tabs may flash open and close while it reads each usage page. Switch to 中文 in the header if you prefer.</p>
+          <p data-i18n="install.s5p">The dashboard opens in Chrome's side panel. Press Refresh to fetch your numbers — a few tabs may flash open and close while it reads each usage page. Switch language in the header (EN / FR / 中文) if you prefer.</p>
         </div>
       </div>
     </div>
@@ -444,8 +447,8 @@
       <figure class="demo">
         <p class="lead-in" data-i18n="install.demoLead">Steps 3 and 4, as they look in Chrome (loops every 12 s):</p>
         <div class="vid">
-          <video id="demo-video" autoplay muted loop playsinline preload="metadata" poster="/install-demo-{{lang}}-poster.png" width="1600" height="650">
-            <source src="/install-demo-{{lang}}.webm" type="video/webm">
+          <video id="demo-video" autoplay muted loop playsinline preload="metadata" poster="/install-demo-{{assetLang}}-poster.png" width="1600" height="650">
+            <source src="/install-demo-{{assetLang}}.webm" type="video/webm">
           </video>
         </div>
         <figcaption data-i18n="install.demoCap">Recorded in a real Chrome. Click the video to view it full-screen. The folder picker will be your operating system's own dialog, so it looks a little different.</figcaption>
@@ -567,18 +570,25 @@
 
 <script>
 /* =====================================================================
-   1) Language. Each language is its own page (/en/, /zh/) rendered from
-      this template by scripts/build-pages.mjs, so nothing is translated
-      at runtime. The header link simply points at the other page; we
-      only remember the choice so the root URL (/) can send a returning
-      visitor straight to the language they picked last time.
+   1) Language. Each language is its own page (/en/, /fr/, /zh/) rendered
+      from this template by scripts/build-pages.mjs, so nothing is translated
+      at runtime. The header links point at the other pages; we only remember
+      the choice so the root URL (/) can send a returning visitor straight to
+      the language they picked last time.
    ===================================================================== */
-const LANG = document.documentElement.lang.toLowerCase().startsWith('zh') ? 'zh' : 'en';
-const langLink = document.getElementById('lang');
-langLink.addEventListener('click', () => {
-  try { localStorage.setItem('uiLang', LANG === 'zh' ? 'en' : 'zh'); } catch (e) {}
-  // Keep the reader on the same section (#install, #faq …) after the switch.
-  langLink.href = langLink.pathname + location.hash;
+const LANG = (function () {
+  const raw = (document.documentElement.lang || 'en').toLowerCase();
+  if (raw.indexOf('zh') === 0) return 'zh';
+  if (raw.indexOf('fr') === 0) return 'fr';
+  return 'en';
+})();
+document.querySelectorAll('.langs a').forEach((a) => {
+  a.addEventListener('click', () => {
+    const code = (a.getAttribute('hreflang') || 'en').toLowerCase();
+    const pick = code.indexOf('zh') === 0 ? 'zh' : code.indexOf('fr') === 0 ? 'fr' : 'en';
+    try { localStorage.setItem('uiLang', pick); } catch (e) {}
+    a.href = a.pathname + location.hash;
+  });
 });
 // Click the install demo to watch it full-screen (it's small inside the right-hand column).
 document.querySelector('.demo .vid').addEventListener('click', () => {
@@ -617,15 +627,16 @@ function renderRelease() {
   subs.forEach((el) => { if (el) el.textContent = '.zip · v' + release.version; });
   if (release.publishedAt) {
     const date = new Date(release.publishedAt);
-    const text = new Intl.DateTimeFormat(LANG === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
-    d.textContent = (LANG === 'zh' ? '发布于 ' : 'released ') + text;
+    const loc = LANG === 'zh' ? 'zh-CN' : LANG === 'fr' ? 'fr-FR' : 'en-US';
+    const text = new Intl.DateTimeFormat(loc, { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+    d.textContent = (LANG === 'zh' ? '发布于 ' : LANG === 'fr' ? 'publié le ' : 'released ') + text;
     d.hidden = false;
   }
   if (release.size) { s.textContent = fmtSize(release.size); s.hidden = false; dot.hidden = false; }
   const dl = document.getElementById('rel-downloads');
   if (release.downloads) {
-    const n = new Intl.NumberFormat(LANG === 'zh' ? 'zh-CN' : 'en-US').format(release.downloads);
-    dl.textContent = LANG === 'zh' ? '累计下载 ' + n + ' 次' : n + ' downloads';
+    const n = new Intl.NumberFormat(LANG === 'zh' ? 'zh-CN' : LANG === 'fr' ? 'fr-FR' : 'en-US').format(release.downloads);
+    dl.textContent = LANG === 'zh' ? '累计下载 ' + n + ' 次' : LANG === 'fr' ? n + ' téléchargements' : n + ' downloads';
     dl.hidden = false; document.getElementById('rel-dot2').hidden = false;
   }
 }

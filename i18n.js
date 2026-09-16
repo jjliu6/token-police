@@ -1,8 +1,25 @@
-// UI strings. Default English; user can switch to Chinese and it is stored.
+// UI strings. Default English; user can switch to French or Chinese and it is stored.
 let uiLang = 'en';
 
+const UI_LANGS = ['en', 'fr', 'zh'];
+const LANG_HTML = { en: 'en', fr: 'fr', zh: 'zh' };
+const LANG_CYCLE = { en: 'fr', fr: 'zh', zh: 'en' };
+const LANG_BTN = {
+  en: { label: 'FR', title: 'Passer en français' },
+  fr: { label: '中文', title: '切换到中文' },
+  zh: { label: 'EN', title: 'Switch to English' },
+};
+
+function knownLang(lang) {
+  return UI_LANGS.indexOf(lang) >= 0 ? lang : 'en';
+}
+
 function currentLang() {
-  return uiLang === 'zh' ? 'zh' : 'en';
+  return knownLang(uiLang);
+}
+
+function nextLang(lang) {
+  return LANG_CYCLE[knownLang(lang)] || 'en';
 }
 
 const I18N = {
@@ -136,6 +153,137 @@ const I18N = {
     dispatchTile: 'Tile windows side by side',
     dispatchTileHint: 'Opens each destination as its own window, arranged to fill the screen',
     dispatchSoon: 'No public composer yet — quota only',
+  },
+  fr: {
+    brand: 'TOKEN POLICE',
+    legend: 'le chiffre = restant',
+    refresh: 'Actualiser',
+    fetching: 'Chargement…',
+    left: 'restant',
+    pctLeft: '{n} % restants',
+    thisPeriod: 'Cette période',
+    empty: 'Rien pour l’instant — clique « Actualiser », ou ouvre la page d’usage dans un onglet normal.',
+    firstTime: 'Première fois ? Clique « Actualiser » pour récupérer les chiffres.',
+    updated: 'Maj {time}',
+    fetchingHint: 'Récupération… des onglets peuvent clignoter. Les résultats restent dans ce panneau.',
+    justNow: 'à l’instant',
+    minsAgo: 'il y a {n} min',
+    hoursAgo: 'il y a {n} h',
+    daysAgo: 'il y a {n} j',
+    resettingSoon: 'reset imminent',
+    resetInDays: 'reset dans {n} j',
+    resetInHours: 'reset dans {n} h',
+    resetInMins: 'reset dans {n} min',
+    burnCollecting: 'Cadence : on collecte… (pas assez de données)',
+    burnBarely: 'Presque rien consommé récemment',
+    burnTillReset: 'Cadence ~{n} %/j · tient jusqu’au reset',
+    burnEmptyHours: 'vide dans ~{n} h',
+    burnEmptyDays: 'vide dans ~{n} j',
+    burnBefore: ' (avant le reset !)',
+    burnLine: 'Cadence ~{n} %/j · {eta}',
+    credits: 'crédits {n}',
+    tokens: '{n} tokens',
+    tracked: 'Suivis :',
+    gearTitle: 'Réglages',
+    autoCheck: 'Vérif. auto chaque heure',
+    autoCheckTip: 'Chaque heure, re-vérifie discrètement tous les agents cochés dans des onglets en arrière-plan — sans jamais voler le focus. Une page qui ne se rend pas en fond (ça arrive avec Cursor/Grok) garde sa dernière valeur ; clique Actualiser pour un vrai refresh.',
+    notifyLow: 'Alertes quota bas',
+    notifyLowTip: 'Préviens quand un agent suivi passe sous 15 % (puis sous 5 %) restants.',
+    checkUpdates: 'Vérifier les mises à jour',
+    checkUpdatesTip: 'Une fois par jour, demande à GitHub quelle est la dernière version (aucun compte ni donnée d’usage n’est envoyé) et affiche un bandeau en bas s’il y en a une plus récente.',
+    versionTitle: 'Version installée — clique pour ouvrir la page de téléchargement',
+    upToDate: 'à jour',
+    updateAvail: 'Nouvelle version {v} — télécharger ↗',
+    builtBy: 'Fait par {name} chez {org} · Licence MIT · {src}',
+    creditsSrc: 'Code sur GitHub',
+    disclaimer: 'Non officiel. Aucun lien avec Anthropic, OpenAI, xAI, Cursor ou Google. L’extension ne lit que les chiffres déjà affichés sur la page d’usage de chaque produit.',
+    share: 'Partager',
+    shareTitle: 'Partager Token Police',
+    sharePitch: 'Le quota restant de Claude Code, Codex, Cursor, Grok et Gemini, dans un seul panneau Chrome. Gratuit, open source — rien ne quitte ton navigateur.',
+    sharePrivacy: 'Seul le lien du produit est partagé. Ton quota, tes logs et tes comptes restent ici.',
+    shareCopy: 'Copier le lien',
+    shareCopied: 'Copié',
+    shareX: 'Partager sur X',
+    shareClose: 'Fermer',
+    shareTweet: 'Token Police : le quota restant de Claude, Codex, Cursor, Grok et Gemini dans un panneau Chrome. {url}',
+    shareShotAlt: 'Aperçu du panneau Token Police',
+    logs: 'Journaux',
+    logsClose: 'Fermer',
+    logsAll: 'Tous',
+    logsSuccess: 'OK',
+    logsFailure: 'Échec',
+    logsJson: 'Exporter JSON',
+    logsCsv: 'Exporter CSV',
+    logsClear: 'Vider les journaux',
+    logsEmpty: 'Pas encore de journal de capture.',
+    logManual: 'manuel',
+    logAutomatic: 'auto',
+    logPage: 'page',
+    stale2h: 'Données peut-être périmées',
+    stale24h: 'Valeur en cache, pas le quota actuel',
+    lastSuccess: 'Dernier OK : {time}',
+    lastAttempt: 'Dernière tentative : {time}',
+    lowTitle: '{name} : {n} % restants',
+    lowBody: 'Le quota touche à sa fin.',
+    lowBodyR: 'Le quota touche à sa fin. Reset {r}.',
+    openPage: 'Ouvrir la page',
+    fetchFailed: 'Le dernier refresh n’a pas pu lire cette page — tu es peut-être déconnecté.',
+    sectionMissing: 'La page spending de Cursor n’a pas de bloc Grok Bot — décoche-le dans ⚙ si tu ne l’utilises pas.',
+    spark7d: '% restant — 7 derniers jours',
+    showHair: 'Petit chauve',
+    hairLabel: 'CHEVEUX',
+    showHairTip: 'Un petit bonhomme qui flotte sur le tableau. Ses cheveux tombent tant que tu restes assis — 2 h d’habitude, 1 h si un agent grille fort. Le quota restant plafonne. Finis un étirement, ça repousse ; ça revient aussi au reset. Tu peux le glisser, ou le laisser se balader.',
+    hairTip: 'Cheveux : {n} % — ça tombe avec l’horloge d’assise (1 h si ça brûle, 2 h sinon). Finis un mouvement pour que ça repousse.',
+    actHint: 'Choisis-en une — fais-la, les cheveux reviennent.',
+    actDoing: 'En cours : {act}',
+    actDoingNote: 'Vas-y. Reviens et appuie sur C’est fait : les cheveux reviennent, les chiffres aussi.',
+    actDone: 'C’est fait — les cheveux sont de retour',
+    moveReminder: 'Rappel de bouger',
+    moveReminderTip: 'Quand un agent suivi brûle plus de 10 % de son quota en 2 heures, te piquer de te lever (au plus une fois toutes les 2 h par agent).',
+    moveTitle: '{name} : {n} % grillés en 2 h 🔥',
+    moveBody: 'Lève-toi, étire-toi, va toucher de l’herbe. Pas de mouvement, pas de vibe coding.',
+    weeklyAll: 'Hebdo (tous modèles)',
+    session5h: 'Session (5 h)',
+    weekly: 'Hebdo',
+    fiveHour: 'Limite 5 h',
+    weeklyGrok: 'Hebdo (SuperGrok)',
+    cursorModels: 'Modèles Cursor',
+    otherModels: 'Autres modèles',
+    currentUsage: 'Usage actuel',
+    chat: 'Chat',
+    build: 'Build',
+    auto: 'Auto',
+    imagine: 'Img',
+    voice: 'Voix',
+    api: 'API',
+    dispatch: 'Dispatch',
+    dispatchOpen: 'Ouvrir Dispatch',
+    dispatchFold: 'Replier Dispatch',
+    dispatchBoard: 'Tout',
+    dispatchChat: 'Chat',
+    dispatchCode: 'Code',
+    dispatchPlaceholder: 'Écris un prompt, puis coche une ou plusieurs destinations…',
+    dispatchRepo: 'Dépôt',
+    dispatchAuto: 'Dispatch auto',
+    dispatchMulti: 'Dispatcher {n}',
+    dispatchSelectReady: 'Tout cocher (prêts)',
+    dispatchParallel: 'Tout ouvrir',
+    dispatchNeed: 'Écris d’abord un prompt',
+    dispatchEmpty: 'Aucun agent de cette catégorie au-dessus de 15 %',
+    dispatchOpenedN: '{n} onglets ouverts · prérempli seulement, pas envoyé',
+    dispatchOpenedNSent: '{n} onglets ouverts · envoi auto (best effort)',
+    dispatchTabs: 'Onglets · {n}',
+    dispatchCloseTabs: 'Fermer les onglets',
+    dispatchBoardHint: 'Clique une carte pour sauter à cet onglet. Tout te ramène ici.',
+    dispatchNoLive: 'La sortie live reste sur leur page. Ici, juste la liste d’onglets.',
+    dispatchFocus: 'Aller à l’onglet',
+    dispatchGone: 'Onglet fermé',
+    dispatchHint: 'Coche des destinations, puis dispatch. Ctrl+Entrée en choisit une toute seule.',
+    dispatchSend: 'Envoi auto après préremplissage — ça soumet vraiment et ça consomme du quota (best effort)',
+    dispatchSendCode: 'Pas d’envoi auto pour le code (préremplissage seulement, pour l’instant)',
+    dispatchTile: 'Fenêtres côte à côte',
+    dispatchTileHint: 'Ouvre chaque destination dans sa propre fenêtre, calées pour remplir l’écran',
+    dispatchSoon: 'Pas encore de compositeur public — quota seulement',
   },
   zh: {
     brand: 'TOKEN POLICE',
@@ -283,7 +431,7 @@ function t(key, vars) {
 
 function applyI18n() {
   if (typeof document === 'undefined') return;
-  document.documentElement.lang = currentLang() === 'zh' ? 'zh' : 'en';
+  document.documentElement.lang = LANG_HTML[currentLang()] || 'en';
   const brand = document.getElementById('brand-name');
   if (brand) brand.textContent = t('brand');
   const legend = document.getElementById('legend');
@@ -292,8 +440,9 @@ function applyI18n() {
   if (btn && !btn.disabled) btn.textContent = t('refresh');
   const langBtn = document.getElementById('lang');
   if (langBtn) {
-    langBtn.textContent = currentLang() === 'zh' ? 'EN' : '中文';
-    langBtn.title = currentLang() === 'zh' ? 'Switch to English' : '切换到中文';
+    const next = LANG_BTN[currentLang()] || LANG_BTN.en;
+    langBtn.textContent = next.label;
+    langBtn.title = next.title;
   }
   const gearBtn = document.getElementById('gear');
   if (gearBtn) gearBtn.title = t('gearTitle');
@@ -318,7 +467,7 @@ function applyI18n() {
 }
 
 function applyStoredLang(lang) {
-  uiLang = lang === 'zh' ? 'zh' : 'en';
+  uiLang = knownLang(lang);
   applyI18n();
 }
 

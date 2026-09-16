@@ -365,7 +365,7 @@ function activityIds(stage) {
 
 function actLabel(id) {
   const a = typeof ACT_BY_ID !== 'undefined' ? ACT_BY_ID[id] : null;
-  if (a) return currentLang() === 'zh' ? a.zh : a.en;
+  if (a) return a[currentLang()] || a.en;
   return t(id);
 }
 
@@ -758,22 +758,27 @@ var SAYS = {
   high: {
     zh: ['加油，vibe 住', '这波能成', '额度还在，大胆写', '今天额度自由', '再推一把就收工', 'agent 比你还卷', '写就完了', '灵感在，发也在', '来都来了'],
     en: ['vibe coding. don\'t die', 'this one\'s gonna slap', 'quota\'s fat, go wild', 'living that remaining-% life', 'one more push then ship', 'the agent is grinding harder than you', 'just write the thing', 'ideas in, hair in', 'you\'re already here'],
+    fr: ['vibe coding. on lâche rien', 'celle-là va claquer', 'quota en forme, go', 'la belle vie du % restant', 'un dernier push et on ship', 'l\'agent grind plus dur que toi', 'écris, un point c\'est tout', 'les idées y sont, les cheveux aussi', 't\'es déjà lancé'],
   },
   mid: {
     zh: ['再问一句就掉一根', '提示词越写越长，发际线不是', '喝口水，代码又不会跑', '腰开始抗议了', '别坐成一尊佛', 'token 在烧，人别废', '先保存，再站起来', '这需求我看行，椅子不行'],
     en: ['one more prompt, one more follicle', 'prompt got longer. hairline didn\'t', 'sip water. the code will wait', 'your lumbar just filed a ticket', 'you\'ve become furniture', 'tokens burning, human optional?', 'save, then stand', 'the spec is fine. the chair isn\'t'],
+    fr: ['encore un prompt, encore un cheveu', 'le prompt s\'allonge. pas la raie', 'bois une gorgée. le code attendra', 'tes lombaires viennent de poser un ticket', 't\'es devenu un meuble', 'les tokens brûlent, l\'humain optionnel ?', 'sauvegarde, puis lève-toi', 'le spec est bon. la chaise non'],
   },
   low: {
     zh: ['你不休息，我先秃', '发比 token 金贵', '我快见底了你还坐着', '低空飞过重置日', '留点发过年行不行', '再熬我就剩刘海了', '额度和人都见底了', '风好大，我头皮冷'],
     en: ['you stay seated, i go bald', 'hair > tokens. fight me', 'i\'m almost gone and you\'re still typing', 'skating into reset on fumes', 'leave me some hair for the holidays', 'one more all-nighter and it\'s just bangs', 'quota\'s empty. so is my scalp', 'breeze on the scalp. uncool'],
+    fr: ['tu restes assis, moi je pelade', 'les cheveux > les tokens. débat ouvert', 'je suis presque à sec et tu tapes encore', 'on rentre au reset sur les vapeurs', 'laisse-moi deux trois cheveux pour les fêtes', 'encore une nuit blanche et il reste la frange', 'quota à sec. cuir chevelu aussi', 'il y a du vent, j\'ai le crâne à l\'air'],
   },
   due: {
     zh: ['站起来晃两下嘛', '草还在外面长着呢', '动一动，我想留点发', '去做那个，别光点着玩', '起来，vibe 也要呼吸', '摸摸草，字面意思', '椅子会想你的，去吧', '先动，再继续造'],
     en: ['stand up. wiggle. please', 'grass is still growing out there', 'move. i\'d like to keep these', 'go do the thing. don\'t just hover', 'vibe needs oxygen too', 'touch grass. the plant', 'the chair will miss you. go', 'stretch first, then keep building'],
+    fr: ['lève-toi. remue-toi. s\'il te plaît', 'l\'herbe pousse encore, dehors', 'bouge. j\'aimerais garder ceux-là', 'va faire le truc. arrête de survoler', 'le vibe aussi a besoin d\'air', 'touche de l\'herbe. la plante', 'la chaise va te manquer. vas-y', 'étire-toi d\'abord, ensuite on construit'],
   },
   regrow: {
     zh: ['发回来了！', '这下值了', '头皮回温', '根根到位', '谢了，真的', '又是满头的一天', '动得漂亮', '发比额度先回来'],
     en: ["hair's back!", 'worth the wiggle', 'follicles online', 'scalp: restored', 'ok that helped', 'full head. for now', 'nice move', 'tokens stay. hair stays'],
+    fr: ['les cheveux sont de retour !', 'le mouvement valait le coup', 'follicules en ligne', 'cuir chevelu : restauré', 'ok, ça m\'a fait du bien', 'tête pleine. pour l\'instant', 'joli move', 'les tokens restent. les cheveux aussi'],
   },
 };
 var SAY_FIRST_MS = 2200;
@@ -793,7 +798,7 @@ function sayStage(pct, due) {
 
 function sayPool(stage, lang) {
   const pack = SAYS[stage] || SAYS.high;
-  return ((pack[lang === 'zh' ? 'zh' : 'en']) || []).slice();
+  return ((pack[lang] || pack.en) || []).slice();
 }
 
 function pickSay(stage, lang, avoid, rnd) {
@@ -1442,7 +1447,7 @@ if (actsEl && actsEl.addEventListener) {
 const langBtn = document.getElementById('lang');
 if (langBtn) {
   langBtn.addEventListener('click', () => {
-    setLang(currentLang() === 'zh' ? 'en' : 'zh', render);
+    setLang(nextLang(currentLang()), render);
   });
 }
 const shareBtn = document.getElementById('share');

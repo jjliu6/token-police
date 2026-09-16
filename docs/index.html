@@ -3,10 +3,12 @@
   TEMPLATE — do not deploy this file as-is.
   scripts/build-pages.mjs renders it once per language into dist/site/:
     /       English + a tiny script that sends Chinese readers to /zh/
+            and French readers to /fr/
     /en/    English
+    /fr/    French (strings from docs/i18n/fr.mjs)
     /zh/    Chinese (strings from docs/i18n/zh.mjs)
   {{placeholders}} and data-i18n* attributes are filled in at build time.
-  Asset paths are absolute (/icon-128.png) because /en/ and /zh/ live one
+  Asset paths are absolute (/icon-128.png) because /en/, /fr/ and /zh/ live one
   folder deep. Preview with: npm run build:pages && npx serve dist/site
 -->
 <html lang="{{htmlLang}}">
@@ -14,13 +16,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- build:root-redirect -->
-<title data-i18n="meta.title">Token Police — see your remaining Claude Code, Codex, Cursor, Grok &amp; Gemini quota at a glance</title>
+<title data-i18n="meta.title">Token Police — see your remaining AI coding quota at a glance</title>
 <meta name="description" data-i18n-content="meta.description" content="A free, open-source Chrome extension that shows how much usage you have left for Claude Code, Codex, Grok, Cursor, Grok Bot and Gemini — with reset times, burn rate and low-quota alerts. No account, nothing leaves your browser.">
 <link rel="icon" href="/icon-128.png">
 <link rel="canonical" href="{{canonical}}">
-<link rel="alternate" hreflang="en" href="https://token-police.philosophie.ai/en/">
-<link rel="alternate" hreflang="zh-CN" href="https://token-police.philosophie.ai/zh/">
-<link rel="alternate" hreflang="x-default" href="https://token-police.philosophie.ai/en/">
+{{hreflangLinks}}
 <meta property="og:title" data-i18n-content="meta.ogTitle" content="Token Police — your AI coding quota, at a glance">
 <meta property="og:description" data-i18n-content="meta.ogDescription" content="Free Chrome extension: remaining usage for Claude Code, Codex, Cursor, Grok and Gemini in one side panel. Download the latest release.">
 <!-- 1200×630. X / Slack drop the preview if this is the 128px favicon. -->
@@ -32,6 +32,7 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="{{canonical}}">
 <meta property="og:locale" content="{{ogLocale}}">
+{{ogLocaleAlternates}}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" data-i18n-content="meta.ogTitle" content="Token Police — your AI coding quota, at a glance">
 <meta name="twitter:description" data-i18n-content="meta.ogDescription" content="Free Chrome extension: remaining usage for Claude Code, Codex, Cursor, Grok and Gemini in one side panel. Download the latest release.">
@@ -97,6 +98,8 @@
   nav.links a:hover { color: var(--fg); text-decoration: none; }
   .lang, #header-share { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; border: 1px solid var(--line); background: var(--bg-elev); color: var(--fg); border-radius: 999px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
   .lang:hover, #header-share:hover { border-color: var(--fg-faint); text-decoration: none; color: var(--fg); }
+  .langs { display: inline-flex; align-items: center; gap: 6px; }
+  .langs .lang[aria-current="page"] { background: var(--accent-soft); color: var(--accent-strong); border-color: transparent; font-weight: 600; pointer-events: none; }
   #header-share { font: inherit; font-size: 13px; font-weight: 500; appearance: none; }
   #header-share svg { width: 14px; height: 14px; flex: none; }
   .header-tools { display: flex; align-items: center; gap: 8px; }
@@ -238,7 +241,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
         <span data-i18n="nav.share">Share</span>
       </button>
-      <a class="lang" id="lang" href="{{altHref}}" hreflang="{{altHtmlLang}}" lang="{{altHtmlLang}}" title="{{altTitle}}">{{altLabel}}</a>
+      <nav class="langs" aria-label="Language">{{langLinks}}</nav>
     </div>
   </div>
 </header>
@@ -249,7 +252,7 @@
     <div>
       <span class="eyebrow" data-i18n="hero.eyebrow">Free · Open source · Chrome extension</span>
       <h1 data-i18n-html="hero.h1">Know how much AI coding quota you have <span class="hl">left</span> — at a glance.</h1>
-      <p class="lead" data-i18n="hero.lead">One side panel shows your remaining usage for Claude Code, Codex, Cursor, Grok, Grok Bot and Gemini — with reset times, burn rate and low-quota alerts. No account linking, no API keys, and nothing leaves your browser. From the same panel, Dispatch opens one prompt in several of them at once — pre-filled, not sent by default (Chat destinations can opt into auto-send). And a little hair mascot that loses hair as you burn quota and makes you stand up now and then.</p>
+      <p class="lead" data-i18n="hero.lead">One side panel shows your remaining usage for Claude Code, Codex, Cursor, Grok, Grok Bot and Gemini — with reset times, burn rate and low-quota alerts. No account linking, no API keys, and nothing leaves your browser.</p>
 
       <div class="cta">
         <a class="btn btn-primary" id="download" href="https://github.com/jjliu6/token-police/releases/latest/download/token-police.zip">
@@ -273,11 +276,11 @@
         <span class="dot" id="rel-dot2" hidden>·</span>
         <span id="rel-downloads" hidden></span>
       </div>
-      <p class="compat" data-i18n="hero.compat">Works in Chrome and other Chromium browsers (Edge, Brave, Arc). The button always points to the newest build on GitHub — you never download an outdated version.</p>
+      <p class="compat" data-i18n="hero.compat">Works in Chrome and other Chromium browsers (Edge, Brave, Arc). The button always points to the newest version on GitHub.</p>
     </div>
 
     <div class="shot-frame">
-      <div class="shot"><img src="/shot-panel-{{lang}}.png" width="840" height="1520" alt="The side panel showing remaining quota for six coding agents, with the hair mascot floating over the cards" loading="eager"></div>
+      <div class="shot"><img src="/shot-panel-{{assetLang}}.png" width="840" height="1520" alt="The side panel showing remaining quota for six coding agents, with the hair mascot floating over the cards" loading="eager"></div>
       <p class="sample" data-i18n="hero.sample">The real panel, with sample data.</p>
     </div>
   </div>
@@ -312,12 +315,12 @@
       <div class="feat">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 5-8 4 5"/></svg></div>
         <h3 data-i18n="feat.2h">Burn rate &amp; 7-day trend</h3>
-        <p data-i18n="feat.2p">After a few hours of history it estimates how fast you're spending and warns when you'll run out before the next reset. Each card draws a sparkline.</p>
+        <p data-i18n="feat.2p">Once it has a few hours of data, it estimates how fast you're spending and warns when you'll run out before the next reset. Each card draws a sparkline.</p>
       </div>
       <div class="feat">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></div>
-        <h3 data-i18n="feat.3h">Side panel, one click</h3>
-        <p data-i18n="feat.3p">Click the toolbar icon to open the side panel. Quotas stay visible while Refresh scrapes — no extra windows stacked on top. The striped ring on the icon is decorative, not live quota.</p>
+        <h3 data-i18n="feat.3h">Stays in the side panel</h3>
+        <p data-i18n="feat.3p">Click the toolbar icon to open the side panel. Quotas stay visible while Refresh runs — no extra windows stacked on top.</p>
       </div>
       <div class="feat">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/></svg></div>
@@ -326,8 +329,8 @@
       </div>
       <div class="feat">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></div>
-        <h3 data-i18n="feat.5h">Quiet hourly auto-check</h3>
-        <p data-i18n="feat.5p">Once an hour it quietly re-reads your usage pages in background tabs without stealing focus. Hit Refresh any time for a guaranteed update.</p>
+        <h3 data-i18n="feat.5h">Hourly check, in the background</h3>
+        <p data-i18n="feat.5p">Once an hour it re-reads your usage pages in background tabs without stealing focus. Or hit Refresh for a fresh read.</p>
       </div>
       <div class="feat">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.5 8-8 9-4.5-1-8-4.5-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg></div>
@@ -342,26 +345,26 @@
 <section id="dispatch">
   <div class="wrap">
     <span class="eyebrow" data-i18n="dispatch.eyebrow">New in v1.5 · Dispatch</span>
-    <h2 data-i18n="dispatch.h2">One prompt, opened in Claude, ChatGPT, Grok, Gemini, Codex and Cursor.</h2>
-    <p class="lead" data-i18n="dispatch.lead">The Dispatch button in the footer opens a composer. Tick Chat or Code destinations and they come up as real Chrome tabs with the prompt already filled in. By default you still press Send; Chat destinations can opt into auto-send (which really uses quota).</p>
+    <h2 data-i18n="dispatch.h2">One prompt, opened in all of them.</h2>
+    <p class="lead" data-i18n="dispatch.lead">The Dispatch button in the footer opens a composer. Tick Chat or Code and they come up as real Chrome tabs with the prompt already filled in. You still hit Send yourself. Auto-send is optional — and it does spend quota.</p>
     <div class="mascot-grid">
       <div class="mascot-shots">
         <figure>
           <div class="shot"><img src="/dispatch-composer.png" width="840" height="1520" alt="Dispatch composer in the side panel: a prompt, Chat and Code chips, and an Open button" loading="lazy"></div>
-          <figcaption data-i18n="dispatch.cap1">Type a prompt, pick Chat or Code, tick the destinations.</figcaption>
+          <figcaption data-i18n="dispatch.cap1">Type a prompt, pick Chat or Code, tick where it goes.</figcaption>
         </figure>
         <figure>
           <div class="shot"><img src="/dispatch-board.png" width="840" height="1520" alt="Dispatch board listing three opened agent tabs so you can jump back" loading="lazy"></div>
-          <figcaption data-i18n="dispatch.cap2">A board lists the tabs. Click a card to jump back.</figcaption>
+          <figcaption data-i18n="dispatch.cap2">A tab list. Click a card to jump back.</figcaption>
         </figure>
       </div>
       <div>
         <ul class="checks">
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="dispatch.1"><b>Prefill by default, not sent for you.</b> Each tab opens with the prompt in the composer — by default you confirm Send or Start task on that site. Chat destinations can opt into auto-send; Code destinations are always prefill-only.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="dispatch.1"><b>Filled in, not sent.</b> Each tab opens with the prompt in the composer. You confirm Send or Start task on that site. Chat can opt into auto-send; Code always stays fill-only.</span></li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="dispatch.2"><b>Chat vs Code.</b> Chat opens Claude, ChatGPT, Grok and Gemini. Code opens Claude Code, Codex Cloud and Cursor Agents. Grok Bot stays on the quota cards — it has no public web composer.</span></li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="dispatch.3"><b>A board to jump back.</b> After opening, the panel keeps a tab list. Click a card to focus that tab. Live output stays on their page — we don't iframe those sites.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="dispatch.3"><b>A tab list so you can jump back.</b> After opening, the panel keeps a tab list. Click a card to focus that tab. Live output stays on their page.</span></li>
         </ul>
-        <div class="note" data-i18n-html="dispatch.note"><b>Auto-dispatch</b> picks the agent with the most leftover and skips anyone under 15%. The prompt and tab list stay in <code>chrome.storage.local</code>.</div>
+        <div class="note" data-i18n-html="dispatch.note"><b>Auto-dispatch</b> picks the agent with the most leftover and skips anyone under 15%.</div>
       </div>
     </div>
   </div>
@@ -372,21 +375,21 @@
   <div class="wrap">
     <span class="eyebrow" data-i18n="mascot.eyebrow">Take breaks too</span>
     <h2 data-i18n="mascot.h2">A hair mascot that thins while you sit, and makes you stretch.</h2>
-    <p class="lead" data-i18n="mascot.lead">Quota isn't the only thing that runs out while you vibe-code. The panel now comes with a small companion that keeps an eye on you as well.</p>
+    <p class="lead" data-i18n="mascot.lead">Quota isn't the only thing that runs out while you vibe-code. The panel comes with a small companion that keeps an eye on you as well.</p>
     <div class="mascot-grid">
       <div class="mascot-shots">
         <figure>
-          <div class="shot"><img src="/shot-panel-{{lang}}.png" width="840" height="1520" alt="The panel with the hair mascot floating over the quota cards, showing 51% hair left" loading="lazy"></div>
-          <figcaption data-i18n="mascot.cap1">Hair falls over the sit clock; remaining quota is a ceiling.</figcaption>
+          <div class="shot"><img src="/shot-panel-{{assetLang}}.png" width="840" height="1520" alt="The panel with the hair mascot floating over the quota cards, showing 51% hair left" loading="lazy"></div>
+          <figcaption data-i18n="mascot.cap1">Hair falls the longer you sit. Leftover quota is the cap.</figcaption>
         </figure>
         <figure>
-          <div class="shot"><img src="/shot-break-{{lang}}.png" width="840" height="1520" alt="Break time: the quota cards are frosted over and the mascot offers three short activities with a Done button" loading="lazy"></div>
+          <div class="shot"><img src="/shot-break-{{assetLang}}.png" width="840" height="1520" alt="Break time: the quota cards are frosted over and the mascot offers three short activities with a Done button" loading="lazy"></div>
           <figcaption data-i18n="mascot.cap2">Break time: cards frost over until you finish one activity.</figcaption>
         </figure>
       </div>
       <div>
         <ul class="checks">
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="mascot.1"><b>Hair falls while you sit.</b> After a stretch it grows back to full, then thins over 2 hours — or 1 hour if you are burning hard. Remaining quota is a ceiling. Drag it anywhere, or let it wander.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="mascot.1"><b>Hair falls while you sit.</b> After a stretch it grows back to full, then thins over 2 hours — or 1 hour if you are burning hard. Leftover quota is the cap. Drag it anywhere, or let it wander.</span></li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="mascot.2"><b>Every 2 hours it asks you to move</b> (every hour if an agent burned more than 10% in that window). A frosted veil covers the cards and 2–3 random stretch or rest activities appear, drawn from a pool of 100.</span></li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="mascot.3"><b>Pick one, go do it, tap Done.</b> The veil lifts, the hair grows back, and the numbers are readable again.</span></li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="mascot.4"><b>Move reminder</b> (on by default, switch in ⚙): a desktop nudge when an agent burns more than 10% of its quota within 2 hours, at most once every 2 hours per agent. It's a nudge, not a lock — an extension can't stop your terminal.</span></li>
@@ -401,7 +404,7 @@
 <section id="install">
   <div class="wrap">
     <span class="eyebrow" data-i18n="install.eyebrow">Install in 2 minutes</span>
-    <h2 data-i18n="install.h2">No Chrome Web Store, no build step — just a folder.</h2>
+    <h2 data-i18n="install.h2">No store listing — just a folder.</h2>
     <p class="lead" data-i18n="install.lead">The extension ships as a plain .zip. You unzip it once and tell Chrome where the folder is.</p>
 
     <div class="install-grid">
@@ -434,7 +437,7 @@
       <div class="step">
         <div>
           <h3 data-i18n="install.s5h">Click the icon, then Refresh</h3>
-          <p data-i18n="install.s5p">The dashboard opens in Chrome's side panel. Press Refresh to fetch your numbers — a few tabs may flash open and close while it reads each usage page. Switch to 中文 in the header if you prefer.</p>
+          <p data-i18n="install.s5p">The dashboard opens in Chrome's side panel. Press Refresh to fetch your numbers — a few tabs may flash open and close while it reads each usage page.</p>
         </div>
       </div>
     </div>
@@ -444,8 +447,8 @@
       <figure class="demo">
         <p class="lead-in" data-i18n="install.demoLead">Steps 3 and 4, as they look in Chrome (loops every 12 s):</p>
         <div class="vid">
-          <video id="demo-video" autoplay muted loop playsinline preload="metadata" poster="/install-demo-{{lang}}-poster.png" width="1600" height="650">
-            <source src="/install-demo-{{lang}}.webm" type="video/webm">
+          <video id="demo-video" autoplay muted loop playsinline preload="metadata" poster="/install-demo-{{assetLang}}-poster.png" width="1600" height="650">
+            <source src="/install-demo-{{assetLang}}.webm" type="video/webm">
           </video>
         </div>
         <figcaption data-i18n="install.demoCap">Recorded in a real Chrome. Click the video to view it full-screen. The folder picker will be your operating system's own dialog, so it looks a little different.</figcaption>
@@ -463,7 +466,6 @@
       <ul class="checks">
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="upd.1">Once a day the extension asks GitHub what the newest release is. When there is one, the version line at the bottom of the panel turns into a <b>“New version available — download”</b> link.</span></li>
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="upd.2">To update: download the .zip again, replace the contents of your extension folder, then press the ↻ reload button on the extension's card in <code>chrome://extensions</code>. Your settings and history stay.</span></li>
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="upd.3">This page and the Download button are synced with GitHub too: the version shown above is fetched live from the latest release.</span></li>
       </ul>
     </div>
     <div>
@@ -490,7 +492,7 @@
       </details>
       <details>
         <summary data-i18n="faq.2q">Is it safe? What can it access?</summary>
-        <p data-i18n="faq.2a">It only has permission for five domains (claude.ai, chatgpt.com, grok.com, cursor.com, gemini.google.com). It reads the usage numbers shown there, and if you use Dispatch it fills the prompt you typed into those sites' composers — by default it does not send the prompt for you (unless you turn on auto-send for Chat destinations). It cannot see other sites, and it makes no network requests apart from the optional daily version check.</p>
+        <p data-i18n="faq.2a">It only has permission for five domains (claude.ai, chatgpt.com, grok.com, cursor.com, gemini.google.com). It reads the usage numbers shown there. It cannot see other sites, and it makes no network requests apart from the optional daily version check.</p>
       </details>
       <details>
         <summary data-i18n="faq.3q">Which browsers work?</summary>
@@ -510,7 +512,7 @@
       </details>
       <details>
         <summary data-i18n="faq.8q">Does Dispatch send the prompt for me?</summary>
-        <p data-i18n="faq.8a">Not by default. It opens real Chrome tabs and fills the composer, and by default you confirm Send or Start task on each site. If you turn on the Auto-send toggle in the Dispatch panel, Chat destinations will be submitted for you (which really uses quota); Code destinations stay prefill-only. Grok Bot has no public web composer, so it stays on the quota dashboard.</p>
+        <p data-i18n="faq.8a">Not by default. It opens real Chrome tabs and fills the composer — you confirm Send or Start task on each site. Turn on Auto-send and Chat will be submitted for you (that does spend quota); Code always stays fill-only. Grok Bot has no public web composer, so it stays on the quota cards.</p>
       </details>
       <details>
         <summary data-i18n="faq.6q">Can I get the very latest unreleased code?</summary>
@@ -533,8 +535,8 @@
       <a class="btn btn-secondary" href="#install" data-i18n="bottom.how">How to install</a>
     </div>
     <div class="share-block" id="share">
-      <p class="share-label" data-i18n="share.label">Like it? Spread the word.</p>
-      <p id="share-text" hidden data-i18n="share.text">Token Police: see remaining Claude Code, Codex, Cursor, Grok &amp; Gemini quota in one Chrome side panel. Free, open source, nothing leaves your browser.</p>
+      <p class="share-label" data-i18n="share.label">Useful? Send it to a friend.</p>
+      <p id="share-text" hidden data-i18n="share.text">Token Police: remaining AI coding quota in one Chrome side panel. Free, open source, nothing leaves your browser.</p>
       <span id="share-copied" hidden data-i18n="share.copied">Copied</span>
       <div class="share-row">
         <a class="share-btn" data-network="x" target="_blank" rel="noopener noreferrer" href="https://x.com/intent/post">
@@ -567,18 +569,25 @@
 
 <script>
 /* =====================================================================
-   1) Language. Each language is its own page (/en/, /zh/) rendered from
-      this template by scripts/build-pages.mjs, so nothing is translated
-      at runtime. The header link simply points at the other page; we
-      only remember the choice so the root URL (/) can send a returning
-      visitor straight to the language they picked last time.
+   1) Language. Each language is its own page (/en/, /fr/, /zh/) rendered
+      from this template by scripts/build-pages.mjs, so nothing is translated
+      at runtime. The header links point at the other pages; we only remember
+      the choice so the root URL (/) can send a returning visitor straight to
+      the language they picked last time.
    ===================================================================== */
-const LANG = document.documentElement.lang.toLowerCase().startsWith('zh') ? 'zh' : 'en';
-const langLink = document.getElementById('lang');
-langLink.addEventListener('click', () => {
-  try { localStorage.setItem('uiLang', LANG === 'zh' ? 'en' : 'zh'); } catch (e) {}
-  // Keep the reader on the same section (#install, #faq …) after the switch.
-  langLink.href = langLink.pathname + location.hash;
+const LANG = (function () {
+  const raw = (document.documentElement.lang || 'en').toLowerCase();
+  if (raw.indexOf('zh') === 0) return 'zh';
+  if (raw.indexOf('fr') === 0) return 'fr';
+  return 'en';
+})();
+document.querySelectorAll('.langs a').forEach((a) => {
+  a.addEventListener('click', () => {
+    const code = (a.getAttribute('hreflang') || 'en').toLowerCase();
+    const pick = code.indexOf('zh') === 0 ? 'zh' : code.indexOf('fr') === 0 ? 'fr' : 'en';
+    try { localStorage.setItem('uiLang', pick); } catch (e) {}
+    a.href = a.pathname + location.hash;
+  });
 });
 // Click the install demo to watch it full-screen (it's small inside the right-hand column).
 document.querySelector('.demo .vid').addEventListener('click', () => {
@@ -617,15 +626,16 @@ function renderRelease() {
   subs.forEach((el) => { if (el) el.textContent = '.zip · v' + release.version; });
   if (release.publishedAt) {
     const date = new Date(release.publishedAt);
-    const text = new Intl.DateTimeFormat(LANG === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
-    d.textContent = (LANG === 'zh' ? '发布于 ' : 'released ') + text;
+    const loc = LANG === 'zh' ? 'zh-CN' : LANG === 'fr' ? 'fr-FR' : 'en-US';
+    const text = new Intl.DateTimeFormat(loc, { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+    d.textContent = (LANG === 'zh' ? '发布于 ' : LANG === 'fr' ? 'publié le ' : 'released ') + text;
     d.hidden = false;
   }
   if (release.size) { s.textContent = fmtSize(release.size); s.hidden = false; dot.hidden = false; }
   const dl = document.getElementById('rel-downloads');
   if (release.downloads) {
-    const n = new Intl.NumberFormat(LANG === 'zh' ? 'zh-CN' : 'en-US').format(release.downloads);
-    dl.textContent = LANG === 'zh' ? '累计下载 ' + n + ' 次' : n + ' downloads';
+    const n = new Intl.NumberFormat(LANG === 'zh' ? 'zh-CN' : LANG === 'fr' ? 'fr-FR' : 'en-US').format(release.downloads);
+    dl.textContent = LANG === 'zh' ? '累计下载 ' + n + ' 次' : LANG === 'fr' ? n + ' téléchargements' : n + ' downloads';
     dl.hidden = false; document.getElementById('rel-dot2').hidden = false;
   }
 }

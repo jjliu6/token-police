@@ -5,16 +5,18 @@
 // Output layout (what GitHub Pages serves at token-police.philosophie.ai):
 //
 //   /            English, plus a tiny inline script that sends readers whose
-//                stored choice / browser language is Chinese to /zh/, and
-//                rewrites the address bar to /en/ for everyone else. Old
-//                ?lang=zh links keep working through the same script.
+//                stored choice / browser language is Chinese to /zh/ or
+//                French to /fr/, and rewrites the address bar to /en/ for
+//                everyone else. Old ?lang=zh / ?lang=fr links keep working
+//                through the same script.
 //   /en/         English
+//   /fr/         French — every data-i18n* element replaced from docs/i18n/fr.mjs
 //   /zh/         Chinese — every data-i18n* element replaced from docs/i18n/zh.mjs
 //   /<assets>    images, videos, version.json — copied from docs/ unchanged
 //
-// Static hosting maps URL paths to files, so /zh/ only exists if zh/index.html
+// Static hosting maps URL paths to files, so /fr/ only exists if fr/index.html
 // does. That is why these are real files and not a client-side switch: a
-// shared /zh/ link must open Chinese for whoever receives it, JavaScript or
+// shared /fr/ link must open French for whoever receives it, JavaScript or
 // not, and search engines can index each language separately (hreflang).
 //
 // Zero dependencies on purpose: no HTML parser, so the template keeps to a
@@ -35,19 +37,41 @@ const docs = join(root, 'docs');
 const SITE = 'https://token-police.philosophie.ai';
 
 export const LANGS = {
-  en: { htmlLang: 'en', ogLocale: 'en_US', path: '/en/', label: 'EN', switchTitle: 'Switch to English', shareTitle: 'Share this page' },
-  zh: { htmlLang: 'zh-CN', ogLocale: 'zh_CN', path: '/zh/', label: '中文', switchTitle: '切换到中文', shareTitle: '分享这个页面' },
+  en: { htmlLang: 'en', ogLocale: 'en_US', path: '/en/', label: 'EN', switchTitle: 'Switch to English', shareTitle: 'Share this page', assetLang: 'en' },
+  fr: { htmlLang: 'fr', ogLocale: 'fr_FR', path: '/fr/', label: 'FR', switchTitle: 'Passer en français', shareTitle: 'Partager cette page', assetLang: 'en' },
+  zh: { htmlLang: 'zh-CN', ogLocale: 'zh_CN', path: '/zh/', label: '中文', switchTitle: '切换到中文', shareTitle: '分享这个页面', assetLang: 'zh' },
 };
 
-// Things in docs/ that are build inputs, not site files.
 const SKIP = new Set(['index.html', 'i18n']);
 
 function escapeAttr(s) {
-  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  return s.replace(/&/g, '&').replace(/"/g, '"');
 }
 
-// Replace the text/HTML of every element carrying data-i18n / data-i18n-html
-// and the content attribute of every data-i18n-content element.
+function langLinks(current) {
+  return Object.entries(LANGS).map(([code, info]) => {
+    const on = code === current ? ' aria-current="page"' : '';
+    return `<a class="lang"${on} href="${info.path}" hreflang="${info.htmlLang}" lang="${info.htmlLang}" title="${escapeAttr(info.switchTitle)}">${info.label}</a>`;
+  }).join('');
+}
+
+function hreflangLinks() {
+  const alts = [
+    '<link rel="alternate" hreflang="en" href="https://token-police.philosophie.ai/en/">',
+    '<link rel="alternate" hreflang="fr" href="https://token-police.philosophie.ai/fr/">',
+    '<link rel="alternate" hreflang="zh-CN" href="https://token-police.philosophie.ai/zh/">',
+    '<link rel="alternate" hreflang="x-default" href="https://token-police.philosophie.ai/en/">',
+  ];
+  return alts.join('\n');
+}
+
+function ogLocaleAlternates(current) {
+  return Object.entries(LANGS)
+    .filter(([code]) => code !== current)
+    .map(([, info]) => `<meta property="og:locale:alternate" content="${info.ogLocale}">`)
+    .join('\n');
+}
+
 function translate(html, dict, lang) {
   const used = new Set();
   const missing = new Set();
@@ -57,7 +81,6 @@ function translate(html, dict, lang) {
     return null;
   };
 
-  // Elements. Non-greedy up to the first closing tag of the same name.
   html = html.replace(
     /<([a-z][a-z0-9]*)((?:\s[^>]*?)?)\sdata-i18n(-html)?="([^"]+)"([^>]*)>([\s\S]*?)<\/\1>/g,
     (whole, tag, before, isHtml, key, after, inner) => {
@@ -73,7 +96,6 @@ function translate(html, dict, lang) {
     },
   );
 
-  // Attributes (meta description, og:title …).
   html = html.replace(
     /<meta((?:\s[^>]*?)?)\sdata-i18n-content="([^"]+)"([^>]*?)\scontent="([^"]*)"([^>]*)>/g,
     (whole, before, key, mid, content, after) => {
@@ -92,40 +114,41 @@ function translate(html, dict, lang) {
 
 const ROOT_REDIRECT = `<script>
 /* Root URL only. Pick a language page: ?lang= in the URL, then the choice
-   remembered from the header link, then the browser language. Chinese goes to
-   /zh/; everyone else stays on this (English) page but the address bar is
-   rewritten to /en/ so copied links always name the language. */
+   remembered from the header link, then the browser language. Chinese goes
+   to /zh/, French to /fr/; everyone else stays on this (English) page but
+   the address bar is rewritten to /en/ so copied links always name the
+   language. */
 (function () {
+  var allowed = { en: 1, zh: 1, fr: 1 };
   var pick = null;
   try { pick = new URLSearchParams(location.search).get('lang'); } catch (e) {}
-  if (pick !== 'zh' && pick !== 'en') {
+  if (!allowed[pick]) {
     try { pick = localStorage.getItem('uiLang'); } catch (e) {}
   }
-  if (pick !== 'zh' && pick !== 'en') {
-    pick = String(navigator.language || '').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
+  if (!allowed[pick]) {
+    var nav = String(navigator.language || '').toLowerCase();
+    pick = nav.indexOf('zh') === 0 ? 'zh' : nav.indexOf('fr') === 0 ? 'fr' : 'en';
   }
   if (pick === 'zh') { location.replace('/zh/' + location.hash); return; }
+  if (pick === 'fr') { location.replace('/fr/' + location.hash); return; }
   try { history.replaceState(null, '', '/en/' + location.hash); } catch (e) {}
 })();
 </script>`;
 
 export function render(template, { lang, dict, root: isRoot = false }) {
   const me = LANGS[lang];
-  const other = LANGS[lang === 'zh' ? 'en' : 'zh'];
   const canonical = SITE + me.path;
   const values = {
     lang,
     htmlLang: me.htmlLang,
     ogLocale: me.ogLocale,
     canonical,
-    altHref: other.path,
-    altHtmlLang: other.htmlLang,
-    altLabel: other.label,
-    altTitle: other.switchTitle,
+    assetLang: me.assetLang,
     shareTitle: me.shareTitle,
+    langLinks: langLinks(lang),
+    hreflangLinks: hreflangLinks(),
+    ogLocaleAlternates: ogLocaleAlternates(lang),
   };
-  // Strip the template banner comment first: it doesn't ship, and it mentions
-  // {{placeholders}} literally.
   let html = template.replace(/<!--\n\s*TEMPLATE[\s\S]*?-->\n/, '');
   html = translate(html, dict, lang);
   html = html.replace(/\{\{(\w+)\}\}/g, (whole, name) => {
@@ -149,6 +172,7 @@ function copyAssets(from, to) {
 export async function build(outDir) {
   const template = readFileSync(join(docs, 'index.html'), 'utf8');
   const zh = (await import(pathToFileURL(join(docs, 'i18n', 'zh.mjs')).href)).default;
+  const fr = (await import(pathToFileURL(join(docs, 'i18n', 'fr.mjs')).href)).default;
 
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
@@ -157,6 +181,7 @@ export async function build(outDir) {
   const pages = {
     'index.html': render(template, { lang: 'en', dict: null, root: true }),
     'en/index.html': render(template, { lang: 'en', dict: null }),
+    'fr/index.html': render(template, { lang: 'fr', dict: fr }),
     'zh/index.html': render(template, { lang: 'zh', dict: zh }),
   };
   for (const [rel, html] of Object.entries(pages)) {

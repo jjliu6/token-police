@@ -69,9 +69,59 @@ function el(extra) {
   };
 }
 
+function langSwitchEls() {
+  function btn(id, label, title) {
+    const classes = new Set(id === 'en' ? ['on'] : []);
+    const node = el({
+      dataset: { lang: id },
+      textContent: label,
+      title,
+      attrs: {},
+      setAttribute(k, v) { this.attrs[k] = v; },
+      getAttribute(k) { return this.attrs[k]; },
+    });
+    node.classList = {
+      add(c) { classes.add(c); },
+      remove(c) { classes.delete(c); },
+      toggle(c, force) {
+        if (force === true) classes.add(c);
+        else if (force === false) classes.delete(c);
+        else if (classes.has(c)) classes.delete(c);
+        else classes.add(c);
+      },
+      contains(c) { return classes.has(c); },
+    };
+    return node;
+  }
+  const fr = btn('fr', 'FR', 'Français');
+  const en = btn('en', 'EN', 'English');
+  const zh = btn('zh', '中文', '中文');
+  const list = [fr, en, zh];
+  return {
+    fr, en, zh, list,
+    langs: el({
+      querySelectorAll: () => list,
+      addEventListener: noop,
+    }),
+  };
+}
+
+function assertLangPills(switcher, current, where) {
+  const out = [];
+  if (switcher.fr.textContent !== 'FR' || switcher.en.textContent !== 'EN' || switcher.zh.textContent !== '中文') {
+    out.push(`${where}: FR / EN / 中文 must all stay visible`);
+  }
+  for (const id of ['fr', 'en', 'zh']) {
+    const on = switcher[id].classList.contains('on');
+    if (on !== (id === current)) out.push(`${where}: ${id} on=${on}, expected ${id === current}`);
+  }
+  return out;
+}
+
+const langSwitch = langSwitchEls();
 const els = {
   refresh: el(),
-  lang: el(),
+  langs: langSwitch.langs,
   gear: el(),
   settings: el({ hidden: true }),
   'brand-name': el(),
@@ -150,6 +200,7 @@ const popupCtx = {
   document: {
     documentElement: { lang: 'en' },
     getElementById: (id) => els[id] || null,
+    querySelectorAll: (sel) => (sel === '#langs [data-lang]' ? langSwitch.list : []),
     body: { classList: { add: noop }, style: {} },
     addEventListener: (type, fn) => {
       (docListeners[type] = docListeners[type] || []).push(fn);
@@ -186,9 +237,9 @@ if (els['brand-name'].textContent !== 'TOKEN POLICE') {
 if (els.legend.textContent !== 'number = remaining') {
   problems.push(`default legend should be English, got ${JSON.stringify(els.legend.textContent)}`);
 }
-if (els.lang.textContent !== '中文') problems.push(`English UI should show a 中文 button, got ${JSON.stringify(els.lang.textContent)}`);
 if (els.refresh.textContent !== 'Refresh') problems.push(`default refresh label should be Refresh, got ${JSON.stringify(els.refresh.textContent)}`);
-if (els.share.textContent !== 'Share app') problems.push(`default share label should be Share app, got ${JSON.stringify(els.share.textContent)}`);
+problems.push(...assertLangPills(langSwitch, 'en', 'default'));
+if (els.share.textContent !== 'Share') problems.push(`default share label should be Share, got ${JSON.stringify(els.share.textContent)}`);
 if (els.logs.textContent !== 'Logs') problems.push(`default logs label should be Logs, got ${JSON.stringify(els.logs.textContent)}`);
 if (popupCtx.document.documentElement.lang !== 'en') {
   problems.push(`<html lang> should be en by default, got ${popupCtx.document.documentElement.lang}`);
@@ -324,7 +375,7 @@ const shareProblems = [];
 for (const key of ['share', 'shareTitle', 'sharePitch', 'sharePrivacy', 'shareCopy', 'shareCopied', 'shareX', 'shareClose', 'shareTweet', 'shareShotAlt']) {
   if (!ctx.t(key) || ctx.t(key) === key) shareProblems.push(`missing English i18n key ${key}`);
 }
-if (ctx.t('share') !== 'Share app') shareProblems.push(`share should be Share app, got ${ctx.t('share')}`);
+if (ctx.t('share') !== 'Share') shareProblems.push(`share should be Share, got ${ctx.t('share')}`);
 if (ctx.sharePageUrl() !== 'https://token-police.philosophie.ai/') {
   shareProblems.push(`share URL must be the landing page, got ${ctx.sharePageUrl()}`);
 }
@@ -1171,7 +1222,7 @@ console.log('ok  Dragging the mascot follows the cursor instead of the 7.2s wand
 // --- Occasional mouth blurts, stage + language aware ---
 const sayProblems = [];
 ['high', 'mid', 'low', 'due', 'regrow'].forEach((stage) => {
-  ['zh', 'en'].forEach((lang) => {
+  ['zh', 'en', 'fr'].forEach((lang) => {
     const pool = ctx.sayPool(stage, lang);
     if (pool.length < 8) sayProblems.push(`${stage}/${lang} should have ≥8 lines, got ${pool.length}`);
     if (new Set(pool).size !== pool.length) sayProblems.push(`${stage}/${lang} has duplicate lines`);
@@ -1180,6 +1231,9 @@ const sayProblems = [];
     }
     if (lang === 'en' && pool.some((s) => /[\u4e00-\u9fff]/.test(s) || !s.trim())) {
       sayProblems.push(`${stage}/en should be English-only spoken lines`);
+    }
+    if (lang === 'fr' && pool.some((s) => /[\u4e00-\u9fff]/.test(s) || !s.trim() || !/[éèêëàâùûôîïçœæÉÈÀÙÇ'’ ]/.test(s) && !/[a-z]/i.test(s))) {
+      sayProblems.push(`${stage}/fr should be spoken French: ${JSON.stringify(pool)}`);
     }
   });
 });
@@ -1201,7 +1255,7 @@ if (els.say.hidden) sayProblems.push('blurtSay should unhide the bubble');
 if (els.say.textContent !== said) sayProblems.push(`bubble text should match, got ${JSON.stringify(els.say.textContent)}`);
 if (els.say.textContent.includes('<')) sayProblems.push('say must use textContent, not HTML');
 ctx.blurtSay(10, false, () => 0);
-if (ctx.sayPool('low', 'en').indexOf(els.say.textContent) === -1 && ctx.sayPool('low', 'zh').indexOf(els.say.textContent) === -1) {
+if (ctx.sayPool('low', 'en').indexOf(els.say.textContent) === -1 && ctx.sayPool('low', 'zh').indexOf(els.say.textContent) === -1 && ctx.sayPool('low', 'fr').indexOf(els.say.textContent) === -1) {
   sayProblems.push(`10% hair should pick a low-stage line, got ${JSON.stringify(els.say.textContent)}`);
 }
 const grewLine = ctx.blurtSay(100, false, () => 0, 'regrow');
@@ -1288,10 +1342,10 @@ if (!htmlZh.includes('自动 6%')) zhProblems.push('Chinese card should show 自
 if (!htmlZh.includes('绘图 1%')) zhProblems.push('Chinese card should show 绘图 1%');
 if (!htmlZh.includes('>剩余<')) zhProblems.push('Chinese card should say 剩余');
 if (htmlZh.includes('>left<')) zhProblems.push('Chinese card should not say left');
-if (els.lang.textContent !== 'EN') zhProblems.push(`Chinese UI should show an EN button, got ${JSON.stringify(els.lang.textContent)}`);
 if (els.refresh.textContent !== '刷新') zhProblems.push(`Chinese refresh label should be 刷新, got ${JSON.stringify(els.refresh.textContent)}`);
-if (els.share.textContent !== '推荐应用') zhProblems.push(`Chinese share label should be 推荐应用, got ${JSON.stringify(els.share.textContent)}`);
-if (els.logs.textContent !== '抓取日志') zhProblems.push(`Chinese logs label should be 抓取日志, got ${JSON.stringify(els.logs.textContent)}`);
+zhProblems.push(...assertLangPills(langSwitch, 'zh', 'zh'));
+if (els.share.textContent !== '分享') zhProblems.push(`Chinese share label should be 分享, got ${JSON.stringify(els.share.textContent)}`);
+if (els.logs.textContent !== '日志') zhProblems.push(`Chinese logs label should be 日志, got ${JSON.stringify(els.logs.textContent)}`);
 if (els['share-title'].textContent !== '推荐 Token Police') {
   zhProblems.push(`Chinese share title, got ${JSON.stringify(els['share-title'].textContent)}`);
 }
@@ -1325,21 +1379,49 @@ if (zhProblems.length) {
 }
 console.log('ok  中文 toggle switches dashboard strings and persists uiLang=zh');
 
+ctx.setLang('fr');
+if (store.uiLang !== 'fr' || ctx.currentLang() !== 'fr') {
+  console.error('expected uiLang/currentLang fr, got', store.uiLang, ctx.currentLang());
+  process.exit(1);
+}
+const htmlFr = ctx.card('grok-build', grok, []);
+const frProblems = [];
+if (!htmlFr.includes('>restant<')) frProblems.push('French card should say restant');
+if (htmlFr.includes('>left<') || htmlFr.includes('>剩余<')) frProblems.push('French card should not say left/剩余');
+if (els.refresh.textContent !== 'Actualiser') frProblems.push(`French refresh, got ${JSON.stringify(els.refresh.textContent)}`);
+frProblems.push(...assertLangPills(langSwitch, 'fr', 'fr'));
+if (els.share.textContent !== 'Partager') frProblems.push(`French share, got ${JSON.stringify(els.share.textContent)}`);
+if (els.logs.textContent !== 'Journaux') frProblems.push(`French logs, got ${JSON.stringify(els.logs.textContent)}`);
+if (popupCtx.document.documentElement.lang !== 'fr') {
+  frProblems.push(`<html lang> should be fr after toggle, got ${popupCtx.document.documentElement.lang}`);
+}
+if (els['share-shot'].src !== 'icons/share-preview-en.webp') {
+  frProblems.push(`French share card reuses the English screenshot, got ${JSON.stringify(els['share-shot'].src)}`);
+}
+if (frProblems.length) {
+  console.error(htmlFr);
+  console.error(frProblems.join('\n'));
+  process.exit(1);
+}
+console.log('ok  FR toggle switches dashboard strings and persists uiLang=fr');
+
 ctx.setLang('en');
 if (ctx.currentLang() !== 'en' || store.uiLang !== 'en') {
   console.error('switching back to English failed', ctx.currentLang(), store.uiLang);
   process.exit(1);
 }
-if (els.lang.textContent !== '中文') {
-  console.error('English UI should show 中文 again, got', els.lang.textContent);
+const enRestore = assertLangPills(langSwitch, 'en', 'en-restore');
+if (enRestore.length) {
+  console.error(enRestore.join('\n'));
   process.exit(1);
 }
 console.log('ok  EN toggle restores English');
 
 const savedStore = { agents: { 'grok-build': grok }, history: [], uiLang: 'zh' };
+const langSwitch2 = langSwitchEls();
 const els2 = {
   refresh: el(),
-  lang: el(),
+  langs: langSwitch2.langs,
   'brand-name': el(),
   legend: el(),
   grid: el(),
@@ -1377,6 +1459,7 @@ const reloadCtxObj = {
   document: {
     documentElement: { lang: 'en' },
     getElementById: (id) => els2[id] || null,
+    querySelectorAll: (sel) => (sel === '#langs [data-lang]' ? langSwitch2.list : []),
     body: { classList: { add: noop }, style: {} },
   },
   location: { href: 'chrome-extension://id/popup.html' },
@@ -1395,8 +1478,8 @@ if (reloadCtx.currentLang() !== 'zh') {
   console.error('saved uiLang=zh should reload as Chinese, got', reloadCtx.currentLang());
   process.exit(1);
 }
-if (els2.lang.textContent !== 'EN' || !els2.grid.innerHTML.includes('剩余')) {
-  console.error('reloaded Chinese dashboard mismatch', els2.lang.textContent, els2.grid.innerHTML);
+if (assertLangPills(langSwitch2, 'zh', 'reload').length || !els2.grid.innerHTML.includes('剩余')) {
+  console.error('reloaded Chinese dashboard mismatch', assertLangPills(langSwitch2, 'zh', 'reload'), els2.grid.innerHTML);
   process.exit(1);
 }
 console.log('ok  Persisted uiLang=zh is restored on next open');

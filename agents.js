@@ -36,11 +36,11 @@ const AGENTS = [
     name: 'Cursor',
     color: '#6E9BF5',
     kind: 'code',
-    page: 'https://cursor.com/dashboard/usage',
-    scrape: [
-      'https://cursor.com/dashboard/usage?cawrefresh=1',
-      'https://cursor.com/dashboard/spending?cawrefresh=1',
-    ],
+    // 额度百分比（Cursor Models / Other Models）、套餐、重置时间全在 spending 页上，
+    // 和 Grok Bot 共用同一页。usage 页只多给一个"累计 token 总数"，对"看还剩多少额度"
+    // 这个主业可有可无，所以不抓它 —— 少开一个重页，自动刷新的失败面直接减半。
+    page: 'https://cursor.com/dashboard/spending',
+    scrape: ['https://cursor.com/dashboard/spending?cawrefresh=1'],
     foreground: true,
   },
   {

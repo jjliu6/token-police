@@ -255,7 +255,7 @@ await tick(15);
 const all = createdTabs.slice(before2).map((o) => o.url);
 const spending = all.filter((u) => u.startsWith('https://cursor.com/dashboard/spending'));
 if (spending.length !== 1) problems.push(`shared spending page should open once, got ${JSON.stringify(all)}`);
-if (!all.some((u) => u.startsWith('https://cursor.com/dashboard/usage'))) problems.push('cursor usage page should still open');
+if (all.some((u) => u.startsWith('https://cursor.com/dashboard/usage'))) problems.push('cursor usage page should no longer be scraped');
 
 // 12) 手动 Refresh：也去重；Cursor 抓到、Grok Bot 没抓到 → grok-bot 标为 missing（不是 fail）
 // 假标签页一打开就"抓完关掉"，整轮刷新几毫秒就结束；所以先把 cursor/gemini 的数据

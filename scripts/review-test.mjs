@@ -77,9 +77,14 @@ check(sessionToMarkdown(session).includes('login-bug.png'), 'markdown lists atta
 
 const claude = dispatchById('claude-chat');
 const job = makeReviewJob(claude, short, session);
-check(job.send === false, 'review job must never auto-send');
+check(job.send === false, 'review job defaults to prefill (no auto-send)');
 check(job.fill === 'script', 'Claude chat stays script-fill');
 check(job.prompt.includes('Independently review'), 'job carries the assembled prompt');
+const jobSend = makeReviewJob(claude, short, session, true);
+check(jobSend.send === true, 'Chat reviewer may auto-send when the user opts in');
+const grok = dispatchById('grok-build');
+check(makeReviewJob(grok, short, session, true).send === true, 'Grok chat may auto-send when opted in');
+check(makeReviewJob(grok, short, session, false).send === false, 'Grok stays prefill when the toggle is off');
 
 const claudeCode = dispatchById('claude-code');
 const tiny = reviewPayload({
@@ -88,21 +93,21 @@ const tiny = reviewPayload({
   sessionUrl: 'https://chatgpt.com/c/x',
   conversation: [{ role: 'user', text: 'hi' }, { role: 'assistant', text: 'hello' }],
 }, 'Review this.');
-const qJob = makeReviewJob(claudeCode, tiny, { conversation: [] });
+const qJob = makeReviewJob(claudeCode, tiny, { conversation: [] }, true);
 check(qJob.fill === 'query', `short Claude Code review may use ?prompt=, got ${qJob.fill}`);
-check(qJob.send === false, 'Claude Code review still does not auto-send');
+check(qJob.send === false, 'Claude Code review must not auto-send even when requested');
 check(qJob.url.includes('prompt='), 'short query fill keeps the prompt param');
 
-const longJob = makeReviewJob(claudeCode, long, longSession);
-check(longJob.send === false, 'long review never auto-sends');
+const longJob = makeReviewJob(claudeCode, long, longSession, true);
+check(longJob.send === false, 'long Claude Code review never auto-sends');
 check(longJob.fill === 'script', 'long Claude Code review cannot use ?prompt=');
 check(!/[?&]prompt=/.test(longJob.url), `long review must drop the URL prompt, got ${longJob.url}`);
 check(longJob.attachName === 'conversation.md', 'long job carries the markdown attachment');
 
 const codeAgent = dispatchById('codex');
-const codeJob = makeReviewJob(codeAgent, short, session);
+const codeJob = makeReviewJob(codeAgent, short, session, true);
 check(codeJob.repo === 'jjliu6/token-police', `code reviewer gets detected repo, got ${codeJob.repo}`);
-check(codeJob.send === false, 'Codex review is prefill only');
+check(codeJob.send === false, 'Codex review is prefill only even when send is requested');
 
 if (problems.length) {
   console.error(problems.join('\n'));

@@ -1527,6 +1527,7 @@ let dispatchShake = false;
 let crosscheckPromptStored = '';
 let crosscheckReviewer = 'claude-chat';
 let crosscheckConfirm = false;
+let crosscheckAutoSend = false;
 let crosscheckSession = null;
 let crosscheckStatus = '';
 let crosscheckStatusKind = '';
@@ -1553,7 +1554,7 @@ function setCrosscheckOpen(on) {
 
 function persistCrosscheck() {
   if (!chrome.storage || !chrome.storage.local) return;
-  const payload = { crosscheckReviewer };
+  const payload = { crosscheckReviewer, crosscheckAutoSend };
   if (crosscheckPromptStored.trim()) payload.crosscheckPrompt = crosscheckPromptStored;
   else if (chrome.storage.local.remove) chrome.storage.local.remove('crosscheckPrompt');
   chrome.storage.local.set(payload);
@@ -1692,8 +1693,21 @@ function renderCrosscheck() {
       </button>`;
     }).join('');
   }
+  const sendAllowed = !!(agent && canAutoSend(agent));
+  const sendTog = document.getElementById('crosscheck-send');
+  if (sendTog) {
+    sendTog.disabled = !sendAllowed;
+    sendTog.checked = sendAllowed && crosscheckAutoSend;
+    const wrap = sendTog.closest ? sendTog.closest('.sendtog') : null;
+    if (wrap) wrap.classList.toggle('dim', !sendAllowed);
+  }
+  const sendLabel = document.getElementById('crosscheck-send-label');
+  if (sendLabel) sendLabel.textContent = sendAllowed ? t('dispatchSend') : t('dispatchSendCode');
   const go = document.getElementById('crosscheck-go');
-  if (go) go.textContent = agent ? t('crosscheckGo', { name: agent.name }) : t('crosscheckGoNeed');
+  if (go) {
+    if (!agent) go.textContent = t('crosscheckGoNeed');
+    else go.textContent = t((sendAllowed && crosscheckAutoSend) ? 'crosscheckGoSend' : 'crosscheckGo', { name: agent.name });
+  }
   const note = document.getElementById('crosscheck-note');
   if (note) {
     const payload = (crosscheckSession && crosscheckSession.ok && typeof reviewPayload === 'function')
@@ -1720,15 +1734,14 @@ function runCrosscheck() {
   }
   const payload = reviewPayload(crosscheckSession, crosscheckPromptStored);
   if (payload.useFile) downloadConversationMd(payload.attachName, payload.attachText);
-  const job = makeReviewJob(agent, payload, crosscheckSession);
-  job.send = false;
+  const job = makeReviewJob(agent, payload, crosscheckSession, crosscheckAutoSend);
   chrome.runtime.sendMessage({ type: 'reviewOpen', job }, (opened) => {
     if (chrome.runtime.lastError) {
       if (note) note.textContent = t('crosscheckError');
       return;
     }
     const one = (opened && opened[0]) || job;
-    if (note) note.textContent = t('crosscheckOpened', { name: agent.name });
+    if (note) note.textContent = t(job.send ? 'crosscheckOpenedSent' : 'crosscheckOpened', { name: agent.name });
     if (one && one.tabId != null) {
       chrome.runtime.sendMessage({ type: 'dispatchFocus', tabId: one.tabId, url: one.url });
     }
@@ -1768,6 +1781,19 @@ if (crosscheckChips && crosscheckChips.addEventListener) {
     const id = n && n.dataset && n.dataset.agent;
     if (!id || !dispatchById(id)) return;
     crosscheckReviewer = id;
+    persistCrosscheck();
+    renderCrosscheck();
+  });
+}
+const crosscheckSendEl = document.getElementById('crosscheck-send');
+if (crosscheckSendEl && crosscheckSendEl.addEventListener) {
+  crosscheckSendEl.addEventListener('change', () => {
+    const agent = dispatchById(crosscheckReviewer);
+    if (!agent || !canAutoSend(agent)) {
+      crosscheckSendEl.checked = false;
+      return;
+    }
+    crosscheckAutoSend = !!crosscheckSendEl.checked;
     persistCrosscheck();
     renderCrosscheck();
   });
@@ -2210,9 +2236,10 @@ if (chrome.storage && chrome.storage.local && chrome.storage.local.get) {
     // "Tabs · N" re-entry button reports a stale count.
     pruneDispatchJobs(() => renderDispatch());
   });
-  chrome.storage.local.get(['crosscheckPrompt', 'crosscheckReviewer'], (res) => {
+  chrome.storage.local.get(['crosscheckPrompt', 'crosscheckReviewer', 'crosscheckAutoSend'], (res) => {
     if (typeof res.crosscheckPrompt === 'string') crosscheckPromptStored = res.crosscheckPrompt;
     if (typeof res.crosscheckReviewer === 'string') crosscheckReviewer = res.crosscheckReviewer;
+    if (typeof res.crosscheckAutoSend === 'boolean') crosscheckAutoSend = res.crosscheckAutoSend;
     renderCrosscheck();
   });
 }

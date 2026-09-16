@@ -138,15 +138,16 @@ function reviewPayload(session, instruction) {
   };
 }
 
-// Always prefill. Never auto-send — v1, and canAutoSend is already off for
-// Code. Long Claude Code reviews cannot use ?prompt= (URL cap); switch those
-// to script fill. A conversation.md attachment also forces script fill.
-function makeReviewJob(agent, payload, session) {
+// Prefill by default. Auto-send is the same gate as Dispatch: only chat
+// script-fill surfaces (`canAutoSend()`), and only when the caller passes
+// send=true. Code reviewers stay prefill-only. Long Claude Code reviews cannot
+// use ?prompt= (URL cap); switch those to script fill. A conversation.md
+// attachment also forces script fill.
+function makeReviewJob(agent, payload, session, send) {
   const meta = detectGithubContext(session);
   const text = (payload && payload.prompt) || '';
   const repo = (agent && agent.kind === 'code') ? (meta.repository || '') : '';
-  const job = makeDispatchJob(agent, text, repo, false, false);
-  job.send = false;
+  const job = makeDispatchJob(agent, text, repo, false, !!send);
   if (payload && payload.attachName && payload.attachText) {
     job.attachName = payload.attachName;
     job.attachText = payload.attachText;
@@ -159,6 +160,8 @@ function makeReviewJob(agent, payload, session) {
       job.url = u.toString();
     } catch (e) {}
     job.fill = 'script';
+    // Still a coding target — canAutoSend stays false even after we drop query fill.
+    job.send = false;
   }
   return job;
 }

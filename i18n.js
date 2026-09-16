@@ -1,8 +1,15 @@
-// UI strings. Default English; user can switch to Chinese and it is stored.
+// UI strings. Default English; user can switch to French or Chinese and it is stored.
 let uiLang = 'en';
 
+const UI_LANGS = ['en', 'fr', 'zh'];
+const LANG_HTML = { en: 'en', fr: 'fr', zh: 'zh' };
+
+function knownLang(lang) {
+  return UI_LANGS.indexOf(lang) >= 0 ? lang : 'en';
+}
+
 function currentLang() {
-  return uiLang === 'zh' ? 'zh' : 'en';
+  return knownLang(uiLang);
 }
 
 const I18N = {
@@ -19,7 +26,7 @@ const I18N = {
     pctLeft: '{n}% left',
     thisPeriod: 'This period',
     empty: 'No data yet — click "Refresh", or open its usage page in a normal tab.',
-    firstTime: 'First time? Click "Refresh" to fetch data.',
+    firstTime: 'First time? Click "Refresh" to pull your numbers.',
     updated: 'Updated {time}',
     fetchingHint: 'Fetching… tabs may flash open and close. Results stay in this side panel.',
     justNow: 'just now',
@@ -53,7 +60,7 @@ const I18N = {
     builtBy: 'Built by {name} at {org} · MIT License · {src}',
     creditsSrc: 'Source on GitHub',
     disclaimer: 'Unofficial. Not affiliated with Anthropic, OpenAI, xAI, Cursor or Google. It only reads usage numbers already shown on each product\'s own page.',
-    share: 'Share app',
+    share: 'Share',
     shareTitle: 'Share Token Police',
     sharePitch: 'Remaining Claude Code, Codex, Cursor, Grok & Gemini quota in one Chrome side panel. Free, open source — nothing leaves your browser.',
     sharePrivacy: 'Only the product link is shared. Your quota, logs, and account data are never included.',
@@ -118,7 +125,7 @@ const I18N = {
     dispatchBoard: 'All',
     dispatchChat: 'Chat',
     dispatchCode: 'Code',
-    dispatchPlaceholder: 'Type a prompt, then tick one or more destinations…',
+    dispatchPlaceholder: 'Type a prompt, then pick where it goes…',
     dispatchRepo: 'Repo',
     dispatchAuto: 'Auto-dispatch',
     dispatchMulti: 'Dispatch {n}',
@@ -134,12 +141,147 @@ const I18N = {
     dispatchNoLive: 'Live output stays on their page. This panel keeps the tab list.',
     dispatchFocus: 'Jump to tab',
     dispatchGone: 'Tab was closed',
-    dispatchHint: 'Tick destinations, then dispatch. Ctrl+Enter auto-picks one.',
+    dispatchHint: 'Type a prompt, pick where it goes. Ctrl+Enter auto-picks one.',
     dispatchSend: 'Auto-send after prefill — actually submits & uses quota (best effort)',
     dispatchSendCode: 'Auto-send off for coding targets (prefill only for now)',
     dispatchTile: 'Tile windows side by side',
     dispatchTileHint: 'Opens each destination as its own window, arranged to fill the screen',
     dispatchSoon: 'No public composer yet — quota only',
+  },
+  fr: {
+    brand: 'TOKEN POLICE',
+    legend: 'le chiffre = restant',
+    themeTitle: 'Thème : {mode} (cliquez pour changer)',
+    theme_auto: 'Auto',
+    theme_light: 'Clair',
+    theme_dark: 'Sombre',
+    refresh: 'Actualiser',
+    fetching: 'Chargement…',
+    left: 'restant',
+    pctLeft: '{n} % restants',
+    thisPeriod: 'Cette période',
+    empty: 'Rien pour l’instant — clique « Actualiser », ou ouvre la page d’usage dans un onglet normal.',
+    firstTime: 'Première fois ? Clique « Actualiser » pour récupérer les chiffres.',
+    updated: 'Maj {time}',
+    fetchingHint: 'Récupération… des onglets peuvent clignoter. Les résultats restent dans ce panneau.',
+    justNow: 'à l’instant',
+    minsAgo: 'il y a {n} min',
+    hoursAgo: 'il y a {n} h',
+    daysAgo: 'il y a {n} j',
+    resettingSoon: 'reset imminent',
+    resetInDays: 'reset dans {n} j',
+    resetInHours: 'reset dans {n} h',
+    resetInMins: 'reset dans {n} min',
+    burnCollecting: 'Cadence : on collecte… (pas assez de données)',
+    burnBarely: 'Presque rien consommé récemment',
+    burnTillReset: 'Cadence ~{n} %/j · tient jusqu’au reset',
+    burnEmptyHours: 'vide dans ~{n} h',
+    burnEmptyDays: 'vide dans ~{n} j',
+    burnBefore: ' (avant le reset !)',
+    burnLine: 'Cadence ~{n} %/j · {eta}',
+    credits: 'crédits {n}',
+    tokens: '{n} tokens',
+    tracked: 'Suivis :',
+    gearTitle: 'Réglages',
+    autoCheck: 'Vérif. auto chaque heure',
+    autoCheckTip: 'Chaque heure, re-vérifie discrètement tous les agents cochés dans des onglets en arrière-plan — sans jamais voler le focus. Une page qui ne se rend pas en fond (ça arrive avec Cursor/Grok) garde sa dernière valeur ; clique Actualiser pour un vrai refresh.',
+    notifyLow: 'Alertes quota bas',
+    notifyLowTip: 'Une notif dès qu’un agent suivi passe sous 15 % (puis sous 5 %) restants.',
+    checkUpdates: 'Vérifier les mises à jour',
+    checkUpdatesTip: 'Une fois par jour, demande à GitHub quelle est la dernière version (aucun compte ni donnée d’usage n’est envoyé) et affiche un bandeau en bas s’il y en a une plus récente.',
+    versionTitle: 'Version installée — clique pour ouvrir la page de téléchargement',
+    upToDate: 'à jour',
+    updateAvail: 'Nouvelle version {v} — télécharger ↗',
+    builtBy: 'Fait par {name} chez {org} · Licence MIT · {src}',
+    creditsSrc: 'Code sur GitHub',
+    disclaimer: 'Non officiel. Aucun lien avec Anthropic, OpenAI, xAI, Cursor ou Google. L’extension ne lit que les chiffres déjà affichés sur la page d’usage de chaque produit.',
+    share: 'Partager',
+    shareTitle: 'Partager Token Police',
+    sharePitch: 'Le quota restant de Claude Code, Codex, Cursor, Grok et Gemini, dans un seul panneau Chrome. Gratuit, open source — rien ne quitte ton navigateur.',
+    sharePrivacy: 'Seul le lien du produit est partagé. Ton quota, tes logs et tes comptes restent ici.',
+    shareCopy: 'Copier le lien',
+    shareCopied: 'Copié',
+    shareX: 'Partager sur X',
+    shareClose: 'Fermer',
+    shareTweet: 'Token Police : le quota restant de Claude, Codex, Cursor, Grok et Gemini dans un panneau Chrome. {url}',
+    shareShotAlt: 'Aperçu du panneau Token Police',
+    logs: 'Journaux',
+    logsClose: 'Fermer',
+    logsAll: 'Tous',
+    logsSuccess: 'OK',
+    logsFailure: 'Échec',
+    logsJson: 'Exporter JSON',
+    logsCsv: 'Exporter CSV',
+    logsClear: 'Vider les journaux',
+    logsEmpty: 'Pas encore de journal de capture.',
+    logManual: 'manuel',
+    logAutomatic: 'auto',
+    logPage: 'page',
+    stale2h: 'Données peut-être périmées',
+    stale24h: 'Valeur en cache, pas le quota actuel',
+    lastSuccess: 'Dernier OK : {time}',
+    lastAttempt: 'Dernière tentative : {time}',
+    lowTitle: '{name} : {n} % restants',
+    lowBody: 'Le quota touche à sa fin.',
+    lowBodyR: 'Le quota touche à sa fin. Reset {r}.',
+    openPage: 'Ouvrir la page',
+    fetchFailed: 'Le dernier refresh n’a pas pu lire cette page — tu es peut-être déconnecté.',
+    sectionMissing: 'La page spending de Cursor n’a pas de bloc Grok Bot — décoche-le dans ⚙ si tu ne l’utilises pas.',
+    spark7d: '% restant — 7 derniers jours',
+    showHair: 'Petit chauve',
+    hairLabel: 'CHEVEUX',
+    showHairTip: 'Un petit bonhomme qui flotte sur le tableau. Ses cheveux tombent tant que tu restes assis — 2 h d’habitude, 1 h si un agent grille fort. Le quota restant plafonne. Finis un étirement, ça repousse ; ça revient aussi au reset. Tu peux le glisser, ou le laisser se balader.',
+    hairTip: 'Cheveux : {n} % — ça tombe avec l’horloge d’assise (1 h si ça brûle, 2 h sinon). Finis un mouvement pour que ça repousse.',
+    actHint: 'Choisis-en une — fais-la, les cheveux reviennent.',
+    actDoing: 'En cours : {act}',
+    actDoingNote: 'Vas-y. Reviens et appuie sur « C’est fait » : les cheveux reviennent, les chiffres aussi.',
+    actDone: 'C’est fait — les cheveux sont de retour',
+    moveReminder: 'Rappel de bouger',
+    moveReminderTip: 'Quand un agent suivi brûle plus de 10 % de son quota en 2 heures, une notif te pousse à te lever (au plus une fois toutes les 2 h par agent).',
+    moveTitle: '{name} : {n} % grillés en 2 h 🔥',
+    moveBody: 'Lève-toi, étire-toi, va toucher de l’herbe. Pas de mouvement, pas de vibe coding.',
+    weeklyAll: 'Hebdo (tous modèles)',
+    session5h: 'Session (5 h)',
+    weekly: 'Hebdo',
+    fiveHour: 'Limite 5 h',
+    weeklyGrok: 'Hebdo (SuperGrok)',
+    cursorModels: 'Modèles Cursor',
+    otherModels: 'Autres modèles',
+    currentUsage: 'Usage actuel',
+    chat: 'Chat',
+    build: 'Build',
+    auto: 'Auto',
+    imagine: 'Img',
+    voice: 'Voix',
+    api: 'API',
+    dispatch: 'Dispatch',
+    dispatchOpen: 'Ouvrir Dispatch',
+    dispatchFold: 'Replier Dispatch',
+    dispatchBoard: 'Tout',
+    dispatchChat: 'Chat',
+    dispatchCode: 'Code',
+    dispatchPlaceholder: 'Écris un prompt, puis coche où ça part…',
+    dispatchRepo: 'Dépôt',
+    dispatchAuto: 'Dispatch auto',
+    dispatchMulti: 'Dispatcher {n}',
+    dispatchSelectReady: 'Tout cocher (prêts)',
+    dispatchParallel: 'Tout ouvrir',
+    dispatchNeed: 'Écris d’abord un prompt',
+    dispatchEmpty: 'Aucun agent de cette catégorie au-dessus de 15 %',
+    dispatchOpenedN: '{n} onglets ouverts · prérempli seulement, pas envoyé',
+    dispatchOpenedNSent: '{n} onglets ouverts · envoi auto (best effort)',
+    dispatchTabs: 'Onglets · {n}',
+    dispatchCloseTabs: 'Fermer les onglets',
+    dispatchBoardHint: 'Clique une carte pour sauter à cet onglet. Tout te ramène ici.',
+    dispatchNoLive: 'La sortie live reste sur leur page. Ici, juste la liste d’onglets.',
+    dispatchFocus: 'Aller à l’onglet',
+    dispatchGone: 'Onglet fermé',
+    dispatchHint: 'Écris un prompt, coche où ça part. Ctrl+Entrée en choisit une toute seule.',
+    dispatchSend: 'Envoi auto après préremplissage — ça soumet vraiment et ça consomme du quota (best effort)',
+    dispatchSendCode: 'Pas d’envoi auto pour le code (préremplissage seulement, pour l’instant)',
+    dispatchTile: 'Fenêtres côte à côte',
+    dispatchTileHint: 'Ouvre chaque destination dans sa propre fenêtre, toutes calées pour remplir l’écran',
+    dispatchSoon: 'Pas encore de compositeur public — quota seulement',
   },
   zh: {
     brand: 'TOKEN POLICE',
@@ -154,7 +296,7 @@ const I18N = {
     pctLeft: '剩 {n}%',
     thisPeriod: '本周期',
     empty: '暂无数据 — 点「刷新」，或在普通标签页打开对应额度页面。',
-    firstTime: '第一次用？点「刷新」拉取数据。',
+    firstTime: '第一次用？点「刷新」把数字拉下来。',
     updated: '{time} 更新',
     fetchingHint: '正在抓取… 标签页会闪一下自动开关，结果会留在这个侧边栏里。',
     justNow: '刚刚',
@@ -188,7 +330,7 @@ const I18N = {
     builtBy: '由 {name} @ {org} 构建 · MIT 协议 · {src}',
     creditsSrc: 'GitHub 源码',
     disclaimer: '非官方项目，与 Anthropic、OpenAI、xAI、Cursor、Google 均无关联。它只读取各产品页面上已经展示的用量数字。',
-    share: '推荐应用',
+    share: '分享',
     shareTitle: '推荐 Token Police',
     sharePitch: '一个 Chrome 侧边栏看清 Claude Code、Codex、Cursor、Grok、Gemini 还剩多少额度。免费开源，数据不出浏览器。',
     sharePrivacy: '仅分享产品介绍和链接，不会包含你的额度、日志或账户数据。',
@@ -198,7 +340,7 @@ const I18N = {
     shareClose: '关闭',
     shareTweet: 'Token Police：一个 Chrome 侧边栏看清 Claude、Codex、Cursor、Grok、Gemini 还剩多少额度。{url}',
     shareShotAlt: 'Token Police 面板预览',
-    logs: '抓取日志',
+    logs: '日志',
     logsClose: '关闭',
     logsAll: '全部',
     logsSuccess: '成功',
@@ -206,7 +348,7 @@ const I18N = {
     logsJson: '导出 JSON',
     logsCsv: '导出 CSV',
     logsClear: '清除日志',
-    logsEmpty: '暂无抓取日志。',
+    logsEmpty: '暂无日志。',
     logManual: '手动',
     logAutomatic: '自动',
     logPage: '页面',
@@ -253,7 +395,7 @@ const I18N = {
     dispatchBoard: '全部',
     dispatchChat: '对话',
     dispatchCode: '代码',
-    dispatchPlaceholder: '输入提示词，勾选一个或多个入口…',
+    dispatchPlaceholder: '输入提示词，勾选要打开的…',
     dispatchRepo: '仓库',
     dispatchAuto: '自动指派',
     dispatchMulti: '指派 {n} 个',
@@ -269,7 +411,7 @@ const I18N = {
     dispatchNoLive: '实时输出在对方页面。这边只留任务列表，可随时跳回去。',
     dispatchFocus: '跳到标签',
     dispatchGone: '标签已关',
-    dispatchHint: '勾选入口再指派。Ctrl+Enter 自动派最合适的一个。',
+    dispatchHint: '输入提示词，勾选要打开的。Ctrl+Enter 自动派最合适的一个。',
     dispatchSend: '预填后自动发送——会真正提交、消耗额度（尽力而为）',
     dispatchSendCode: '代码类暂不支持自动发送（目前只预填）',
     dispatchTile: '窗口并排铺开',
@@ -291,17 +433,19 @@ function t(key, vars) {
 
 function applyI18n() {
   if (typeof document === 'undefined') return;
-  document.documentElement.lang = currentLang() === 'zh' ? 'zh' : 'en';
+  document.documentElement.lang = LANG_HTML[currentLang()] || 'en';
   const brand = document.getElementById('brand-name');
   if (brand) brand.textContent = t('brand');
   const legend = document.getElementById('legend');
   if (legend) legend.textContent = t('legend');
   const btn = document.getElementById('refresh');
   if (btn && !btn.disabled) btn.textContent = t('refresh');
-  const langBtn = document.getElementById('lang');
-  if (langBtn) {
-    langBtn.textContent = currentLang() === 'zh' ? 'EN' : '中文';
-    langBtn.title = currentLang() === 'zh' ? 'Switch to English' : '切换到中文';
+  const langBtns = document.querySelectorAll('#langs [data-lang]');
+  for (let i = 0; i < langBtns.length; i++) {
+    const b = langBtns[i];
+    const on = b.dataset.lang === currentLang();
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
   const gearBtn = document.getElementById('gear');
   if (gearBtn) gearBtn.title = t('gearTitle');
@@ -326,7 +470,7 @@ function applyI18n() {
 }
 
 function applyStoredLang(lang) {
-  uiLang = lang === 'zh' ? 'zh' : 'en';
+  uiLang = knownLang(lang);
   applyI18n();
 }
 

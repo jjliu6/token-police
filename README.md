@@ -64,7 +64,7 @@ it installs the same way, just with a few extra development files in the folder.
 5. Click **Load unpacked** and select the unzipped folder (the one that contains `manifest.json`).
 6. Click the toolbar icon. The dashboard opens in the **side panel** so it stays visible while Refresh scrapes.
 7. Click **Refresh** (or open a product's usage page in a normal tab) to populate the data.
-8. The dashboard defaults to **English**. Click **中文** / **EN** in the header to switch; the choice is stored locally (`uiLang`) and does not follow Chrome's UI language.
+8. The dashboard defaults to **English**. The header shows **FR**, **EN** and **中文** as three buttons — click one to switch; the choice is stored locally (`uiLang`) and does not follow Chrome's UI language.
 
 To update later: when the bottom of the panel says a new version is available (or the version on the
 Download button above is higher than the `vX.Y.Z` at the bottom of your panel), download the zip again,
@@ -78,7 +78,7 @@ replace the folder's contents, then click the ↻ reload button on the extension
 - `update.js` — version helpers shared by background and popup (reads the version from the manifest, compares release tags)
 - `background.js` — service worker that coordinates the "Refresh" flow and opens/focuses dispatch tabs
 - `content.js` — content script that reads usage numbers from each product page and fills a prompt on dispatch
-- `popup.html` / `popup.js` / `i18n.js` / `activities.js` — the side-panel dashboard (English / 中文) and the rest/move activity pool
+- `popup.html` / `popup.js` / `i18n.js` / `activities.js` — the side-panel dashboard (English / français / 中文) and the rest/move activity pool
 - `_locales/` — Chrome Store / `chrome://extensions` name and description
 - `icons/` — extension icons (`token-police.svg` is the source; `python3 scripts/render-icons.py` writes `mark-*.png`)
 - `docs/` — the landing page (`index.html`) published to GitHub Pages, plus README screenshots
@@ -123,14 +123,16 @@ that the Download badge above and the in-panel update check both look at.
 
 | URL | What it serves |
 |---|---|
-| `/` | English, plus a tiny script that sends readers whose browser (or last choice) is Chinese to `/zh/`. Old `?lang=zh` links still work. |
+| `/` | English, plus a tiny script that sends readers whose browser (or last choice) is Chinese to `/zh/` or French to `/fr/`. Old `?lang=zh` / `?lang=fr` links still work. |
 | `/en/` | English |
+| `/fr/` | French, with the strings from `docs/i18n/fr.mjs` |
 | `/zh/` | Chinese, with the strings from `docs/i18n/zh.mjs` |
 
-Each language is a real file, so a shared `/zh/` link opens Chinese for
-whoever receives it, and search engines index the two versions separately
-(`hreflang`). To change copy, edit the English in `docs/index.html` and the
-matching key in `docs/i18n/zh.mjs`; `npm test` fails if the two drift apart.
+Each language is a real file, so a shared `/zh/` or `/fr/` link opens that
+language for whoever receives it, and search engines index the versions
+separately (`hreflang`). To change copy, edit the English in `docs/index.html`
+and the matching key in `docs/i18n/zh.mjs` / `docs/i18n/fr.mjs`; `npm test`
+fails if they drift apart.
 Preview locally with `npm run build:pages && npx serve dist/site` (asset paths
 are absolute, so open the template through a server rather than as a file).
 

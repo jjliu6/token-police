@@ -1,8 +1,9 @@
 name: Landing page
 
 # Publishes the product landing page to GitHub Pages at
-#   https://token-police.philosophie.ai/       (English; Chinese readers are sent to /zh/)
+#   https://token-police.philosophie.ai/       (English; Chinese readers are sent to /zh/, French to /fr/)
 #   https://token-police.philosophie.ai/en/
+#   https://token-police.philosophie.ai/fr/
 #   https://token-police.philosophie.ai/zh/
 #
 # docs/index.html is a template; scripts/build-pages.mjs renders it once per

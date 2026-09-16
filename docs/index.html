@@ -249,7 +249,7 @@
     <div>
       <span class="eyebrow" data-i18n="hero.eyebrow">Free · Open source · Chrome extension</span>
       <h1 data-i18n-html="hero.h1">Know how much AI coding quota you have <span class="hl">left</span> — at a glance.</h1>
-      <p class="lead" data-i18n="hero.lead">One side panel shows your remaining usage for Claude Code, Codex, Cursor, Grok, Grok Bot and Gemini — with reset times, burn rate and low-quota alerts. No account linking, no API keys, and nothing leaves your browser. From the same panel, Dispatch opens one prompt in several of them at once — pre-filled, not sent. And a little hair mascot that loses hair as you burn quota and makes you stand up now and then.</p>
+      <p class="lead" data-i18n="hero.lead">One side panel shows your remaining usage for Claude Code, Codex, Cursor, Grok, Grok Bot and Gemini — with reset times, burn rate and low-quota alerts. No account linking, no API keys, and nothing leaves your browser. From the same panel, Dispatch opens one prompt in several of them at once — pre-filled, not sent by default (Chat destinations can opt into auto-send). And a little hair mascot that loses hair as you burn quota and makes you stand up now and then.</p>
 
       <div class="cta">
         <a class="btn btn-primary" id="download" href="https://github.com/jjliu6/token-police/releases/latest/download/token-police.zip">
@@ -343,7 +343,7 @@
   <div class="wrap">
     <span class="eyebrow" data-i18n="dispatch.eyebrow">New in v1.5 · Dispatch</span>
     <h2 data-i18n="dispatch.h2">One prompt, opened in Claude, ChatGPT, Grok, Gemini, Codex and Cursor.</h2>
-    <p class="lead" data-i18n="dispatch.lead">The Dispatch button in the footer opens a composer. Tick Chat or Code destinations and they come up as real Chrome tabs with the prompt already filled in. You still press Send.</p>
+    <p class="lead" data-i18n="dispatch.lead">The Dispatch button in the footer opens a composer. Tick Chat or Code destinations and they come up as real Chrome tabs with the prompt already filled in. By default you still press Send; Chat destinations can opt into auto-send (which really uses quota).</p>
     <div class="mascot-grid">
       <div class="mascot-shots">
         <figure>
@@ -357,7 +357,7 @@
       </div>
       <div>
         <ul class="checks">
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="dispatch.1"><b>Prefill only, not sent.</b> Each tab opens with the prompt in the composer — you confirm Send or Start task on that site.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="dispatch.1"><b>Prefill by default, not sent for you.</b> Each tab opens with the prompt in the composer — by default you confirm Send or Start task on that site. Chat destinations can opt into auto-send; Code destinations are always prefill-only.</span></li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="dispatch.2"><b>Chat vs Code.</b> Chat opens Claude, ChatGPT, Grok and Gemini. Code opens Claude Code, Codex Cloud and Cursor Agents. Grok Bot stays on the quota cards — it has no public web composer.</span></li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span data-i18n-html="dispatch.3"><b>A board to jump back.</b> After opening, the panel keeps a tab list. Click a card to focus that tab. Live output stays on their page — we don't iframe those sites.</span></li>
         </ul>
@@ -490,7 +490,7 @@
       </details>
       <details>
         <summary data-i18n="faq.2q">Is it safe? What can it access?</summary>
-        <p data-i18n="faq.2a">It only has permission for five domains (claude.ai, chatgpt.com, grok.com, cursor.com, gemini.google.com). It reads the usage numbers shown there, and if you use Dispatch it fills the prompt you typed into those sites' composers — it never sends the prompt for you. It cannot see other sites, and it makes no network requests apart from the optional daily version check.</p>
+        <p data-i18n="faq.2a">It only has permission for five domains (claude.ai, chatgpt.com, grok.com, cursor.com, gemini.google.com). It reads the usage numbers shown there, and if you use Dispatch it fills the prompt you typed into those sites' composers — by default it does not send the prompt for you (unless you turn on auto-send for Chat destinations). It cannot see other sites, and it makes no network requests apart from the optional daily version check.</p>
       </details>
       <details>
         <summary data-i18n="faq.3q">Which browsers work?</summary>
@@ -510,7 +510,7 @@
       </details>
       <details>
         <summary data-i18n="faq.8q">Does Dispatch send the prompt for me?</summary>
-        <p data-i18n="faq.8a">No. It opens real Chrome tabs and fills the composer. You still confirm Send or Start task on each site. Grok Bot has no public web composer, so it stays on the quota dashboard.</p>
+        <p data-i18n="faq.8a">Not by default. It opens real Chrome tabs and fills the composer, and by default you confirm Send or Start task on each site. If you turn on the Auto-send toggle in the Dispatch panel, Chat destinations will be submitted for you (which really uses quota); Code destinations stay prefill-only. Grok Bot has no public web composer, so it stays on the quota dashboard.</p>
       </details>
       <details>
         <summary data-i18n="faq.6q">Can I get the very latest unreleased code?</summary>

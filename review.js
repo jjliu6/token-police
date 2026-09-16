@@ -1,10 +1,10 @@
 // Cross-check review-prompt assembly: GitHub-link detection, composer vs
-// conversation.md length handling, and a review job that reuses Dispatch
-// open/fill (always prefill, never auto-send).
+// conversation.md length handling, reviewer pick (highest leftover quota),
+// and a review job that reuses Dispatch open/fill.
 //
 // Classic script: popup.html <script> + background importScripts. Depends on
 // i18n.js `t()` / `currentLang()` and agents.js `makeDispatchJob` /
-// `buildDispatch` / `dispatchById`.
+// `buildDispatch` / `dispatchById` / `leftoverOf` / `canDispatch`.
 
 const CROSSCHECK_QUERY_FILL_MAX = 1500;
 const CROSSCHECK_COMPOSER_MAX = 8000;
@@ -136,6 +136,16 @@ function reviewPayload(session, instruction) {
     attachText: markdown,
     chars: full.length,
   };
+}
+
+// Highest remaining quota among dispatchable reviewers that already have a
+// leftover number. ChatGPT (quotaId null) never wins. Ties keep
+// DISPATCH_TARGETS order. No AUTO_MIN_LEFT floor — Cross-check is "额度最多",
+// not Dispatch's "ready" pool.
+function pickCrosscheckReviewer(map) {
+  const pool = DISPATCH_TARGETS.filter((a) => canDispatch(a) && a.quotaId && leftoverOf(a, map) != null);
+  if (!pool.length) return null;
+  return pool.reduce((best, a) => (leftoverOf(a, map) > leftoverOf(best, map) ? a : best));
 }
 
 // Prefill by default. Auto-send is the same gate as Dispatch: only chat

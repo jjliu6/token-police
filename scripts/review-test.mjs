@@ -20,9 +20,11 @@ const detectGithubContext = vm.runInContext('detectGithubContext', ctx);
 const assembleReviewText = vm.runInContext('assembleReviewText', ctx);
 const reviewPayload = vm.runInContext('reviewPayload', ctx);
 const makeReviewJob = vm.runInContext('makeReviewJob', ctx);
+const pickCrosscheckReviewer = vm.runInContext('pickCrosscheckReviewer', ctx);
 const sessionToMarkdown = vm.runInContext('sessionToMarkdown', ctx);
 const CROSSCHECK_COMPOSER_MAX = vm.runInContext('CROSSCHECK_COMPOSER_MAX', ctx);
 const dispatchById = vm.runInContext('dispatchById', ctx);
+const I18N = vm.runInContext('I18N', ctx);
 
 const def = defaultCrosscheckPrompt();
 check(!!def && def.length > 40, 'default prompt should be the spec text');
@@ -108,6 +110,61 @@ const codeAgent = dispatchById('codex');
 const codeJob = makeReviewJob(codeAgent, short, session, true);
 check(codeJob.repo === 'jjliu6/token-police', `code reviewer gets detected repo, got ${codeJob.repo}`);
 check(codeJob.send === false, 'Codex review is prefill only even when send is requested');
+
+const pickKeys = [
+  'crosscheckPickLabel',
+  'crosscheckPickRecommend',
+  'crosscheckPickManual',
+  'crosscheckRecommendPicked',
+  'crosscheckRecommendWhy',
+  'crosscheckRecommendEmpty',
+];
+['en', 'fr', 'zh'].forEach((lang) => {
+  pickKeys.forEach((k) => {
+    check(typeof I18N[lang][k] === 'string' && I18N[lang][k].length > 0, `${lang}.${k} missing`);
+  });
+});
+check(I18N.en.crosscheckPickRecommend.includes('recommend') || I18N.en.crosscheckPickRecommend.includes('Recommend'), 'EN recommend label');
+check(I18N.zh.crosscheckPickRecommend.includes('推荐'), 'ZH recommend label');
+check(I18N.zh.crosscheckPickManual.includes('自己'), 'ZH manual label');
+
+const quotaMap = {
+  'claude-code': { limits: [{ percent_left: 62 }] },
+  'codex': { limits: [{ percent_left: 41 }] },
+  'cursor': { limits: [{ percent_left: 12 }] },
+  'grok-build': { limits: [{ percent_left: 88 }] },
+  'gemini': { limits: [{ percent_left: 73 }] },
+  'chatgpt': { limits: [{ percent_left: 99 }] },
+  'grok-bot': { limits: [{ percent_left: 100 }] },
+};
+const rec = pickCrosscheckReviewer(quotaMap);
+check(rec && rec.id === 'grok-build', `highest leftover should pick Grok chat (88%), got ${rec && rec.id}`);
+check(rec.id !== 'chatgpt', 'ChatGPT must not win recommend');
+check(pickCrosscheckReviewer({}) == null, 'empty quota map recommends nobody');
+check(pickCrosscheckReviewer(null) == null, 'null map recommends nobody');
+const fakeGpt = pickCrosscheckReviewer({
+  chatgpt: { limits: [{ percent_left: 99 }] },
+  cursor: { limits: [{ percent_left: 10 }] },
+});
+check(fakeGpt && fakeGpt.id === 'cursor', `quotaId-null ChatGPT is skipped even at 99%, got ${fakeGpt && fakeGpt.id}`);
+
+const lowOnly = {
+  'cursor': { limits: [{ percent_left: 8 }] },
+  'codex': { limits: [{ percent_left: 4 }] },
+};
+const low = pickCrosscheckReviewer(lowOnly);
+check(low && low.id === 'cursor', `no 15% floor — 8% Cursor still wins, got ${low && low.id}`);
+
+const claudeOnly = { 'claude-code': { limits: [{ percent_left: 55 }] } };
+const tied = pickCrosscheckReviewer(claudeOnly);
+check(tied && tied.id === 'claude-chat', `Claude chat and Claude Code share quota; first in DISPATCH_TARGETS wins, got ${tied && tied.id}`);
+
+const geminiWins = pickCrosscheckReviewer({
+  'gemini': { limits: [{ percent_left: 91 }] },
+  'cursor': { limits: [{ percent_left: 88 }] },
+  'claude-code': { limits: [{ percent_left: 40 }] },
+});
+check(geminiWins && geminiWins.id === 'gemini', `Gemini 91% beats Cursor 88%, got ${geminiWins && geminiWins.id}`);
 
 if (problems.length) {
   console.error(problems.join('\n'));

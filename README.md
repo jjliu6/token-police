@@ -50,7 +50,7 @@ it installs the same way, just with a few extra development files in the folder.
 - No API and no account linking — it reads the numbers straight off each tool's own usage page that you're already logged into.
 - Everything stays local in your browser (`chrome.storage.local`). Your usage data is never sent to any server.
 - **Dispatch** (footer): type a prompt, pick Chat vs Code, tick one or more destinations, and open them as real Chrome tabs with the prompt pre-filled. **Chat** opens Claude (`claude.ai/new`), ChatGPT (`chatgpt.com/`), Grok, and Gemini. **Code** opens Claude Code (`claude.ai/code`), Codex Cloud (`chatgpt.com/codex`), Cursor Agents, and Grok Build (`grok.com` in Build mode). Grok Bot stays quota-only (grayed out). Claude Code is the only official query-param prefill; the rest script-fill. By default the prompt is only pre-filled, **not sent** — an optional per-panel **Auto-send** toggle (off by default, Chat targets only for now) will actually submit and use quota. Auto-dispatch skips anyone under 15% remaining. An optional **Tile windows side by side** toggle (off by default) opens each destination as its own window laid out to fill the screen — 2 as columns, 3 as one big window plus two stacked, 4 as a 2×2 grid — so you can watch every AI answer at once instead of flipping between tabs.
-- **Cross-check** (footer): from a ChatGPT conversation, pick a second AI and Token Police fills that tab with a review instruction plus the current transcript. **Prefill by default** — an optional **Auto-send** toggle (off by default, Chat targets only, same `canAutoSend()` gate as Dispatch) will actually submit and use quota. Coding reviewers stay prefill-only. Long sessions download `conversation.md` instead of stuffing the composer. v1 reads ChatGPT chats only; it does not call a model API or render the reviewer's findings.
+- **Cross-check** (footer): from a ChatGPT conversation, hand the transcript to a second AI. Two explicit reviewer modes: **System recommend** (default — the dispatchable reviewer with the most remaining quota) and **Pick myself**. **Prefill by default** — an optional **Auto-send** toggle (off by default, Chat targets only, same `canAutoSend()` gate as Dispatch) will actually submit and use quota. Coding reviewers stay prefill-only. Long sessions download `conversation.md` instead of stuffing the composer. v1 reads ChatGPT chats only; it does not call a model API or render the reviewer's findings.
 
 ## Install
 
@@ -80,7 +80,7 @@ replace the folder's contents, then click the ↻ reload button on the extension
 - `background.js` — service worker that coordinates the "Refresh" flow and opens/focuses dispatch and Cross-check tabs
 - `content.js` — content script that reads usage numbers from each product page, extracts a ChatGPT transcript for Cross-check, and fills a prompt on dispatch
 - `conversation-adapters.js` — per-host transcript extractors (v1: ChatGPT chat)
-- `review.js` — Cross-check prompt assembly, GitHub-link detection, `conversation.md` fallback
+- `review.js` — Cross-check prompt assembly, GitHub-link detection, `conversation.md` fallback, highest-quota reviewer recommend
 - `popup.html` / `popup.js` / `i18n.js` / `activities.js` — the side-panel dashboard (English / français / 中文) and the rest/move activity pool
 - `_locales/` — Chrome Store / `chrome://extensions` name and description
 - `icons/` — extension icons (`token-police.svg` is the source; `python3 scripts/render-icons.py` writes `mark-*.png`)

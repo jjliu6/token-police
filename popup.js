@@ -1373,6 +1373,7 @@ function render() {
     freshnessTimer = setTimeout(render, 60000);
     quotaMap = map;
     renderDispatch();
+    renderCrosscheck();
   });
 }
 
@@ -1526,6 +1527,7 @@ let dispatchTile = false;
 let dispatchShake = false;
 let crosscheckPromptStored = '';
 let crosscheckReviewer = 'claude-chat';
+let crosscheckPickMode = 'recommend';
 let crosscheckConfirm = false;
 let crosscheckAutoSend = false;
 let crosscheckSession = null;
@@ -1554,7 +1556,7 @@ function setCrosscheckOpen(on) {
 
 function persistCrosscheck() {
   if (!chrome.storage || !chrome.storage.local) return;
-  const payload = { crosscheckReviewer, crosscheckAutoSend };
+  const payload = { crosscheckReviewer, crosscheckAutoSend, crosscheckPickMode };
   if (crosscheckPromptStored.trim()) payload.crosscheckPrompt = crosscheckPromptStored;
   else if (chrome.storage.local.remove) chrome.storage.local.remove('crosscheckPrompt');
   chrome.storage.local.set(payload);
@@ -1629,7 +1631,7 @@ function captureCrosscheckSource() {
         crosscheckStatusKind = 'ready';
         const summary = (typeof sessionSummary === 'function') ? sessionSummary(res) : `${res.conversation.length} messages`;
         crosscheckStatus = t('crosscheckReady', { summary });
-        if (!crosscheckReviewer) crosscheckReviewer = 'claude-chat';
+        if (crosscheckPickMode !== 'recommend' && !crosscheckReviewer) crosscheckReviewer = 'claude-chat';
       } else if (res.reason === 'unsupported') {
         crosscheckSession = null;
         crosscheckStatusKind = 'unsupported';
@@ -1646,6 +1648,30 @@ function captureCrosscheckSource() {
       renderCrosscheck();
     });
   });
+}
+
+function activeCrosscheckAgent() {
+  if (crosscheckPickMode === 'recommend') {
+    return (typeof pickCrosscheckReviewer === 'function')
+      ? pickCrosscheckReviewer(quotaMap)
+      : null;
+  }
+  const stored = dispatchById(crosscheckReviewer);
+  return (stored && canDispatch(stored)) ? stored : null;
+}
+
+function setCrosscheckPickMode(mode) {
+  if (mode !== 'recommend' && mode !== 'manual') return;
+  if (mode === 'manual' && crosscheckPickMode === 'recommend') {
+    const rec = (typeof pickCrosscheckReviewer === 'function')
+      ? pickCrosscheckReviewer(quotaMap)
+      : null;
+    if (rec) crosscheckReviewer = rec.id;
+    else if (!dispatchById(crosscheckReviewer)) crosscheckReviewer = 'claude-chat';
+  }
+  crosscheckPickMode = mode;
+  persistCrosscheck();
+  renderCrosscheck();
 }
 
 function renderCrosscheck() {
@@ -1672,7 +1698,50 @@ function renderCrosscheck() {
   }
   const reset = document.getElementById('crosscheck-reset');
   if (reset) reset.textContent = t('crosscheckReset');
-  const agent = dispatchById(crosscheckReviewer);
+  const recommend = (typeof pickCrosscheckReviewer === 'function')
+    ? pickCrosscheckReviewer(quotaMap)
+    : null;
+  const agent = activeCrosscheckAgent();
+  const pickLabel = document.getElementById('crosscheck-pick-label');
+  if (pickLabel) pickLabel.textContent = t('crosscheckPickLabel');
+  const pickSeg = document.getElementById('crosscheck-pick');
+  if (pickSeg) {
+    const btns = pickSeg.querySelectorAll('[data-pick]');
+    for (let i = 0; i < btns.length; i++) {
+      const b = btns[i];
+      const on = b.dataset.pick === crosscheckPickMode;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.textContent = b.dataset.pick === 'recommend'
+        ? t('crosscheckPickRecommend')
+        : t('crosscheckPickManual');
+    }
+  }
+  const picked = document.getElementById('crosscheck-picked');
+  const pickedDot = document.getElementById('crosscheck-picked-dot');
+  const pickedName = document.getElementById('crosscheck-picked-name');
+  const pickedWhy = document.getElementById('crosscheck-picked-why');
+  const pickEmpty = document.getElementById('crosscheck-pick-empty');
+  const recommendOn = crosscheckPickMode === 'recommend';
+  if (picked) {
+    const showCard = recommendOn && !!recommend;
+    picked.hidden = !showCard;
+    if (showCard) {
+      if (pickedDot) pickedDot.style.background = recommend.color;
+      if (pickedName) {
+        const left = leftoverOf(recommend, quotaMap);
+        pickedName.textContent = t('crosscheckRecommendPicked', {
+          name: recommend.name,
+          n: left == null ? '—' : Math.round(left),
+        });
+      }
+      if (pickedWhy) pickedWhy.textContent = t('crosscheckRecommendWhy');
+    }
+  }
+  if (pickEmpty) {
+    pickEmpty.hidden = !(recommendOn && !recommend);
+    if (recommendOn && !recommend) pickEmpty.textContent = t('crosscheckRecommendEmpty');
+  }
   const warn = document.getElementById('crosscheck-warn');
   if (warn) {
     const srcKind = crosscheckSession && crosscheckSession.sourceKind;
@@ -1684,6 +1753,7 @@ function renderCrosscheck() {
   }
   const chips = document.getElementById('crosscheck-chips');
   if (chips) {
+    chips.hidden = recommendOn;
     chips.innerHTML = DISPATCH_TARGETS.filter((a) => canDispatch(a)).map((a) => {
       const on = a.id === crosscheckReviewer;
       const left = leftoverOf(a, quotaMap);
@@ -1727,9 +1797,13 @@ function runCrosscheck() {
     if (note) note.textContent = t('crosscheckNeedConfirm');
     return;
   }
-  const agent = dispatchById(crosscheckReviewer);
+  const agent = activeCrosscheckAgent();
   if (!agent || !canDispatch(agent)) {
-    if (note) note.textContent = t('crosscheckNeedReviewer');
+    if (note) {
+      note.textContent = (crosscheckPickMode === 'recommend' && !pickCrosscheckReviewer(quotaMap))
+        ? t('crosscheckRecommendEmpty')
+        : t('crosscheckNeedReviewer');
+    }
     return;
   }
   const payload = reviewPayload(crosscheckSession, crosscheckPromptStored);
@@ -1773,6 +1847,14 @@ const crosscheckReset = document.getElementById('crosscheck-reset');
 if (crosscheckReset && crosscheckReset.addEventListener) {
   crosscheckReset.addEventListener('click', resetCrosscheckPrompt);
 }
+const crosscheckPickEl = document.getElementById('crosscheck-pick');
+if (crosscheckPickEl && crosscheckPickEl.addEventListener) {
+  crosscheckPickEl.addEventListener('click', (e) => {
+    const mode = e.target && e.target.dataset && e.target.dataset.pick;
+    if (!mode) return;
+    setCrosscheckPickMode(mode);
+  });
+}
 const crosscheckChips = document.getElementById('crosscheck-chips');
 if (crosscheckChips && crosscheckChips.addEventListener) {
   crosscheckChips.addEventListener('click', (e) => {
@@ -1788,7 +1870,7 @@ if (crosscheckChips && crosscheckChips.addEventListener) {
 const crosscheckSendEl = document.getElementById('crosscheck-send');
 if (crosscheckSendEl && crosscheckSendEl.addEventListener) {
   crosscheckSendEl.addEventListener('change', () => {
-    const agent = dispatchById(crosscheckReviewer);
+    const agent = activeCrosscheckAgent();
     if (!agent || !canAutoSend(agent)) {
       crosscheckSendEl.checked = false;
       return;
@@ -2236,10 +2318,13 @@ if (chrome.storage && chrome.storage.local && chrome.storage.local.get) {
     // "Tabs · N" re-entry button reports a stale count.
     pruneDispatchJobs(() => renderDispatch());
   });
-  chrome.storage.local.get(['crosscheckPrompt', 'crosscheckReviewer', 'crosscheckAutoSend'], (res) => {
+  chrome.storage.local.get(['crosscheckPrompt', 'crosscheckReviewer', 'crosscheckAutoSend', 'crosscheckPickMode'], (res) => {
     if (typeof res.crosscheckPrompt === 'string') crosscheckPromptStored = res.crosscheckPrompt;
     if (typeof res.crosscheckReviewer === 'string') crosscheckReviewer = res.crosscheckReviewer;
     if (typeof res.crosscheckAutoSend === 'boolean') crosscheckAutoSend = res.crosscheckAutoSend;
+    if (res.crosscheckPickMode === 'manual' || res.crosscheckPickMode === 'recommend') {
+      crosscheckPickMode = res.crosscheckPickMode;
+    }
     renderCrosscheck();
   });
 }

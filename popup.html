@@ -174,6 +174,8 @@
   .dispatch-float .chip.dim:hover{background:var(--bg)}
   .dispatch-float .ord{width:14px;height:14px;flex:none;border-radius:3px;border:1px solid var(--line);font-size:9px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
   .dispatch-float .chip.on .ord{border-color:var(--accent-line);color:var(--accent)}
+  .dispatch-float .picked{display:flex;align-items:center;gap:7px;border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:8px;padding:8px 10px;color:var(--ink);font-size:11.5px;text-align:left}
+  .dispatch-float .picked .why{margin-left:auto;color:var(--muted);font-size:10px;white-space:nowrap}
   .dispatch-float .row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .dispatch-float .note{font-size:11px;color:var(--muted);text-align:center;min-height:14px}
   .dispatch-float .sendtog{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink2);cursor:pointer;user-select:none}
@@ -343,7 +345,18 @@
         <button class="btn logs" id="crosscheck-reset" type="button" style="margin:0;padding:3px 8px"></button>
       </div>
       <p class="note" id="crosscheck-warn" hidden style="text-align:left;color:var(--warn)"></p>
-      <div class="chips" id="crosscheck-chips"></div>
+      <p class="note" id="crosscheck-pick-label" style="text-align:left;min-height:0"></p>
+      <div class="seg" id="crosscheck-pick" role="group">
+        <button type="button" data-pick="recommend" class="on"></button>
+        <button type="button" data-pick="manual"></button>
+      </div>
+      <div class="picked" id="crosscheck-picked" hidden>
+        <span class="dot" id="crosscheck-picked-dot"></span>
+        <span id="crosscheck-picked-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <span class="why" id="crosscheck-picked-why"></span>
+      </div>
+      <p class="note" id="crosscheck-pick-empty" hidden style="text-align:left"></p>
+      <div class="chips" id="crosscheck-chips" hidden></div>
       <label class="sendtog"><input type="checkbox" id="crosscheck-send"><span id="crosscheck-send-label"></span></label>
       <button class="btn share" id="crosscheck-go" type="button"></button>
       <p class="note" id="crosscheck-note"></p>

@@ -16,6 +16,10 @@ const I18N = {
   en: {
     brand: 'TOKEN POLICE',
     legend: 'number = remaining',
+    themeTitle: 'Theme: {mode} (click to switch)',
+    theme_auto: 'Auto',
+    theme_light: 'Light',
+    theme_dark: 'Dark',
     refresh: 'Refresh',
     fetching: 'Fetching…',
     left: 'left',
@@ -147,6 +151,10 @@ const I18N = {
   fr: {
     brand: 'TOKEN POLICE',
     legend: 'le chiffre = restant',
+    themeTitle: 'Thème : {mode} (cliquez pour changer)',
+    theme_auto: 'Auto',
+    theme_light: 'Clair',
+    theme_dark: 'Sombre',
     refresh: 'Actualiser',
     fetching: 'Chargement…',
     left: 'restant',
@@ -278,6 +286,10 @@ const I18N = {
   zh: {
     brand: 'TOKEN POLICE',
     legend: '数字为剩余额度',
+    themeTitle: '主题：{mode}（点击切换）',
+    theme_auto: '跟随系统',
+    theme_light: '浅色',
+    theme_dark: '深色',
     refresh: '刷新',
     fetching: '刷新中…',
     left: '剩余',

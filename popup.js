@@ -1451,9 +1451,52 @@ if (langsEl) {
     while (n && n !== e.currentTarget && !(n.dataset && n.dataset.lang)) n = n.parentNode;
     const lang = n && n.dataset && n.dataset.lang;
     if (!lang) return;
-    setLang(lang, render);
+    // 语言切换后一并刷新主题按钮的提示文字
+    setLang(lang, () => { render(); applyTheme(); });
   });
 }
+
+// 主题：偏好 auto/light/dark 存在 localStorage（同步、能在首帧前读到，配合 <head> 里的
+// 防闪烁脚本）。auto 时按系统实际解析成 light/dark 写到 <html data-theme> 上。
+const THEME_ORDER = ['auto', 'light', 'dark'];
+const THEME_ICON = { auto: '🌗', light: '☀️', dark: '🌙' };
+function themePref() {
+  try { return localStorage.getItem('tpTheme') || 'auto'; } catch (e) { return 'auto'; }
+}
+function resolveTheme(pref) {
+  if (pref === 'auto') {
+    return (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+  }
+  return pref;
+}
+function applyTheme() {
+  const pref = themePref();
+  const root = document.documentElement;
+  if (root && typeof root.setAttribute === 'function') {
+    root.setAttribute('data-theme', resolveTheme(pref));
+  }
+  const btn = document.getElementById('theme');
+  if (btn) {
+    btn.textContent = THEME_ICON[pref] || THEME_ICON.auto;
+    btn.title = t('themeTitle', { mode: t('theme_' + pref) });
+  }
+}
+function cycleTheme() {
+  const i = THEME_ORDER.indexOf(themePref());
+  const next = THEME_ORDER[(i + 1) % THEME_ORDER.length];
+  try { localStorage.setItem('tpTheme', next); } catch (e) {}
+  applyTheme();
+}
+const themeBtn = document.getElementById('theme');
+if (themeBtn) themeBtn.addEventListener('click', cycleTheme);
+// auto 模式下，系统在浅/深之间切换时实时跟随
+if (window.matchMedia) {
+  const mq = window.matchMedia('(prefers-color-scheme: light)');
+  const onSys = () => { if (themePref() === 'auto') applyTheme(); };
+  if (mq.addEventListener) mq.addEventListener('change', onSys);
+  else if (mq.addListener) mq.addListener(onSys);
+}
+applyTheme();
 const shareBtn = document.getElementById('share');
 if (shareBtn && shareBtn.addEventListener) {
   shareBtn.addEventListener('click', openShare);
@@ -1557,6 +1600,8 @@ function setDispatchOpen(on) {
   const el = document.getElementById('dispatch-float');
   if (!el) return;
   el.hidden = !on;
+  const scrim = document.getElementById('dispatch-scrim');
+  if (scrim) scrim.hidden = !on; // 打开时压暗主界面，让浮层浮出来
   const btn = document.getElementById('dispatch-toggle');
   if (btn) btn.title = on ? t('dispatchFold') : t('dispatchOpen');
   if (on) renderDispatch();
@@ -1802,6 +1847,10 @@ function selectedAgents() {
     .filter(Boolean);
 }
 
+const dispatchScrim = document.getElementById('dispatch-scrim');
+if (dispatchScrim && dispatchScrim.addEventListener) {
+  dispatchScrim.addEventListener('click', () => setDispatchOpen(false));
+}
 const dispatchToggle = document.getElementById('dispatch-toggle');
 if (dispatchToggle && dispatchToggle.addEventListener) {
   dispatchToggle.addEventListener('click', () => setDispatchOpen(!dispatchFloatOpen()));

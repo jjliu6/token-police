@@ -38,7 +38,7 @@
         "https://cursor.com/*",
         "https://gemini.google.com/*"
       ],
-      "js": ["parse.js", "content.js"],
+      "js": ["parse.js", "conversation-adapters.js", "content.js"],
       "run_at": "document_start",
       "all_frames": true
     }

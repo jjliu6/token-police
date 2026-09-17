@@ -201,6 +201,20 @@ const mt = takeDispatchPending(mp, 31);
 if (!mt.job || mt.job.mode !== 'build') problems.push('claim must return the mode flag');
 if (makeDispatchJob(grok, 'go', '', false, true).mode !== null) problems.push('chat Grok must not carry a mode');
 
+let ap = putDispatchPending({}, 40, {
+  prompt: 'review this',
+  host: 'claude.ai',
+  send: false,
+  attachName: 'conversation.md',
+  attachText: '# session',
+});
+if (!ap['40'] || ap['40'].attachName !== 'conversation.md' || ap['40'].attachText !== '# session') {
+  problems.push('pending must carry a conversation.md attachment');
+}
+if (ap['40'].send !== false) problems.push('attachment pending must stay prefill-only');
+const at = takeDispatchPending(ap, 40);
+if (!at.job || at.job.attachName !== 'conversation.md') problems.push('claim must return the markdown attachment');
+
 // Accumulating the board across dispatches: newest batch first, earlier
 // still-open tabs kept, and a re-dispatched tab deduped (moved to the front).
 const prior = [{ tabId: 1, name: 'A' }, { tabId: 2, name: 'B' }];

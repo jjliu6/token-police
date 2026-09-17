@@ -84,6 +84,22 @@ const ctxObj = {
           if (i >= 0) onRemovedListeners.splice(i, 1);
         },
       },
+      sendMessage: (tabId, msg, cb) => {
+        if (msg && msg.type === 'captureConversation') {
+          setTimeout(() => cb && cb({
+            ok: true,
+            sourceAgent: 'chatgpt',
+            sourceKind: 'chat',
+            conversation: [
+              { role: 'user', text: 'Fix login' },
+              { role: 'assistant', text: 'Done. https://github.com/jjliu6/token-police/pull/63' },
+            ],
+            sessionUrl: 'https://chatgpt.com/c/abc',
+          }), 0);
+          return;
+        }
+        if (cb) setTimeout(() => cb(), 0);
+      },
     },
     action: {
       setBadgeText: ({ text }) => badge.texts.push(text),
@@ -385,6 +401,44 @@ await grok(86, T + 9.5 * H); // 冷却已过，但窗口 [7.5h,9.5h] 里只有�
 if (moves().length !== 3) problems.push('a single point in the window is not enough to nudge');
 await grok(82, T + 10 * H); // 窗口 [8h,10h]：86→82 只掉 4，低于阈值
 if (moves().length !== 3) problems.push('a small burn below 10% must not nudge');
+
+// Cross-check: captureConversation reads the source tab; reviewOpen prefills.
+let captured = null;
+await new Promise((done) => {
+  const ret = onMessage({ type: 'captureConversation', tabId: 7 }, {}, (r) => { captured = r; done(); });
+  if (ret !== true) done();
+});
+await tick(10);
+if (!captured || captured.ok !== true || captured.sourceAgent !== 'chatgpt') {
+  problems.push(`captureConversation should return the ChatGPT session, got ${JSON.stringify(captured)}`);
+}
+if (!captured || !captured.conversation || captured.conversation.length !== 2) {
+  problems.push(`captureConversation must include the transcript, got ${JSON.stringify(captured)}`);
+}
+const reviewJob = {
+  agentId: 'claude-chat',
+  name: 'Claude',
+  prompt: 'Independently review this.',
+  url: 'https://claude.ai/new',
+  fill: 'script',
+  send: false,
+};
+let reviewOpened = null;
+await new Promise((done) => {
+  const ret = onMessage({ type: 'reviewOpen', job: reviewJob }, {}, (r) => { reviewOpened = r; done(); });
+  if (ret !== true) done();
+});
+await tick(20);
+if (!reviewOpened || !reviewOpened.length) {
+  problems.push(`reviewOpen should open a tab, got ${JSON.stringify(reviewOpened)}`);
+}
+const lastCreate = createdTabs[createdTabs.length - 1];
+if (!lastCreate || lastCreate.url !== 'https://claude.ai/new') {
+  problems.push(`reviewOpen should open the reviewer URL, got ${JSON.stringify(lastCreate)}`);
+}
+if (reviewOpened && reviewOpened[0] && reviewOpened[0].send) {
+  problems.push('reviewOpen must not auto-send');
+}
 
 if (problems.length) {
   console.error(problems.join('\n'));

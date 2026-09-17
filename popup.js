@@ -1373,6 +1373,7 @@ function render() {
     freshnessTimer = setTimeout(render, 60000);
     quotaMap = map;
     renderDispatch();
+    renderCrosscheck();
   });
 }
 
@@ -1510,6 +1511,7 @@ if (typeof document !== 'undefined' && document.addEventListener) {
     else if (shareOverlayOpen()) closeShare();
     else if (dispatchBoardOpen()) closeDispatchBoard();
     else if (dispatchFloatOpen()) setDispatchOpen(false);
+    else if (crosscheckFloatOpen()) setCrosscheckOpen(false);
   });
 }
 
@@ -1523,6 +1525,365 @@ let dispatchJobs = [];
 let dispatchAutoSend = false;
 let dispatchTile = false;
 let dispatchShake = false;
+let crosscheckPromptStored = '';
+let crosscheckReviewer = 'claude-chat';
+let crosscheckPickMode = 'recommend';
+let crosscheckConfirm = false;
+let crosscheckAutoSend = false;
+let crosscheckSession = null;
+let crosscheckStatus = '';
+let crosscheckStatusKind = '';
+let crosscheckCapturing = false;
+
+function crosscheckFloatOpen() {
+  const el = document.getElementById('crosscheck-float');
+  return !!(el && !el.hidden);
+}
+
+function setCrosscheckOpen(on) {
+  const el = document.getElementById('crosscheck-float');
+  if (!el) return;
+  if (on) setDispatchOpen(false);
+  el.hidden = !on;
+  const btn = document.getElementById('crosscheck-toggle');
+  if (btn) btn.title = on ? t('crosscheckFold') : t('crosscheckOpen');
+  if (on) {
+    crosscheckConfirm = false;
+    captureCrosscheckSource();
+  }
+  renderCrosscheck();
+}
+
+function persistCrosscheck() {
+  if (!chrome.storage || !chrome.storage.local) return;
+  const payload = { crosscheckReviewer, crosscheckAutoSend, crosscheckPickMode };
+  if (crosscheckPromptStored.trim()) payload.crosscheckPrompt = crosscheckPromptStored;
+  else if (chrome.storage.local.remove) chrome.storage.local.remove('crosscheckPrompt');
+  chrome.storage.local.set(payload);
+}
+
+function resetCrosscheckPrompt() {
+  crosscheckPromptStored = '';
+  if (chrome.storage && chrome.storage.local && chrome.storage.local.remove) {
+    chrome.storage.local.remove('crosscheckPrompt', () => renderCrosscheck());
+  } else {
+    renderCrosscheck();
+  }
+  persistCrosscheck();
+}
+
+function downloadConversationMd(name, text) {
+  try {
+    const blob = new Blob([text], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name || 'conversation.md';
+    a.rel = 'noopener';
+    if (document.body) document.body.appendChild(a);
+    a.click();
+    if (a.parentNode) a.parentNode.removeChild(a);
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) {} }, 2000);
+  } catch (e) {}
+}
+
+function findCrosscheckTab(cb) {
+  if (!chrome.windows || !chrome.windows.getLastFocused) { cb(null); return; }
+  chrome.windows.getLastFocused({ populate: true, windowTypes: ['normal'] }, (win) => {
+    if (chrome.runtime.lastError || !win || !Array.isArray(win.tabs)) { cb(null); return; }
+    const tab = win.tabs.filter((x) => x && x.active)[0] || null;
+    cb(tab);
+  });
+}
+
+function captureCrosscheckSource() {
+  crosscheckCapturing = true;
+  crosscheckSession = null;
+  crosscheckStatusKind = 'capturing';
+  crosscheckStatus = t('crosscheckCapturing');
+  renderCrosscheck();
+  findCrosscheckTab((tab) => {
+    if (!tab || tab.id == null) {
+      crosscheckCapturing = false;
+      crosscheckStatusKind = 'need';
+      crosscheckStatus = t('crosscheckNeedSource');
+      renderCrosscheck();
+      return;
+    }
+    if (!chrome.runtime || !chrome.runtime.sendMessage) {
+      crosscheckCapturing = false;
+      crosscheckStatusKind = 'error';
+      crosscheckStatus = t('crosscheckError');
+      renderCrosscheck();
+      return;
+    }
+    chrome.runtime.sendMessage({ type: 'captureConversation', tabId: tab.id }, (res) => {
+      crosscheckCapturing = false;
+      if (chrome.runtime.lastError || !res) {
+        crosscheckSession = null;
+        crosscheckStatusKind = 'error';
+        crosscheckStatus = t('crosscheckError');
+        renderCrosscheck();
+        return;
+      }
+      if (res.ok && res.conversation && res.conversation.length) {
+        crosscheckSession = res;
+        crosscheckStatusKind = 'ready';
+        const summary = (typeof sessionSummary === 'function') ? sessionSummary(res) : `${res.conversation.length} messages`;
+        crosscheckStatus = t('crosscheckReady', { summary });
+        if (crosscheckPickMode !== 'recommend' && !crosscheckReviewer) crosscheckReviewer = 'claude-chat';
+      } else if (res.reason === 'unsupported') {
+        crosscheckSession = null;
+        crosscheckStatusKind = 'unsupported';
+        crosscheckStatus = t('crosscheckUnsupported');
+      } else if (res.reason === 'empty') {
+        crosscheckSession = null;
+        crosscheckStatusKind = 'empty';
+        crosscheckStatus = t('crosscheckEmpty');
+      } else {
+        crosscheckSession = null;
+        crosscheckStatusKind = 'error';
+        crosscheckStatus = t('crosscheckError');
+      }
+      renderCrosscheck();
+    });
+  });
+}
+
+function activeCrosscheckAgent() {
+  if (crosscheckPickMode === 'recommend') {
+    return (typeof pickCrosscheckReviewer === 'function')
+      ? pickCrosscheckReviewer(quotaMap)
+      : null;
+  }
+  const stored = dispatchById(crosscheckReviewer);
+  return (stored && canDispatch(stored)) ? stored : null;
+}
+
+function setCrosscheckPickMode(mode) {
+  if (mode !== 'recommend' && mode !== 'manual') return;
+  if (mode === 'manual' && crosscheckPickMode === 'recommend') {
+    const rec = (typeof pickCrosscheckReviewer === 'function')
+      ? pickCrosscheckReviewer(quotaMap)
+      : null;
+    if (rec) crosscheckReviewer = rec.id;
+    else if (!dispatchById(crosscheckReviewer)) crosscheckReviewer = 'claude-chat';
+  }
+  crosscheckPickMode = mode;
+  persistCrosscheck();
+  renderCrosscheck();
+}
+
+function renderCrosscheck() {
+  const box = document.getElementById('crosscheck-float');
+  if (!box) return;
+  const fold = document.getElementById('crosscheck-fold');
+  if (fold) fold.textContent = t('crosscheck');
+  const status = document.getElementById('crosscheck-status');
+  if (status) status.textContent = crosscheckStatus || t('crosscheckNeedSource');
+  const privacy = document.getElementById('crosscheck-privacy');
+  if (privacy) privacy.textContent = t('crosscheckPrivacy');
+  const confirm = document.getElementById('crosscheck-confirm');
+  if (confirm) confirm.checked = !!crosscheckConfirm;
+  const confirmLabel = document.getElementById('crosscheck-confirm-label');
+  if (confirmLabel) confirmLabel.textContent = t('crosscheckConfirm');
+  const promptLabel = document.getElementById('crosscheck-prompt-label');
+  if (promptLabel) promptLabel.textContent = t('crosscheckPromptLabel');
+  const area = document.getElementById('crosscheck-prompt');
+  if (area && document.activeElement !== area) {
+    const shown = (typeof resolveCrosscheckPrompt === 'function')
+      ? resolveCrosscheckPrompt(crosscheckPromptStored)
+      : crosscheckPromptStored;
+    if (area.value !== shown) area.value = shown;
+  }
+  const reset = document.getElementById('crosscheck-reset');
+  if (reset) reset.textContent = t('crosscheckReset');
+  const recommend = (typeof pickCrosscheckReviewer === 'function')
+    ? pickCrosscheckReviewer(quotaMap)
+    : null;
+  const agent = activeCrosscheckAgent();
+  const pickLabel = document.getElementById('crosscheck-pick-label');
+  if (pickLabel) pickLabel.textContent = t('crosscheckPickLabel');
+  const pickSeg = document.getElementById('crosscheck-pick');
+  if (pickSeg) {
+    const btns = pickSeg.querySelectorAll('[data-pick]');
+    for (let i = 0; i < btns.length; i++) {
+      const b = btns[i];
+      const on = b.dataset.pick === crosscheckPickMode;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.textContent = b.dataset.pick === 'recommend'
+        ? t('crosscheckPickRecommend')
+        : t('crosscheckPickManual');
+    }
+  }
+  const picked = document.getElementById('crosscheck-picked');
+  const pickedDot = document.getElementById('crosscheck-picked-dot');
+  const pickedName = document.getElementById('crosscheck-picked-name');
+  const pickedWhy = document.getElementById('crosscheck-picked-why');
+  const pickEmpty = document.getElementById('crosscheck-pick-empty');
+  const recommendOn = crosscheckPickMode === 'recommend';
+  if (picked) {
+    const showCard = recommendOn && !!recommend;
+    picked.hidden = !showCard;
+    if (showCard) {
+      if (pickedDot) pickedDot.style.background = recommend.color;
+      if (pickedName) {
+        const left = leftoverOf(recommend, quotaMap);
+        pickedName.textContent = t('crosscheckRecommendPicked', {
+          name: recommend.name,
+          n: left == null ? '—' : Math.round(left),
+        });
+      }
+      if (pickedWhy) pickedWhy.textContent = t('crosscheckRecommendWhy');
+    }
+  }
+  if (pickEmpty) {
+    pickEmpty.hidden = !(recommendOn && !recommend);
+    if (recommendOn && !recommend) pickEmpty.textContent = t('crosscheckRecommendEmpty');
+  }
+  const warn = document.getElementById('crosscheck-warn');
+  if (warn) {
+    const srcKind = crosscheckSession && crosscheckSession.sourceKind;
+    let msg = '';
+    if (agent && srcKind === 'chat' && agentKind(agent) === 'code') msg = t('crosscheckCodeWarn');
+    if (agent && srcKind === 'code' && agentKind(agent) === 'chat') msg = t('crosscheckChatWarn');
+    warn.textContent = msg;
+    warn.hidden = !msg;
+  }
+  const chips = document.getElementById('crosscheck-chips');
+  if (chips) {
+    chips.hidden = recommendOn;
+    chips.innerHTML = DISPATCH_TARGETS.filter((a) => canDispatch(a)).map((a) => {
+      const on = a.id === crosscheckReviewer;
+      const left = leftoverOf(a, quotaMap);
+      const pct = left == null ? '' : ` · ${Math.round(left)}%`;
+      return `<button type="button" class="chip${on ? ' on' : ''}" data-agent="${a.id}">
+        <span class="ord">${on ? '✓' : ''}</span>${esc(a.name)}${pct}
+      </button>`;
+    }).join('');
+  }
+  const sendAllowed = !!(agent && canAutoSend(agent));
+  const sendTog = document.getElementById('crosscheck-send');
+  if (sendTog) {
+    sendTog.disabled = !sendAllowed;
+    sendTog.checked = sendAllowed && crosscheckAutoSend;
+    const wrap = sendTog.closest ? sendTog.closest('.sendtog') : null;
+    if (wrap) wrap.classList.toggle('dim', !sendAllowed);
+  }
+  const sendLabel = document.getElementById('crosscheck-send-label');
+  if (sendLabel) sendLabel.textContent = sendAllowed ? t('dispatchSend') : t('dispatchSendCode');
+  const go = document.getElementById('crosscheck-go');
+  if (go) {
+    if (!agent) go.textContent = t('crosscheckGoNeed');
+    else go.textContent = t((sendAllowed && crosscheckAutoSend) ? 'crosscheckGoSend' : 'crosscheckGo', { name: agent.name });
+  }
+  const note = document.getElementById('crosscheck-note');
+  if (note) {
+    const payload = (crosscheckSession && crosscheckSession.ok && typeof reviewPayload === 'function')
+      ? reviewPayload(crosscheckSession, crosscheckPromptStored)
+      : null;
+    note.textContent = (payload && payload.useFile) ? t('crosscheckLong') : t('crosscheckHint');
+  }
+}
+
+function runCrosscheck() {
+  const note = document.getElementById('crosscheck-note');
+  if (!crosscheckSession || !crosscheckSession.ok) {
+    if (note) note.textContent = t('crosscheckNeedSource');
+    return;
+  }
+  if (!crosscheckConfirm) {
+    if (note) note.textContent = t('crosscheckNeedConfirm');
+    return;
+  }
+  const agent = activeCrosscheckAgent();
+  if (!agent || !canDispatch(agent)) {
+    if (note) {
+      note.textContent = (crosscheckPickMode === 'recommend' && !pickCrosscheckReviewer(quotaMap))
+        ? t('crosscheckRecommendEmpty')
+        : t('crosscheckNeedReviewer');
+    }
+    return;
+  }
+  const payload = reviewPayload(crosscheckSession, crosscheckPromptStored);
+  if (payload.useFile) downloadConversationMd(payload.attachName, payload.attachText);
+  const job = makeReviewJob(agent, payload, crosscheckSession, crosscheckAutoSend);
+  chrome.runtime.sendMessage({ type: 'reviewOpen', job }, (opened) => {
+    if (chrome.runtime.lastError) {
+      if (note) note.textContent = t('crosscheckError');
+      return;
+    }
+    const one = (opened && opened[0]) || job;
+    if (note) note.textContent = t(job.send ? 'crosscheckOpenedSent' : 'crosscheckOpened', { name: agent.name });
+    if (one && one.tabId != null) {
+      chrome.runtime.sendMessage({ type: 'dispatchFocus', tabId: one.tabId, url: one.url });
+    }
+  });
+}
+
+const crosscheckToggle = document.getElementById('crosscheck-toggle');
+if (crosscheckToggle && crosscheckToggle.addEventListener) {
+  crosscheckToggle.addEventListener('click', () => setCrosscheckOpen(!crosscheckFloatOpen()));
+}
+const crosscheckFold = document.getElementById('crosscheck-fold');
+if (crosscheckFold && crosscheckFold.addEventListener) {
+  crosscheckFold.addEventListener('click', () => setCrosscheckOpen(false));
+}
+const crosscheckConfirmEl = document.getElementById('crosscheck-confirm');
+if (crosscheckConfirmEl && crosscheckConfirmEl.addEventListener) {
+  crosscheckConfirmEl.addEventListener('change', () => {
+    crosscheckConfirm = !!crosscheckConfirmEl.checked;
+  });
+}
+const crosscheckPromptEl = document.getElementById('crosscheck-prompt');
+if (crosscheckPromptEl && crosscheckPromptEl.addEventListener) {
+  crosscheckPromptEl.addEventListener('input', () => {
+    crosscheckPromptStored = crosscheckPromptEl.value;
+    persistCrosscheck();
+  });
+}
+const crosscheckReset = document.getElementById('crosscheck-reset');
+if (crosscheckReset && crosscheckReset.addEventListener) {
+  crosscheckReset.addEventListener('click', resetCrosscheckPrompt);
+}
+const crosscheckPickEl = document.getElementById('crosscheck-pick');
+if (crosscheckPickEl && crosscheckPickEl.addEventListener) {
+  crosscheckPickEl.addEventListener('click', (e) => {
+    const mode = e.target && e.target.dataset && e.target.dataset.pick;
+    if (!mode) return;
+    setCrosscheckPickMode(mode);
+  });
+}
+const crosscheckChips = document.getElementById('crosscheck-chips');
+if (crosscheckChips && crosscheckChips.addEventListener) {
+  crosscheckChips.addEventListener('click', (e) => {
+    let n = e.target;
+    while (n && n !== e.currentTarget && !(n.dataset && n.dataset.agent)) n = n.parentNode;
+    const id = n && n.dataset && n.dataset.agent;
+    if (!id || !dispatchById(id)) return;
+    crosscheckReviewer = id;
+    persistCrosscheck();
+    renderCrosscheck();
+  });
+}
+const crosscheckSendEl = document.getElementById('crosscheck-send');
+if (crosscheckSendEl && crosscheckSendEl.addEventListener) {
+  crosscheckSendEl.addEventListener('change', () => {
+    const agent = activeCrosscheckAgent();
+    if (!agent || !canAutoSend(agent)) {
+      crosscheckSendEl.checked = false;
+      return;
+    }
+    crosscheckAutoSend = !!crosscheckSendEl.checked;
+    persistCrosscheck();
+    renderCrosscheck();
+  });
+}
+const crosscheckGo = document.getElementById('crosscheck-go');
+if (crosscheckGo && crosscheckGo.addEventListener) {
+  crosscheckGo.addEventListener('click', runCrosscheck);
+}
 
 // The screen's usable area, read from the side panel (which sees the whole
 // display, not just its own narrow strip). Handed to the background so it can
@@ -1556,6 +1917,7 @@ function dispatchBoardOpen() {
 function setDispatchOpen(on) {
   const el = document.getElementById('dispatch-float');
   if (!el) return;
+  if (on) setCrosscheckOpen(false);
   el.hidden = !on;
   const btn = document.getElementById('dispatch-toggle');
   if (btn) btn.title = on ? t('dispatchFold') : t('dispatchOpen');
@@ -1955,6 +2317,15 @@ if (chrome.storage && chrome.storage.local && chrome.storage.local.get) {
     // Some of those tabs may have been closed since; drop them before the
     // "Tabs · N" re-entry button reports a stale count.
     pruneDispatchJobs(() => renderDispatch());
+  });
+  chrome.storage.local.get(['crosscheckPrompt', 'crosscheckReviewer', 'crosscheckAutoSend', 'crosscheckPickMode'], (res) => {
+    if (typeof res.crosscheckPrompt === 'string') crosscheckPromptStored = res.crosscheckPrompt;
+    if (typeof res.crosscheckReviewer === 'string') crosscheckReviewer = res.crosscheckReviewer;
+    if (typeof res.crosscheckAutoSend === 'boolean') crosscheckAutoSend = res.crosscheckAutoSend;
+    if (res.crosscheckPickMode === 'manual' || res.crosscheckPickMode === 'recommend') {
+      crosscheckPickMode = res.crosscheckPickMode;
+    }
+    renderCrosscheck();
   });
 }
 

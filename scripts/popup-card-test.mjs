@@ -156,6 +156,8 @@ const els = {
   'logs-json': el(),
   'logs-csv': el(),
   'logs-clear': el(),
+  'dispatch-toggle': el(),
+  'crosscheck-toggle': el(),
 };
 
 const popupCtx = {
@@ -241,6 +243,9 @@ if (els.refresh.textContent !== 'Refresh') problems.push(`default refresh label 
 problems.push(...assertLangPills(langSwitch, 'en', 'default'));
 if (els.share.textContent !== 'Share') problems.push(`default share label should be Share, got ${JSON.stringify(els.share.textContent)}`);
 if (els.logs.textContent !== 'Logs') problems.push(`default logs label should be Logs, got ${JSON.stringify(els.logs.textContent)}`);
+if (els['crosscheck-toggle'].textContent !== 'Cross-check') {
+  problems.push(`default Cross-check label, got ${JSON.stringify(els['crosscheck-toggle'].textContent)}`);
+}
 if (popupCtx.document.documentElement.lang !== 'en') {
   problems.push(`<html lang> should be en by default, got ${popupCtx.document.documentElement.lang}`);
 }

@@ -32,6 +32,7 @@ function deepText(root) {
 }
 
 function makeAgents() {
+  if (!document.body) return { agents: [], waiting: true };
   const T = (document.body.innerText || '') + '\n' + deepText(document.body);
   const h = location.hostname;
   const g = (re) => { const m = T.match(re); return m ? m[1].trim() : null; };
@@ -207,17 +208,116 @@ function maybeClose() {
   reportPageOutcomes();
   closeIfAuto();
 }
+function cursorDashboardPath() {
+  const h = location.hostname || '';
+  const p = location.pathname || '';
+  return h.includes('cursor.com') && p.includes('/dashboard/');
+}
+
+function cursorJsonOk(r) {
+  if (!r || r.type === 'opaqueredirect') return null;
+  if (r.status === 0 || r.status === 301 || r.status === 302 || r.status === 303 || r.status === 307 || r.status === 308) return null;
+  if (!r.ok) return null;
+  return r.json().catch(() => null);
+}
+
+function cursorDashboardPost(path) {
+  return fetch('https://cursor.com/api/dashboard/' + path, {
+    method: 'POST',
+    credentials: 'include',
+    redirect: 'manual',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  }).then(cursorJsonOk, () => null);
+}
+
+function cursorAgentsFromDashboard(parsed) {
+  if (!parsed) return [];
+  const out = [];
+  if (parsed.cursor && parsed.cursor.limits) {
+    out.push({
+      id: 'cursor',
+      name: 'Cursor',
+      color: '#6E9BF5',
+      limits: parsed.cursor.limits,
+      plan: parsed.cursor.plan || undefined,
+    });
+  }
+  if (parsed.grokBot && parsed.grokBot.limits) {
+    out.push({
+      id: 'grok-bot',
+      name: 'Grok Bot',
+      color: '#F49AC1',
+      limits: parsed.grokBot.limits,
+    });
+  }
+  return out;
+}
+
+// Heavy Cursor dashboard tabs often never paint in the background. Read the
+// same JSON the spending page uses so quiet refresh does not depend on React.
+let cursorApi = { state: 'idle', agents: [], grokMissing: false, grokUnknown: false };
+
+function startCursorApi() {
+  if (cursorApi.state !== 'idle') return;
+  if (typeof fetch !== 'function') return;
+  if (!cursorDashboardPath()) return;
+  if (!inTopFrame()) return;
+  cursorApi.state = 'pending';
+  Promise.all([
+    cursorDashboardPost('get-current-period-usage'),
+    cursorDashboardPost('get-plan-info'),
+    cursorDashboardPost('get-sand-usage-status'),
+  ]).then(([usage, plan, sand]) => {
+    const apply = (parsed) => {
+      cursorApi.agents = cursorAgentsFromDashboard(parsed);
+      cursorApi.grokMissing = !!(parsed && parsed.grokMissing);
+      cursorApi.state = (cursorApi.agents.length || cursorApi.grokMissing) ? 'done' : 'failed';
+      cursorApi.grokUnknown = cursorApi.state === 'done'
+        && !cursorApi.grokMissing
+        && !cursorApi.agents.some((a) => a.id === 'grok-bot');
+      tryOnce();
+    };
+    const parsed = typeof parseCursorDashboard === 'function'
+      ? parseCursorDashboard(usage, plan, sand, Date.now())
+      : null;
+    if (parsed && (parsed.cursor || parsed.grokBot || parsed.grokMissing)) {
+      apply(parsed);
+      return;
+    }
+    // GET fallback: no CSRF Origin check, still cookie-auth'd.
+    return fetch('https://cursor.com/api/usage-summary', {
+      credentials: 'include',
+      redirect: 'manual',
+    }).then(cursorJsonOk, () => null).then((summary) => {
+      const again = typeof parseCursorDashboard === 'function'
+        ? parseCursorDashboard(summary, plan, sand, Date.now())
+        : null;
+      apply(again);
+    });
+  }).catch(() => {
+    cursorApi.state = 'failed';
+    tryOnce();
+  });
+}
+
 function tryOnce() {
   if (done) return;
+  startCursorApi();
   const r = makeAgents();
+  const extra = cursorApi.state === 'done' ? cursorApi.agents : [];
   let pending = !!r.waiting;
-  r.agents.forEach((a) => {
+  r.agents.concat(extra).forEach((a) => {
     if (saved[a.id]) return; // 每个产品只存一次
     if (a.id === 'grok-build' && !grokStable(a)) { pending = true; return; }
     saved[a.id] = true;
     inflight++;
     save(a, () => { inflight--; maybeClose(); });
   });
+  const grokResolved = !!saved['grok-bot'] || cursorApi.grokMissing;
+  if (grokResolved) pending = false;
+  else if (r.waiting || cursorApi.grokUnknown) pending = true;
+  else if (cursorApi.state === 'pending' && !saved.cursor) pending = true;
   if (pending || !Object.keys(saved).length) return;
   done = true;
   finish();

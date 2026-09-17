@@ -155,6 +155,49 @@ $0.00
   check('not the usage view', parseGrokUsage('just chatting with grok about code'), null);
 }
 
+const { parseCursorDashboard } = ctx;
+if (typeof parseCursorDashboard !== 'function') {
+  console.error('parseCursorDashboard was not loaded from parse.js');
+  process.exit(1);
+}
+
+{
+  const now = Date.parse('2026-09-17T12:00:00Z');
+  const usage = {
+    billingCycleEnd: String(now + 16 * 86400000),
+    planUsage: { autoPercentUsed: 35.2, apiPercentUsed: 100 },
+  };
+  const plan = { planInfo: { planName: 'Pro+', price: '$60/mo', billingCycleEnd: String(now + 16 * 86400000) } };
+  const sand = { usagePercent: 1.2, hasNonZeroIncludedLimit: true, nextResetTimestampUtc: now + 7 * 86400000 };
+  const p = parseCursorDashboard(usage, plan, sand, now);
+  check('cursor dashboard: models remaining', p && p.cursor && p.cursor.limits[0].percent_left, 65);
+  check('cursor dashboard: other models remaining', p && p.cursor && p.cursor.limits[1].percent_left, 0);
+  check('cursor dashboard: plan label', p && p.cursor && p.cursor.plan, 'Pro+ $60/mo');
+  check('cursor dashboard: reset days', p && p.cursor && p.cursor.limits[0].resets_text, '(16 days)');
+  check('cursor dashboard: grok bot remaining', p && p.grokBot && p.grokBot.limits[0].percent_left, 99);
+  check('cursor dashboard: grok bot reset', p && p.grokBot && p.grokBot.limits[0].resets_text, '7 days left');
+  check('cursor dashboard: grok not missing', p && p.grokMissing, false);
+}
+
+{
+  const now = Date.parse('2026-09-17T12:00:00Z');
+  const summary = {
+    billingCycleEnd: '2026-10-03T12:00:00.000Z',
+    individualUsage: { plan: { autoPercentUsed: 35, apiPercentUsed: 100 } },
+  };
+  const p = parseCursorDashboard(summary, { planInfo: { planName: 'Pro+', price: '$60/mo' } }, {
+    hasNonZeroIncludedLimit: false,
+    usagePercent: 0,
+  }, now);
+  check('usage-summary shape still parses cursor', p && p.cursor && p.cursor.limits[0].percent_left, 65);
+  check('no grok bot allowance is section_missing', p && p.grokMissing, true);
+  check('excluded grok bot is not a 100% ring', p && p.grokBot, null);
+}
+
+{
+  check('empty dashboard json is null', parseCursorDashboard({}, {}, {}, Date.now()), null);
+}
+
 if (failed) {
   console.error(`\n${failed} test(s) failed`);
   process.exit(1);

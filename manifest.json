@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "default_locale": "en",
   "name": "__MSG_extName__",
-  "version": "1.5.10",
+  "version": "1.6.1",
   "description": "__MSG_extDesc__",
   "action": {
     "default_title": "__MSG_extName__",
@@ -39,7 +39,7 @@
         "https://gemini.google.com/*"
       ],
       "js": ["parse.js", "content.js"],
-      "run_at": "document_idle",
+      "run_at": "document_start",
       "all_frames": true
     }
   ]

@@ -14,13 +14,16 @@ const contentSrc = readFileSync(resolve(root, 'content.js'), 'utf8');
 
 // 造一个最小的假浏览器环境：innerText 就是我们给的文本，MutationObserver / setInterval
 // 都由测试手动触发，chrome.runtime.sendMessage 记录发出的消息。
-function runPage({ host, path = '/', search = '', hash = '', text }) {
+function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchImpl }) {
   const sent = [];
   let body = { innerText: text, childNodes: [] };
   let observerCb = null;
   let intervalCb = null;
   const ctxObj = {
     Date,
+    Promise,
+    setTimeout,
+    fetch: fetchImpl,
     setInterval: (fn) => { intervalCb = fn; return 1; },
     clearInterval: () => { intervalCb = null; },
     MutationObserver: class { constructor(cb) { observerCb = cb; } observe() {} disconnect() { observerCb = null; } },
@@ -35,6 +38,7 @@ function runPage({ host, path = '/', search = '', hash = '', text }) {
     sent,
     setText: (t) => { body.innerText = t; if (observerCb) observerCb(); },
     tick: () => { if (intervalCb) intervalCb(); },
+    flush: async (n = 8) => { for (let i = 0; i < n; i++) await Promise.resolve(); },
     agents: () => sent.filter((m) => m.type === 'agentData').map((m) => m.agent),
     closed: () => sent.some((m) => m.type === 'closeMe'),
     failures: () => sent.filter((m) => m.type === 'pageCaptureFailed'),
@@ -197,6 +201,99 @@ Upgrade
   check(c && c.id === 'claude-code' && c.limits[0].percent_left === 70 && c.limits[1].percent_left === 90, `claude page, got ${JSON.stringify(c)}`);
 }
 
+function jsonOk(body) {
+  return { ok: true, status: 200, type: 'basic', json: async () => JSON.parse(JSON.stringify(body)) };
+}
+
+function cursorFetch(handlers) {
+  return async (url) => {
+    const path = String(url);
+    for (const [key, body] of Object.entries(handlers)) {
+      if (path.includes(key)) return jsonOk(body);
+    }
+    return { ok: false, status: 404, type: 'basic', json: async () => null };
+  };
+}
+
+{
+  const now = Date.parse('2026-09-17T12:00:00Z');
+  const p = runPage({
+    host: 'cursor.com',
+    path: '/dashboard/spending',
+    search: '?cawrefresh=1',
+    text: 'Loading…',
+    fetch: cursorFetch({
+      'get-current-period-usage': {
+        billingCycleEnd: String(now + 16 * 86400000),
+        planUsage: { autoPercentUsed: 35, apiPercentUsed: 100 },
+      },
+      'get-plan-info': { planInfo: { planName: 'Pro+', price: '$60/mo' } },
+      'get-sand-usage-status': {
+        usagePercent: 1,
+        hasNonZeroIncludedLimit: true,
+        nextResetTimestampUtc: now + 7 * 86400000,
+      },
+    }),
+  });
+  await p.flush();
+  const ag = p.agents();
+  const cursor = ag.find((a) => a.id === 'cursor');
+  const bot = ag.find((a) => a.id === 'grok-bot');
+  check(cursor && cursor.limits[0].percent_left === 65, `background spending JSON should save Cursor 65% left, got ${JSON.stringify(cursor)}`);
+  check(cursor && cursor.limits[1] && cursor.limits[1].percent_left === 0, 'background spending JSON should save Other Models 0% left');
+  check(cursor && cursor.plan === 'Pro+ $60/mo', `background spending JSON should save the plan, got ${cursor && cursor.plan}`);
+  check(bot && bot.limits[0].percent_left === 99, `background spending JSON should save Grok Bot 99% left, got ${JSON.stringify(bot)}`);
+  check(p.closed(), 'auto-opened spending page should close after the dashboard JSON is saved');
+}
+
+{
+  const p = runPage({
+    host: 'cursor.com',
+    path: '/dashboard/spending',
+    search: '?cawrefresh=1',
+    text: 'Loading…',
+    fetch: cursorFetch({
+      'get-current-period-usage': { planUsage: { autoPercentUsed: 35, apiPercentUsed: 100 } },
+      'get-plan-info': { planInfo: { planName: 'Pro+', price: '$60/mo' } },
+      'get-sand-usage-status': { hasNonZeroIncludedLimit: false, usagePercent: 0 },
+    }),
+  });
+  await p.flush();
+  check(p.agents().map((a) => a.id).join() === 'cursor', 'JSON with no Grok Bot allowance should save only cursor');
+  check(p.closed(), 'page should close once JSON says Grok Bot is not included');
+}
+
+{
+  const p = runPage({
+    host: 'cursor.com',
+    path: '/dashboard/spending',
+    search: '?cawrefresh=1',
+    text: 'Loading…',
+    fetch: cursorFetch({
+      'usage-summary': {
+        individualUsage: { plan: { autoPercentUsed: 40, apiPercentUsed: 10 } },
+      },
+    }),
+  });
+  await p.flush();
+  const cursor = p.agents().find((a) => a.id === 'cursor');
+  check(cursor && cursor.limits[0].percent_left === 60, `usage-summary GET fallback should save Cursor, got ${JSON.stringify(cursor)}`);
+  check(!p.closed(), 'usage-summary without Grok Bot JSON should keep waiting rather than close as missing');
+}
+
+{
+  const p = runPage({
+    host: 'cursor.com',
+    path: '/dashboard/spending',
+    search: '?cawrefresh=1',
+    text: 'Loading…',
+    fetch: async () => ({ ok: false, status: 401, type: 'basic', json: async () => ({ error: 'not_authenticated' }) }),
+  });
+  await p.flush();
+  check(p.agents().length === 0, 'failed dashboard JSON should not invent numbers');
+  check(!p.closed(), 'failed JSON should keep waiting for the DOM, not close immediately');
+}
+
 if (problems.length) {
   console.error(problems.join('\n'));
   process.exit(1);
@@ -204,4 +301,5 @@ if (problems.length) {
 console.log('ok  Cursor spending page reports Cursor (4% left) and Grok Bot (87% left) from one scrape');
 console.log('ok  Missing / late Grok Bot section: Cursor saved, page waits, closes once done');
 console.log('ok  Gemini usage page reports weekly + current usage, PRO plan');
+console.log('ok  Frozen spending page still saves Cursor + Grok Bot from dashboard JSON');
 console.log('\nContent test passed.');

@@ -436,6 +436,9 @@ const lastCreate = createdTabs[createdTabs.length - 1];
 if (!lastCreate || lastCreate.url !== 'https://claude.ai/new') {
   problems.push(`reviewOpen should open the reviewer URL, got ${JSON.stringify(lastCreate)}`);
 }
+if (!lastCreate || lastCreate.active !== true) {
+  problems.push(`reviewOpen must open the reviewer in the foreground, got ${JSON.stringify(lastCreate)}`);
+}
 if (reviewOpened && reviewOpened[0] && reviewOpened[0].send) {
   problems.push('reviewOpen must not auto-send');
 }

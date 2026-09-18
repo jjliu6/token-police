@@ -158,6 +158,8 @@ const els = {
   'logs-clear': el(),
   'dispatch-toggle': el(),
   'crosscheck-toggle': el(),
+  'crosscheck-float': el({ hidden: true }),
+  'crosscheck-status': el(),
 };
 
 const popupCtx = {
@@ -1422,6 +1424,69 @@ if (enRestore.length) {
   process.exit(1);
 }
 console.log('ok  EN toggle restores English');
+
+// Cross-check status must follow uiLang on every paint. A frozen t() snapshot
+// from a previous language (the EN-panel / Chinese-error-line bug) is wrong.
+{
+  const zhErr = '读不了这个标签。请刷新页面，并保持 Token Police 开着。';
+  const enErr = 'Could not read this tab. Reload the page and keep Token Police open.';
+  const frErr = 'Impossible de lire cet onglet. Recharge la page et garde Token Police ouvert.';
+  ctx.crosscheckStatusKind = 'error';
+  ctx.setLang('zh');
+  if (els['crosscheck-status'].textContent !== zhErr) {
+    console.error('zh Cross-check error, got', JSON.stringify(els['crosscheck-status'].textContent));
+    process.exit(1);
+  }
+  ctx.setLang('en');
+  if (els['crosscheck-status'].textContent !== enErr) {
+    console.error('EN Cross-check must not keep Chinese status, got', JSON.stringify(els['crosscheck-status'].textContent));
+    process.exit(1);
+  }
+  if (/[\u4e00-\u9fff]/.test(els['crosscheck-status'].textContent)) {
+    console.error('EN Cross-check status still contains Chinese');
+    process.exit(1);
+  }
+  ctx.setLang('fr');
+  if (els['crosscheck-status'].textContent !== frErr) {
+    console.error('fr Cross-check error, got', JSON.stringify(els['crosscheck-status'].textContent));
+    process.exit(1);
+  }
+  ctx.crosscheckStatusKind = 'unsupported';
+  ctx.setLang('en');
+  const unsupportedEn = els['crosscheck-status'].textContent;
+  if (!unsupportedEn.includes('conversation Token Police can read')) {
+    console.error('EN unsupported status, got', JSON.stringify(unsupportedEn));
+    process.exit(1);
+  }
+  if (/[\u4e00-\u9fff]/.test(els['crosscheck-status'].textContent)) {
+    console.error('EN unsupported status still contains Chinese');
+    process.exit(1);
+  }
+  ctx.setLang('zh');
+  if (!els['crosscheck-status'].textContent.includes('能读的对话')) {
+    console.error('zh unsupported status, got', JSON.stringify(els['crosscheck-status'].textContent));
+    process.exit(1);
+  }
+  ctx.crosscheckSourceMeta = { sourceAgent: 'chatgpt', sourceKind: 'chat', supported: true, sessionUrl: 'https://chatgpt.com/c/x' };
+  ctx.crosscheckStatusKind = 'error';
+  ctx.setLang('en');
+  if (!els['crosscheck-status'].textContent.includes('ChatGPT')) {
+    console.error('EN named error should mention ChatGPT, got', JSON.stringify(els['crosscheck-status'].textContent));
+    process.exit(1);
+  }
+  if (/[\u4e00-\u9fff]/.test(els['crosscheck-status'].textContent)) {
+    console.error('EN named error still contains Chinese');
+    process.exit(1);
+  }
+  ctx.setLang('zh');
+  if (!els['crosscheck-status'].textContent.includes('ChatGPT') || !els['crosscheck-status'].textContent.includes('刷新')) {
+    console.error('zh named error should name ChatGPT, got', JSON.stringify(els['crosscheck-status'].textContent));
+    process.exit(1);
+  }
+  ctx.crosscheckSourceMeta = null;
+  ctx.setLang('en');
+  console.log('ok  Cross-check status follows uiLang instead of a frozen snapshot');
+}
 
 const savedStore = { agents: { 'grok-build': grok }, history: [], uiLang: 'zh' };
 const langSwitch2 = langSwitchEls();

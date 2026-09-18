@@ -943,20 +943,8 @@ function openLink(id) {
   return `<a href="#" data-open="${id}">${t('openPage')} ↗</a>`;
 }
 
-function failReason(fail, latestAttempt) {
-  if (fail === 'missing') return 'section_missing';
-  if (latestAttempt && latestAttempt.reason) return latestAttempt.reason;
-  if (fail === 'fail' || fail === 'failed' || fail === true) return 'read_failed';
-  return fail ? String(fail) : '';
-}
-
-function failText(fail, latestAttempt) {
-  const why = failReason(fail, latestAttempt);
-  if (why === 'section_missing') return t('sectionMissing');
-  if (why === 'need_signin') return t('fetchNeedSignin');
-  if (why === 'timeout') return t('fetchTimeout');
-  if (why === 'parse_miss') return t('fetchParseMiss');
-  return t('fetchFailed');
+function failText(fail) {
+  return fail === 'missing' ? t('sectionMissing') : t('fetchFailed');
 }
 
 const STALE_WARNING_MS = 2 * 3600000;
@@ -976,7 +964,7 @@ function card(id, a, hist, fail, latestAttempt) {
     return `<div class="card">
       <div class="chead"><div class="name">${logo(id, meta.color)}${meta.name}</div></div>
       <div class="empty">${t('empty')} ${openLink(id)}</div>
-      ${fail ? `<div class="fail">⚠ ${failText(fail, latestAttempt)}</div>` : ''}
+      ${fail ? `<div class="fail">⚠ ${failText(fail)}</div>` : ''}
     </div>`;
   }
   const L = a.limits || [], p0 = L[0], p1 = L[1];
@@ -1003,7 +991,7 @@ function card(id, a, hist, fail, latestAttempt) {
   let burn = '';
   if (est) burn = `<div class="burn" style="color:${est.color}">🔥 ${est.text}</div>`;
   const failLine = fail
-    ? `<div class="fail">⚠ ${failText(fail, latestAttempt)} ${openLink(id)}</div>`
+    ? `<div class="fail">⚠ ${failText(fail)} ${openLink(id)}</div>`
     : '';
   const freshness = stale
     ? `<div class="freshness${stale === 2 ? ' cache' : ''}">⚠ ${t(stale === 2 ? 'stale24h' : 'stale2h')}</div>`

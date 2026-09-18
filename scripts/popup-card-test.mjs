@@ -506,13 +506,6 @@ if (!failHtml.includes("Last refresh couldn't read this page")) failProblems.pus
 if (failHtml.includes('sign in') || failHtml.includes('登录')) failProblems.push('generic fail must not blame login');
 if (!failHtml.includes('data-open="grok-build"')) failProblems.push('failed card should link to the usage page');
 if (ctx.card('grok-build', grok, [], false).includes('class="fail"')) failProblems.push('ok card must not show the failure line');
-const parseMissHtml = ctx.card('grok-build', grok, [], 'failed', { status: 'failed', reason: 'parse_miss', attempted_at: Date.now() });
-if (!parseMissHtml.includes("couldn't parse the numbers")) failProblems.push('parse_miss should say the usage page could not be parsed');
-if (parseMissHtml.includes('sign in')) failProblems.push('parse_miss must not blame login');
-const timeoutHtml = ctx.card('grok-build', grok, [], 'failed', { status: 'failed', reason: 'timeout', attempted_at: Date.now() });
-if (!timeoutHtml.includes('timed out')) failProblems.push('timeout should say the refresh timed out');
-const loginHtml = ctx.card('grok-build', grok, [], 'failed', { status: 'failed', reason: 'need_signin', attempted_at: Date.now() });
-if (!loginHtml.includes('sign-in')) failProblems.push('need_signin should mention a sign-in screen');
 store.refresh = { running: false, started: Date.now(), finished: Date.now(), results: { cursor: 'fail' } };
 ctx.render();
 if (!els.grid.innerHTML.includes('class="fail"')) failProblems.push('render should show the failure line for a failed agent');

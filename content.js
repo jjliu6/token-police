@@ -24,63 +24,16 @@ function deepText(root) {
     if (!node) return;
     if (node.nodeType === 3) { out += node.nodeValue + '\n'; return; }
     if (node.nodeType === 1 && SKIP[node.nodeName]) return;
-    if (node.nodeType === 1) {
-      const aria = node.getAttribute && (
-        node.getAttribute('aria-label')
-        || node.getAttribute('aria-valuetext')
-        || node.getAttribute('title')
-        || ''
-      );
-      if (aria) out += aria + '\n';
-      const now = node.getAttribute && node.getAttribute('aria-valuenow');
-      if (now && /^\d+(\.\d+)?$/.test(now)) out += now + '% used\n';
-    }
-    const shadow = node.shadowRoot || closedShadow(node);
-    if (shadow) shadow.childNodes.forEach(walk);
+    if (node.shadowRoot) node.shadowRoot.childNodes.forEach(walk);
     if (node.childNodes) node.childNodes.forEach(walk);
   };
-  walk(root || document.documentElement || document.body);
+  walk(root || document.body);
   return out;
 }
 
-function closedShadow(node) {
-  if (!node || node.nodeType !== 1) return null;
-  try {
-    if (chrome && chrome.dom && typeof chrome.dom.openOrClosedShadowRoot === 'function') {
-      return chrome.dom.openOrClosedShadowRoot(node);
-    }
-  } catch (e) {}
-  return null;
-}
-
-function frameTexts() {
-  let extra = '';
-  try {
-    const frames = document.querySelectorAll && document.querySelectorAll('iframe');
-    if (!frames) return extra;
-    for (let i = 0; i < frames.length; i++) {
-      try {
-        const doc = frames[i].contentDocument;
-        if (!doc) continue;
-        extra += '\n' + ((doc.body && doc.body.innerText) || '');
-        extra += '\n' + deepText(doc.documentElement || doc.body);
-      } catch (e) {}
-    }
-  } catch (e) {}
-  return extra;
-}
-
-function pageText() {
-  const root = document.documentElement || document.body;
-  if (!root && !document.body) return '';
-  const bodyText = (document.body && document.body.innerText) || '';
-  const rootText = (root && root.innerText) || '';
-  return bodyText + '\n' + rootText + '\n' + deepText(root) + frameTexts();
-}
-
 function makeAgents() {
-  if (!document.body && !document.documentElement) return { agents: [], waiting: true };
-  const T = pageText();
+  if (!document.body) return { agents: [], waiting: true };
+  const T = (document.body.innerText || '') + '\n' + deepText(document.body);
   const h = location.hostname;
   const g = (re) => { const m = T.match(re); return m ? m[1].trim() : null; };
   const pct = (re) => { const m = T.match(re); return m ? parseInt(m[1], 10) : null; };
@@ -183,47 +136,24 @@ function pageAgentIds() {
   const q = location.search || '';
   if (h.includes('claude.ai') && p.startsWith('/new')) return ['claude-code'];
   if (h.includes('chatgpt.com') && p.includes('/codex/cloud/settings/analytics')) return ['codex'];
-  if (h.includes('grok.com') && (/[?&]_s=usage/.test(q) || /(?:\?|&)cawrefresh(?:=|&|$)/.test(q) || /SuperGrok/i.test(pageText()))) {
-    return ['grok-build'];
-  }
+  if (h.includes('grok.com') && /[?&]_s=usage/.test(q)) return ['grok-build'];
   if (h.includes('cursor.com') && p.includes('/dashboard/spending')) return ['cursor', 'grok-bot'];
   if (h.includes('cursor.com') && p.includes('/dashboard/usage')) return ['cursor'];
   if (h.includes('gemini.google.com') && p.includes('/usage')) return ['gemini'];
   return [];
 }
 
-function grokUsageOpen() {
-  return grokUsageWatch() || /SuperGrok|Weekly SuperGrok Limit/i.test(pageText());
-}
-
-function captureFailReason(id) {
-  if (id === 'grok-bot' && saved.cursor && !saved['grok-bot']) return 'section_missing';
-  const T = pageText();
-  if (id === 'grok-build') {
-    const fromPage = typeof grokCaptureReason === 'function'
-      ? grokCaptureReason(T, grokUsageOpen())
-      : 'parse_miss';
-    if (fromPage === 'parse_miss') return 'parse_miss';
-    if (grokApi.reason) return grokApi.reason;
-    return fromPage;
-  }
-  if (typeof looksLikeLogin === 'function' && looksLikeLogin(T)) return 'need_signin';
-  if (T && T.replace(/\s+/g, '').length > 40) return 'parse_miss';
-  return 'timeout';
-}
-
 function reportPageOutcomes() {
+  if (captureTrigger() !== 'page') return;
   pageAgentIds().forEach((id) => {
     if (saved[id]) return;
-    const reason = captureFailReason(id);
-    const missing = reason === 'section_missing';
+    const missing = id === 'grok-bot' && !!saved.cursor;
     try {
       chrome.runtime.sendMessage({
         type: 'pageCaptureFailed',
         agent_id: id,
         status: missing ? 'missing' : 'failed',
-        reason,
-        trigger: captureTrigger(),
+        reason: missing ? 'section_missing' : 'read_failed',
         started: captureStartedAt,
         source_url: captureSourceUrl(),
       });
@@ -232,15 +162,13 @@ function reportPageOutcomes() {
 }
 
 function save(a, done) {
-  const rec = {};
-  Object.keys(a).forEach((k) => { if (k !== 'fromApi') rec[k] = a[k]; });
-  rec.scraped_at = Date.now();
-  rec.status = 'ok';
-  rec.capture_trigger = captureTrigger();
-  rec.capture_source_url = captureSourceUrl();
-  rec.capture_duration_ms = rec.scraped_at - captureStartedAt;
+  a.scraped_at = Date.now();
+  a.status = 'ok';
+  a.capture_trigger = captureTrigger();
+  a.capture_source_url = captureSourceUrl();
+  a.capture_duration_ms = a.scraped_at - captureStartedAt;
   try {
-    chrome.runtime.sendMessage({ type: 'agentData', agent: rec }, () => {
+    chrome.runtime.sendMessage({ type: 'agentData', agent: a }, () => {
       void chrome.runtime.lastError;
       if (done) done();
     });
@@ -294,16 +222,13 @@ function cursorJsonOk(r) {
 }
 
 function cursorDashboardPost(path) {
-  const opts = {
+  return fetch('https://cursor.com/api/dashboard/' + path, {
     method: 'POST',
     credentials: 'include',
     redirect: 'manual',
     headers: { 'content-type': 'application/json' },
     body: '{}',
-  };
-  const signal = typeof abortAfter === 'function' ? abortAfter(8000) : undefined;
-  if (signal) opts.signal = signal;
-  return fetch('https://cursor.com/api/dashboard/' + path, opts).then(cursorJsonOk, () => null);
+  }).then(cursorJsonOk, () => null);
 }
 
 function cursorAgentsFromDashboard(parsed) {
@@ -361,10 +286,10 @@ function startCursorApi() {
       return;
     }
     // GET fallback: no CSRF Origin check, still cookie-auth'd.
-    const summaryOpts = { credentials: 'include', redirect: 'manual' };
-    const signal = typeof abortAfter === 'function' ? abortAfter(8000) : undefined;
-    if (signal) summaryOpts.signal = signal;
-    return fetch('https://cursor.com/api/usage-summary', summaryOpts).then(cursorJsonOk, () => null).then((summary) => {
+    return fetch('https://cursor.com/api/usage-summary', {
+      credentials: 'include',
+      redirect: 'manual',
+    }).then(cursorJsonOk, () => null).then((summary) => {
       const again = typeof parseCursorDashboard === 'function'
         ? parseCursorDashboard(summary, plan, sand, Date.now())
         : null;
@@ -376,102 +301,15 @@ function startCursorApi() {
   });
 }
 
-const GROK_CREDITS_URL = 'https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig';
-let grokApi = { state: 'idle', agent: null, reason: '' };
-
-function grokHost() {
-  return (location.hostname || '').includes('grok.com');
-}
-
-function grokUsageWatch() {
-  const q = location.search || '';
-  return /[?&]_s=usage/.test(q) || /(?:\?|&)cawrefresh(?:=|&|$)/.test(q);
-}
-
-function grokAgentFromParsed(parsed) {
-  if (!parsed || parsed.used == null) return null;
-  return {
-    id: 'grok-build',
-    name: 'Grok',
-    color: '#B78CF0',
-    limits: [{ label: 'Weekly (SuperGrok)', percent_left: 100 - parsed.used, resets_text: parsed.reset }],
-    breakdown: parsed.breakdown,
-    fromApi: true,
-  };
-}
-
-function applyGrokParsed(parsed) {
-  const agent = grokAgentFromParsed(parsed);
-  if (!agent) return false;
-  grokApi.agent = agent;
-  grokApi.state = 'done';
-  grokApi.reason = '';
-  tryOnce();
-  return true;
-}
-
-function startGrokApi() {
-  if (grokApi.state !== 'idle') return;
-  if (!grokHost()) return;
-  if (typeof fetch !== 'function') return;
-  grokApi.state = 'pending';
-  const empty = new Uint8Array([0, 0, 0, 0, 0]);
-  const opts = {
-    method: 'POST',
-    credentials: 'include',
-    redirect: 'manual',
-    headers: {
-      'content-type': 'application/grpc-web+proto',
-      accept: 'application/grpc-web+proto',
-      'x-grpc-web': '1',
-    },
-    body: empty,
-  };
-  const signal = typeof abortAfter === 'function' ? abortAfter(4000) : undefined;
-  if (signal) opts.signal = signal;
-  fetch(GROK_CREDITS_URL, opts).then((r) => {
-    if (!r || r.type === 'opaqueredirect') return null;
-    if (r.status === 401) {
-      grokApi.reason = 'need_signin';
-      return null;
-    }
-    if (!r.ok) return null;
-    return r.arrayBuffer ? r.arrayBuffer() : null;
-  }, () => null).then((buf) => {
-    const parsed = buf && typeof parseGrokCreditsConfig === 'function'
-      ? parseGrokCreditsConfig(buf)
-      : null;
-    if (applyGrokParsed(parsed)) return;
-    grokApi.state = 'failed';
-    tryOnce();
-  }).catch(() => {
-    grokApi.state = 'failed';
-    tryOnce();
-  });
-}
-
-if (typeof window !== 'undefined' && window.addEventListener) {
-  window.addEventListener('message', (ev) => {
-    if (ev.source !== window || !ev.data || ev.data.source !== 'token-police-grok') return;
-    if (ev.data.type !== 'credits' || !ev.data.bytes || saved['grok-build']) return;
-    const parsed = typeof parseGrokCreditsConfig === 'function'
-      ? parseGrokCreditsConfig(ev.data.bytes)
-      : null;
-    applyGrokParsed(parsed);
-  });
-}
-
 function tryOnce() {
   if (done) return;
   startCursorApi();
-  startGrokApi();
   const r = makeAgents();
-  const extra = cursorApi.state === 'done' ? cursorApi.agents.slice() : [];
-  if (grokApi.state === 'done' && grokApi.agent) extra.push(grokApi.agent);
+  const extra = cursorApi.state === 'done' ? cursorApi.agents : [];
   let pending = !!r.waiting;
   r.agents.concat(extra).forEach((a) => {
     if (saved[a.id]) return; // 每个产品只存一次
-    if (a.id === 'grok-build' && !a.fromApi && !grokStable(a)) { pending = true; return; }
+    if (a.id === 'grok-build' && !grokStable(a)) { pending = true; return; }
     saved[a.id] = true;
     inflight++;
     save(a, () => { inflight--; maybeClose(); });
@@ -480,7 +318,6 @@ function tryOnce() {
   if (grokResolved) pending = false;
   else if (r.waiting || cursorApi.grokUnknown) pending = true;
   else if (cursorApi.state === 'pending' && !saved.cursor) pending = true;
-  if (grokHost() && grokApi.state === 'pending' && !saved['grok-build']) pending = true;
   if (pending || !Object.keys(saved).length) return;
   done = true;
   finish();
@@ -507,47 +344,21 @@ function inTopFrame() {
   catch (e) { return true; }
 }
 
-function grokIframeSurface() {
-  return grokHost() && !inTopFrame();
-}
-
-let watching = false;
-function startDomWatch() {
-  if (watching || done) return;
-  watching = true;
+// Injected at document_idle (see manifest). v1.6.1 used document_start so
+// Cursor JSON could start earlier; inactive refresh tabs then froze before
+// this watcher ran, and every agent failed together at the 25s tab-kill.
+if (!isDispatchSurface()) {
   tryOnce();
-  if (done) return;
-  obs = new MutationObserver(tryOnce);
-  obs.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  let n = 0;
-  // Usage overlay is already on screen when this runs. Two ticks (~4s) is
-  // enough to settle the % animation; staring for 60s is not a slow-load wait.
-  const cap = grokHost() ? 2 : 30;
-  iv = setInterval(() => {
-    n++;
-    tryOnce();
-    if (!done && n > cap) { done = true; finish(); maybeClose(); }
-  }, 2000);
-}
-
-if (!isDispatchSurface() || grokIframeSurface()) startDomWatch();
-else if (grokHost()) {
-  startGrokApi();
-  if (typeof MutationObserver === 'function' && document.documentElement) {
-    const kick = new MutationObserver(() => {
-      if (grokUsageWatch() || (typeof parseGrokUsage === 'function' && parseGrokUsage(pageText()))) {
-        kick.disconnect();
-        startDomWatch();
-      }
-    });
-    kick.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  if (!done) {
+    obs = new MutationObserver(tryOnce);
+    obs.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    let n = 0;
+    iv = setInterval(() => {
+      n++;
+      tryOnce();
+      if (!done && n > 30) { done = true; finish(); maybeClose(); }
+    }, 2000);
   }
-}
-
-if (grokHost() && typeof window !== 'undefined' && window.addEventListener) {
-  const onNav = () => { if (grokUsageWatch()) startDomWatch(); };
-  window.addEventListener('popstate', onNav);
-  window.addEventListener('hashchange', onNav);
 }
 
 function isFillableComposer(el) {

@@ -22,45 +22,6 @@ const notifications = [];
 const fetches = [];
 // 假的 GitHub API：默认回 v9.9.9（比任何已装版本都新）；可以改成失败
 let fetchReply = { ok: true, json: () => Promise.resolve({ tag_name: 'v9.9.9', html_url: 'https://github.com/jjliu6/token-police/releases/tag/v9.9.9' }) };
-const swCtl = { cursor: true, grok: true, grokStatus: 200, sand: 'ok' };
-
-function jsonRes(body) {
-  return Promise.resolve({
-    ok: true,
-    status: 200,
-    type: 'basic',
-    json: async () => JSON.parse(JSON.stringify(body)),
-    arrayBuffer: async () => new ArrayBuffer(0),
-  });
-}
-
-function failRes(status) {
-  return Promise.resolve({
-    ok: false,
-    status,
-    type: 'basic',
-    json: async () => ({ error: 'no' }),
-    arrayBuffer: async () => new ArrayBuffer(0),
-  });
-}
-
-function grokCreditsRes() {
-  const json = JSON.stringify({
-    config: {
-      creditUsagePercent: 2,
-      currentPeriod: { end: '2026-09-25T09:20:00.000Z' },
-      productUsage: [{ product: 'GrokChat', usagePercent: 2 }],
-    },
-  });
-  const bytes = new TextEncoder().encode(json);
-  return Promise.resolve({
-    ok: true,
-    status: 200,
-    type: 'basic',
-    json: async () => JSON.parse(json),
-    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
-  });
-}
 const storageListeners = [];
 const onRemovedListeners = [];
 let nextTabId = 100;
@@ -69,44 +30,7 @@ const ctxObj = {
   setTimeout,
   clearTimeout,
   URL,
-  Uint8Array,
-  ArrayBuffer,
-  DataView,
-  TextEncoder,
-  TextDecoder,
-  fetch: (url, opts) => {
-    fetches.push({ url, opts });
-    const u = String(url);
-    if (u.includes('api.github.com')) return Promise.resolve(fetchReply);
-    if (u.includes('cursor.com/api/dashboard/get-current-period-usage')) {
-      if (!swCtl.cursor) return failRes(401);
-      return jsonRes({
-        billingCycleEnd: Date.now() + 14 * 86400000,
-        planUsage: { autoPercentUsed: 40, apiPercentUsed: 10 },
-      });
-    }
-    if (u.includes('cursor.com/api/dashboard/get-plan-info')) {
-      if (!swCtl.cursor) return failRes(401);
-      return jsonRes({ planInfo: { planName: 'Pro+', price: '$60/mo' } });
-    }
-    if (u.includes('cursor.com/api/dashboard/get-sand-usage-status')) {
-      if (!swCtl.cursor) return failRes(401);
-      if (swCtl.sand === 'missing') {
-        return jsonRes({ hasNonZeroIncludedLimit: false, usagePercent: 0 });
-      }
-      return jsonRes({
-        usagePercent: 19,
-        hasNonZeroIncludedLimit: true,
-        nextResetTimestampUtc: Date.now() + 6 * 86400000,
-      });
-    }
-    if (u.includes('cursor.com/api/usage-summary')) return failRes(404);
-    if (u.includes('GetGrokCreditsConfig')) {
-      if (!swCtl.grok) return failRes(swCtl.grokStatus);
-      return grokCreditsRes();
-    }
-    return failRes(404);
-  },
+  fetch: (url, opts) => { fetches.push({ url, opts }); return Promise.resolve(fetchReply); },
   chrome: {
     storage: {
       local: {
@@ -328,20 +252,13 @@ if (!quiet.length || quiet.some((o) => o.active !== false)) {
   problems.push(`quiet check must only open background tabs, got ${JSON.stringify(quiet)}`);
 }
 const urls = quiet.map((o) => o.url).join(' ');
-if (!urls.includes('claude.ai') || !urls.includes('chatgpt.com')) {
-  problems.push(`quiet check should cover tab-scraped agents, got ${urls}`);
+if (!urls.includes('claude.ai') || !urls.includes('chatgpt.com') || !urls.includes('grok.com')) {
+  problems.push(`quiet check should cover all enabled agents, got ${urls}`);
 }
-if (urls.includes('grok.com') || urls.includes('cursor.com')) {
-  problems.push(`service-worker JSON scrape should skip Cursor/Grok tabs, got ${urls}`);
-}
+// cursor 取消勾选 → 它自己的 usage 页不开；但 grok-bot 还勾着，共用的 spending 页仍要开
+if (urls.includes('cursor.com/dashboard/usage')) problems.push('quiet check must skip unchecked agents');
+if (!urls.includes('cursor.com/dashboard/spending')) problems.push('quiet check should still open the spending page for Grok Bot');
 if (!urls.includes('gemini.google.com')) problems.push('quiet check should include Gemini');
-const autoOk = (store.captureLogs || []).filter((x) => x.trigger === 'automatic' && x.status === 'success');
-if (!autoOk.some((x) => x.agent_id === 'grok-build' && x.percent_left === 98)) {
-  problems.push(`quiet check should save Grok from SW JSON, got ${JSON.stringify(autoOk)}`);
-}
-if (!autoOk.some((x) => x.agent_id === 'grok-bot')) {
-  problems.push(`quiet check should save Grok Bot from SW JSON even when Cursor is unticked, got ${JSON.stringify(autoOk)}`);
-}
 const autoFailures = (store.captureLogs || []).filter((x) => x.trigger === 'automatic' && x.status === 'failed');
 if (!autoFailures.length) problems.push('automatic check failures must be written to captureLogs');
 
@@ -353,15 +270,8 @@ alarms.listener({ name: 'quietRefresh' });
 await tick(15);
 const all = createdTabs.slice(before2).map((o) => o.url);
 const spending = all.filter((u) => u.startsWith('https://cursor.com/dashboard/spending'));
-if (spending.length !== 0) problems.push(`JSON scrape should skip the spending tab, got ${JSON.stringify(all)}`);
-if (all.some((u) => u.includes('grok.com'))) problems.push(`JSON scrape should skip grok.com, got ${JSON.stringify(all)}`);
+if (spending.length !== 1) problems.push(`shared spending page should open once, got ${JSON.stringify(all)}`);
 if (all.some((u) => u.startsWith('https://cursor.com/dashboard/usage'))) problems.push('cursor usage page should no longer be scraped');
-if (!store.agents || !store.agents.cursor || store.agents.cursor.limits[0].percent_left !== 60) {
-  problems.push(`SW JSON should save Cursor 60% left, got ${JSON.stringify(store.agents && store.agents.cursor)}`);
-}
-if (!store.agents || !store.agents['grok-build'] || store.agents['grok-build'].limits[0].percent_left !== 98) {
-  problems.push(`SW JSON should save Grok 98% left, got ${JSON.stringify(store.agents && store.agents['grok-build'])}`);
-}
 
 // 12) 手动 Refresh：也去重；Cursor 抓到、Grok Bot 没抓到 → grok-bot 标为 missing（不是 fail）
 // 假标签页一打开就"抓完关掉"，整轮刷新几毫秒就结束；所以先把 cursor/gemini 的数据
@@ -375,80 +285,30 @@ await send(agentData({ id: 'grok-build', scraped_at: t0 - 60000, limits: [{ labe
 onMessage({ type: 'refreshAll' }, {}, () => {});
 await tick(80);
 const manual = createdTabs.slice(before3).map((o) => o.url);
-if (manual.filter((u) => u.startsWith('https://cursor.com/dashboard/spending')).length !== 0) {
-  problems.push(`manual refresh should skip the spending tab when SW JSON works, got ${JSON.stringify(manual)}`);
-}
-if (manual.some((u) => String(u).includes('grok.com'))) {
-  problems.push(`manual refresh should skip grok.com when SW JSON works, got ${JSON.stringify(manual)}`);
+if (manual.filter((u) => u.startsWith('https://cursor.com/dashboard/spending')).length !== 1) {
+  problems.push(`manual refresh should open the spending page once, got ${JSON.stringify(manual)}`);
 }
 const rr = store.refresh && store.refresh.results;
 if (!rr || rr.cursor !== 'ok' || rr.gemini !== 'ok') problems.push(`refresh results should mark cursor/gemini ok, got ${JSON.stringify(rr)}`);
-if (!rr || rr['grok-bot'] !== 'ok') problems.push(`grok-bot should be ok from SW JSON, got ${JSON.stringify(rr)}`);
-if (!rr || rr['grok-build'] !== 'ok') problems.push(`grok-build should be ok from SW JSON, got ${JSON.stringify(rr)}`);
+if (!rr || rr['grok-bot'] !== 'missing') problems.push(`grok-bot should be 'missing' when cursor was read but no Grok Bot section, got ${JSON.stringify(rr)}`);
+if (!rr || rr['grok-build'] !== 'fail') problems.push(`an agent whose page never reported should stay 'fail', got ${JSON.stringify(rr)}`);
 const manualFailures = (store.captureLogs || []).filter((x) => x.trigger === 'manual' && x.status === 'failed');
-if (!manualFailures.some((x) => x.agent_id === 'claude-code' && x.reason === 'timeout')) {
-  problems.push(`tab-scraped failures must be logged as timeout, got ${JSON.stringify(manualFailures)}`);
-}
-if (manualFailures.some((x) => x.agent_id === 'grok-build')) {
-  problems.push(`Grok SW scrape should not log a tab timeout, got ${JSON.stringify(manualFailures)}`);
-}
-if (badge.texts.includes('…') || badgeHasMetric(badge.texts)) {
-  problems.push(`refresh must not put a number or ellipsis on the badge, got ${JSON.stringify(badge.texts)}`);
-}
-
-// 12b) SW sand without Grok Bot → missing, still no spending tab
-swCtl.sand = 'missing';
-const beforeMissing = createdTabs.length;
-onMessage({ type: 'refreshAll' }, {}, () => {});
-await tick(80);
-const missingUrls = createdTabs.slice(beforeMissing).map((o) => o.url);
-if (missingUrls.some((u) => String(u).includes('cursor.com'))) {
-  problems.push(`Grok Bot missing from JSON should not open spending, got ${JSON.stringify(missingUrls)}`);
+if (!manualFailures.some((x) => x.agent_id === 'grok-build' && x.reason === 'read_failed')) {
+  problems.push(`manual refresh failures must be logged, got ${JSON.stringify(manualFailures)}`);
 }
 const missingLog = (store.captureLogs || []).find((x) =>
   x.trigger === 'manual' && x.agent_id === 'grok-bot' && x.status === 'missing');
 if (!missingLog || missingLog.reason !== 'section_missing') {
   problems.push(`missing Grok Bot section must log missing/section_missing, got ${JSON.stringify(missingLog)}`);
 }
-swCtl.sand = 'ok';
-
-// 12c) Grok 401 from SW is need_signin and does not open a doomed grok tab
-swCtl.grok = false;
-swCtl.grokStatus = 401;
-const before401 = createdTabs.length;
-onMessage({ type: 'refreshAll' }, {}, () => {});
-await tick(80);
-const urls401 = createdTabs.slice(before401).map((o) => o.url);
-if (urls401.some((u) => String(u).includes('grok.com'))) {
-  problems.push(`Grok 401 should skip the usage tab, got ${JSON.stringify(urls401)}`);
+if (badge.texts.includes('…') || badgeHasMetric(badge.texts)) {
+  problems.push(`refresh must not put a number or ellipsis on the badge, got ${JSON.stringify(badge.texts)}`);
 }
-const grok401 = (store.captureLogs || []).filter((x) => x.agent_id === 'grok-build' && x.trigger === 'manual');
-if (!grok401.some((x) => x.status === 'failed' && x.reason === 'need_signin')) {
-  problems.push(`Grok 401 should log need_signin, got ${JSON.stringify(grok401.slice(-3))}`);
-}
-swCtl.grok = true;
-swCtl.grokStatus = 200;
-
-// 12d) Cursor/Grok SW down → fall back to opening those tabs
-swCtl.cursor = false;
-swCtl.grok = false;
-swCtl.grokStatus = 500;
-const beforeDown = createdTabs.length;
-onMessage({ type: 'refreshAll' }, {}, () => {});
-await tick(80);
-const downUrls = createdTabs.slice(beforeDown).map((o) => o.url).join(' ');
-if (!downUrls.includes('cursor.com/dashboard/spending') || !downUrls.includes('grok.com')) {
-  problems.push(`SW scrape failure should fall back to tabs, got ${downUrls}`);
-}
-swCtl.cursor = true;
-swCtl.grok = true;
-swCtl.grokStatus = 200;
 
 // 13) 更新检查：启动时查一次 GitHub、存结果；每天一次的闹钟；关掉开关就清掉
 await tick(10);
-const gh = () => fetches.filter((f) => String(f.url).includes('api.github.com'));
-if (gh().length !== 1 || !gh()[0].url.startsWith('https://api.github.com/repos/jjliu6/token-police/releases/latest')) {
-  problems.push(`startup should ask the GitHub releases API once, got ${JSON.stringify(gh())}`);
+if (fetches.length !== 1 || !fetches[0].url.startsWith('https://api.github.com/repos/jjliu6/token-police/releases/latest')) {
+  problems.push(`startup should ask the GitHub releases API once, got ${JSON.stringify(fetches)}`);
 }
 if (!store.updateCheck || store.updateCheck.latest !== '9.9.9' || !store.updateCheck.checkedAt) {
   problems.push(`updateCheck should record the latest release, got ${JSON.stringify(store.updateCheck)}`);
@@ -462,7 +322,7 @@ if (!alarms.created.some((a) => a.name === 'updateCheck' && a.periodInMinutes ==
 // 闹钟到点：强制再查一次
 alarms.listener({ name: 'updateCheck' });
 await tick(10);
-if (gh().length !== 2) problems.push(`alarm should re-check, got ${gh().length} github fetches`);
+if (fetches.length !== 2) problems.push(`alarm should re-check, got ${fetches.length} fetches`);
 // 查失败：保留上次结果，只记 failedAt
 fetchReply = { ok: false, status: 503 };
 alarms.listener({ name: 'updateCheck' });
@@ -479,18 +339,18 @@ if (!store.updateCheck || store.updateCheck.url !== UPDATE_PAGE) {
 }
 // 关掉开关：清闹钟、清结果、不再请求
 const clearedBefore = alarms.cleared;
-const ghBeforeOff = gh().length;
+const fetchesBefore = fetches.length;
 await new Promise((r) => ctxObj.chrome.storage.local.set({ checkUpdates: false }, r));
 await tick(10);
 if (alarms.cleared <= clearedBefore) problems.push('checkUpdates=false should clear the updateCheck alarm');
 if (store.updateCheck !== undefined) problems.push(`checkUpdates=false should drop the stored result, got ${JSON.stringify(store.updateCheck)}`);
 alarms.listener({ name: 'updateCheck' });
 await tick(10);
-if (gh().length !== ghBeforeOff) problems.push('checkUpdates=false must not contact GitHub');
+if (fetches.length !== fetchesBefore) problems.push('checkUpdates=false must not contact GitHub');
 // 打开开关：马上查一次
 await new Promise((r) => ctxObj.chrome.storage.local.set({ checkUpdates: true }, r));
 await tick(10);
-if (gh().length !== ghBeforeOff + 1) problems.push('checkUpdates=true should check right away');
+if (fetches.length !== fetchesBefore + 1) problems.push('checkUpdates=true should check right away');
 if (!store.updateCheck || store.updateCheck.latest !== '9.9.9') problems.push('re-enabling should store a fresh result');
 
 // 关键回归：闹钟已存在时不该被重复创建。service worker 反复重启会重跑 syncUpdateAlarm/
@@ -592,7 +452,6 @@ console.log('ok  Low-quota notifications fire only on threshold crossings');
 console.log('ok  Hourly quiet check: background tabs only, tracked agents only, toggleable');
 console.log('ok  Move reminder: on by default, >10% burned in 2h, 2h cooldown, off when unticked, counts from the last reset');
 console.log('ok  Cursor + Grok Bot share one spending-page scrape; missing Grok Bot section is flagged, not failed');
-console.log('ok  Cursor/Grok quiet+manual refresh uses service-worker JSON and skips frozen tabs');
 console.log('ok  Daily update check stores the latest release, survives failures, and is toggleable');
 console.log('ok  Alarms are not recreated on re-sync, so their countdowns are never reset');
 console.log('\nBackground test passed.');

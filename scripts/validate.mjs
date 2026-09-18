@@ -50,6 +50,16 @@ if (manifest) {
   if (manifest.background?.service_worker) jsFiles.add(manifest.background.service_worker);
   for (const cs of manifest.content_scripts ?? []) {
     for (const js of cs.js ?? []) jsFiles.add(js);
+    // v1.6.1 switched the scrape script to document_start so Cursor JSON
+    // could fire earlier. Quiet refresh opens those tabs inactive; Chrome
+    // freezes them before paint, so the start-time watcher never sees numbers
+    // and every agent dies at the 25s tab-kill. Scrape at idle like v1.5.10.
+    if ((cs.js || []).includes('content.js') && cs.run_at !== 'document_idle') {
+      fail('content.js must run_at document_idle (document_start freezes background usage tabs).');
+    }
+    if ((cs.js || []).includes('grok-hook.js')) {
+      fail('do not inject grok-hook.js; restore idle DOM scrape instead of MAIN-world hooks.');
+    }
   }
 
   const iconSet = { ...(manifest.icons ?? {}), ...(manifest.action?.default_icon ?? {}) };

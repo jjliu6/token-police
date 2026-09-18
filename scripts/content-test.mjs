@@ -14,36 +14,20 @@ const contentSrc = readFileSync(resolve(root, 'content.js'), 'utf8');
 
 // 造一个最小的假浏览器环境：innerText 就是我们给的文本，MutationObserver / setInterval
 // 都由测试手动触发，chrome.runtime.sendMessage 记录发出的消息。
-function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchImpl, frame }) {
+function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchImpl }) {
   const sent = [];
   let body = { innerText: text, childNodes: [] };
   let observerCb = null;
   let intervalCb = null;
-  let clockNow = Date.now();
-  function FakeDate(...args) {
-    if (new.target) return new Date(...(args.length ? args : [clockNow]));
-    return Date(...args);
-  }
-  FakeDate.now = () => clockNow;
-  FakeDate.parse = (...a) => Date.parse(...a);
-  FakeDate.UTC = (...a) => Date.UTC(...a);
-  const win = { addEventListener() {} };
-  win.top = frame === 'iframe' ? {} : win;
   const ctxObj = {
-    Date: FakeDate,
+    Date,
     Promise,
     setTimeout,
     fetch: fetchImpl,
-    Uint8Array,
-    ArrayBuffer,
-    DataView,
-    TextEncoder,
-    TextDecoder,
-    window: win,
     setInterval: (fn) => { intervalCb = fn; return 1; },
     clearInterval: () => { intervalCb = null; },
     MutationObserver: class { constructor(cb) { observerCb = cb; } observe() {} disconnect() { observerCb = null; } },
-    document: { body, documentElement: { innerText: text, childNodes: [] } },
+    document: { body, documentElement: {} },
     location: { hostname: host, pathname: path, search, hash, href: `https://${host}${path}${search}${hash}` },
     chrome: { runtime: { sendMessage: (msg, cb) => { sent.push(msg); if (cb) cb(); }, lastError: null } },
   };
@@ -52,9 +36,8 @@ function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchI
   vm.runInContext(contentSrc, ctx, { filename: 'content.js' });
   return {
     sent,
-    setText: (t) => { body.innerText = t; ctxObj.document.documentElement.innerText = t; if (observerCb) observerCb(); },
+    setText: (t) => { body.innerText = t; if (observerCb) observerCb(); },
     tick: () => { if (intervalCb) intervalCb(); },
-    advance: (ms) => { clockNow += ms; },
     flush: async (n = 8) => { for (let i = 0; i < n; i++) await Promise.resolve(); },
     agents: () => sent.filter((m) => m.type === 'agentData').map((m) => m.agent),
     closed: () => sent.some((m) => m.type === 'closeMe'),
@@ -146,8 +129,8 @@ Resets 9月3日 (23 hours and 4 minutes left)
   const p = runPage({ host: 'gemini.google.com', path: '/usage', text: 'Loading…' });
   for (let i = 0; i < 31; i++) p.tick();
   const fail = p.failures()[0];
-  check(fail && fail.agent_id === 'gemini' && fail.status === 'failed' && fail.reason === 'timeout',
-    `page timeout should report failed/timeout, got ${JSON.stringify(p.failures())}`);
+  check(fail && fail.agent_id === 'gemini' && fail.status === 'failed' && fail.reason === 'read_failed',
+    `page timeout should report failed/read_failed, got ${JSON.stringify(p.failures())}`);
 }
 
 // --- Gemini usage page from the user's screenshot ---
@@ -189,71 +172,6 @@ Upgrade
   for (let i = 0; i < 31; i++) p.tick();
   check(p.agents().length === 0, 'grok chat home should not scrape usage');
   check(!p.closed(), 'grok chat tab must not auto-close');
-}
-{
-  const usage = `
-Weekly SuperGrok Limit
-2% used
-Resets September 25, 2026 at 2:20 AM
-Chat 2%
-Extra Usage Credits
-$0.00
-Auto Top-Up
-`;
-  const p = runPage({ host: 'grok.com', path: '/', search: '?_s=usage&cawrefresh=1&cawtrigger=manual', text: usage });
-  check(p.agents().length === 0, 'grok should wait for the animated % to settle');
-  p.advance(1300);
-  p.tick();
-  const g = p.agents()[0];
-  check(g && g.id === 'grok-build' && g.limits[0].percent_left === 98, `open grok usage modal should save 98% left, got ${JSON.stringify(g)}`);
-  check(g && g.limits[0].resets_text === 'September 25, 2026 at 2:20 AM', `grok reset text, got ${g && g.limits[0].resets_text}`);
-  check(p.closed(), 'auto-opened grok usage page should close after a successful scrape');
-}
-{
-  const p = runPage({
-    host: 'grok.com',
-    path: '/',
-    search: '?_s=usage&cawrefresh=1',
-    text: 'Weekly SuperGrok Limit\nExtra Usage Credits\n',
-  });
-  for (let i = 0; i < 3; i++) p.tick();
-  const fail = p.failures().find((x) => x.agent_id === 'grok-build');
-  check(fail && fail.reason === 'parse_miss',
-    `visible SuperGrok modal without parseable numbers should be parse_miss, got ${JSON.stringify(p.failures())}`);
-  check(fail && fail.trigger === 'manual',
-    `cawrefresh grok tab should report trigger=manual, got ${JSON.stringify(fail)}`);
-  check(p.closed(), 'auto-opened grok usage page should still close after parse_miss');
-}
-{
-  const p = runPage({
-    host: 'grok.com',
-    path: '/',
-    search: '?_s=usage',
-    text: 'Loading…',
-    fetch: () => new Promise(() => {}),
-  });
-  for (let i = 0; i < 3; i++) p.tick();
-  const fail = p.failures().find((x) => x.agent_id === 'grok-build');
-  check(fail && fail.reason === 'parse_miss',
-    `usage URL whose numbers never land in innerText should be parse_miss after ~4s, not a 60s timeout, got ${JSON.stringify(p.failures())}`);
-}
-{
-  const usage = `
-Weekly SuperGrok Limit
-2% used
-Resets September 25, 2026 at 2:20 AM
-Chat 2%
-Extra Usage Credits
-$0.00
-Auto Top-Up
-`;
-  const p = runPage({ host: 'grok.com', path: '/', search: '', text: usage, frame: 'iframe' });
-  check(p.agents().length === 0, 'grok iframe should wait for the animated % to settle');
-  p.advance(1300);
-  p.tick();
-  const g = p.agents()[0];
-  check(g && g.id === 'grok-build' && g.limits[0].percent_left === 98,
-    `grok usage iframe without _s=usage should still save 98% left, got ${JSON.stringify(g)}`);
 }
 {
   const p = runPage({ host: 'claude.ai', path: '/new', text: 'All models\n10% used' });
@@ -376,55 +294,6 @@ function cursorFetch(handlers) {
   check(!p.closed(), 'failed JSON should keep waiting for the DOM, not close immediately');
 }
 
-{
-  const json = JSON.stringify({
-    config: {
-      creditUsagePercent: 2,
-      currentPeriod: { end: '2026-09-25T09:20:00.000Z' },
-      productUsage: [{ product: 'GrokChat', usagePercent: 2 }],
-    },
-  });
-  const p = runPage({
-    host: 'grok.com',
-    path: '/',
-    search: '?_s=usage&cawrefresh=1',
-    text: 'Loading…',
-    fetch: async (url) => {
-      if (!String(url).includes('GetGrokCreditsConfig')) {
-        return { ok: false, status: 404, type: 'basic', arrayBuffer: async () => new ArrayBuffer(0) };
-      }
-      const bytes = new TextEncoder().encode(json);
-      return {
-        ok: true,
-        status: 200,
-        type: 'basic',
-        arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
-      };
-    },
-  });
-  await p.flush();
-  const g = p.agents()[0];
-  check(g && g.id === 'grok-build' && g.limits[0].percent_left === 98,
-    `grok credits API should save 98% left without waiting on the DOM, got ${JSON.stringify(g)}`);
-  check(g && !g.fromApi, 'fromApi must not be stored on the agent');
-  check(p.closed(), 'auto-opened grok usage page should close after the credits API is saved');
-}
-
-{
-  const p = runPage({
-    host: 'grok.com',
-    path: '/',
-    search: '?_s=usage&cawrefresh=1',
-    text: 'Sign in to continue to Grok',
-    fetch: async () => ({ ok: false, status: 401, type: 'basic', arrayBuffer: async () => new ArrayBuffer(0) }),
-  });
-  await p.flush();
-  for (let i = 0; i < 31; i++) p.tick();
-  const fail = p.failures().find((x) => x.agent_id === 'grok-build');
-  check(fail && fail.reason === 'need_signin',
-    `401 + login wall should be need_signin, got ${JSON.stringify(p.failures())}`);
-}
-
 if (problems.length) {
   console.error(problems.join('\n'));
   process.exit(1);
@@ -433,5 +302,4 @@ console.log('ok  Cursor spending page reports Cursor (4% left) and Grok Bot (87%
 console.log('ok  Missing / late Grok Bot section: Cursor saved, page waits, closes once done');
 console.log('ok  Gemini usage page reports weekly + current usage, PRO plan');
 console.log('ok  Frozen spending page still saves Cursor + Grok Bot from dashboard JSON');
-console.log('ok  Grok usage modal and credits API report 98% remaining');
 console.log('\nContent test passed.');

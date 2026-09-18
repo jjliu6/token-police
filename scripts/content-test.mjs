@@ -14,7 +14,7 @@ const contentSrc = readFileSync(resolve(root, 'content.js'), 'utf8');
 
 // 造一个最小的假浏览器环境：innerText 就是我们给的文本，MutationObserver / setInterval
 // 都由测试手动触发，chrome.runtime.sendMessage 记录发出的消息。
-function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchImpl }) {
+function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchImpl, frame }) {
   const sent = [];
   let body = { innerText: text, childNodes: [] };
   let observerCb = null;
@@ -27,6 +27,8 @@ function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchI
   FakeDate.now = () => clockNow;
   FakeDate.parse = (...a) => Date.parse(...a);
   FakeDate.UTC = (...a) => Date.UTC(...a);
+  const win = { addEventListener() {} };
+  win.top = frame === 'iframe' ? {} : win;
   const ctxObj = {
     Date: FakeDate,
     Promise,
@@ -37,7 +39,7 @@ function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchI
     DataView,
     TextEncoder,
     TextDecoder,
-    window: { addEventListener() {}, top: null },
+    window: win,
     setInterval: (fn) => { intervalCb = fn; return 1; },
     clearInterval: () => { intervalCb = null; },
     MutationObserver: class { constructor(cb) { observerCb = cb; } observe() {} disconnect() { observerCb = null; } },
@@ -214,11 +216,44 @@ Auto Top-Up
     search: '?_s=usage&cawrefresh=1',
     text: 'Weekly SuperGrok Limit\nExtra Usage Credits\n',
   });
-  for (let i = 0; i < 31; i++) p.tick();
+  for (let i = 0; i < 3; i++) p.tick();
   const fail = p.failures().find((x) => x.agent_id === 'grok-build');
   check(fail && fail.reason === 'parse_miss',
     `visible SuperGrok modal without parseable numbers should be parse_miss, got ${JSON.stringify(p.failures())}`);
+  check(fail && fail.trigger === 'manual',
+    `cawrefresh grok tab should report trigger=manual, got ${JSON.stringify(fail)}`);
   check(p.closed(), 'auto-opened grok usage page should still close after parse_miss');
+}
+{
+  const p = runPage({
+    host: 'grok.com',
+    path: '/',
+    search: '?_s=usage',
+    text: 'Loading…',
+    fetch: () => new Promise(() => {}),
+  });
+  for (let i = 0; i < 3; i++) p.tick();
+  const fail = p.failures().find((x) => x.agent_id === 'grok-build');
+  check(fail && fail.reason === 'parse_miss',
+    `usage URL whose numbers never land in innerText should be parse_miss after ~4s, not a 60s timeout, got ${JSON.stringify(p.failures())}`);
+}
+{
+  const usage = `
+Weekly SuperGrok Limit
+2% used
+Resets September 25, 2026 at 2:20 AM
+Chat 2%
+Extra Usage Credits
+$0.00
+Auto Top-Up
+`;
+  const p = runPage({ host: 'grok.com', path: '/', search: '', text: usage, frame: 'iframe' });
+  check(p.agents().length === 0, 'grok iframe should wait for the animated % to settle');
+  p.advance(1300);
+  p.tick();
+  const g = p.agents()[0];
+  check(g && g.id === 'grok-build' && g.limits[0].percent_left === 98,
+    `grok usage iframe without _s=usage should still save 98% left, got ${JSON.stringify(g)}`);
 }
 {
   const p = runPage({ host: 'claude.ai', path: '/new', text: 'All models\n10% used' });

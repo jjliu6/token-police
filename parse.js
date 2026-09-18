@@ -64,11 +64,26 @@ function looksLikeLogin(T) {
   return /\b(sign in|log in|sign-in|登录|se connecter|create an account)\b/i.test(T);
 }
 
-function grokCaptureReason(T) {
+function grokCaptureReason(T, usageOpen) {
   if (parseGrokUsage(T)) return '';
   if (looksLikeLogin(T)) return 'need_signin';
+  // Usage URL / overlay already painted: we failed to extract numbers, not to
+  // wait out a slow load. Callers pass usageOpen when `_s=usage` is set.
+  if (usageOpen) return 'parse_miss';
   if (T && /Weekly SuperGrok Limit|SuperGrok|Extra Usage Credits/i.test(T)) return 'parse_miss';
   return 'timeout';
+}
+
+function abortAfter(ms) {
+  try {
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      return AbortSignal.timeout(ms);
+    }
+  } catch (e) {}
+  if (typeof AbortController !== 'function') return undefined;
+  const c = new AbortController();
+  setTimeout(() => { try { c.abort(); } catch (e) {} }, ms);
+  return c.signal;
 }
 
 function grokResetText(ms) {

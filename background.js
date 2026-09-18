@@ -3,10 +3,13 @@
 // - 重页面(Cursor/Grok)：浏览器会冻结后台标签页导致抓不到，所以逐个"短暂切到前台"、
 //   抓到就自动关，一个接一个，尽量少打扰。
 // - 只刷新用户在面板里勾选的产品（enabledAgents，缺省全开）。
-// - 刷新结束后按 agent 记录成/败（refresh.results）。失败原因要诚实：超时、解析失败、
-//   登录页，而不是一律写成“可能未登录”。
+// - 刷新结束后按 agent 记录成/败（refresh.results）。失败原因要诚实：解析失败、
+//   登录页、标签页超时，而不是一律写成“可能未登录”。
+// Cursor / Grok 数字走 service worker 的 JSON/gRPC（host_permissions + cookies），
+// 不再为它们开会被冻结的后台标签页——1.6.1 把 Cursor JSON 放进内容脚本后，
+// 安静刷新会一次打开一堆重页，连带 Claude/Codex/Gemini 也更容易 25s 被杀掉。
 
-importScripts('agents.js', 'i18n.js', 'update.js', 'capture-logs.js', 'review.js');
+importScripts('agents.js', 'parse.js', 'i18n.js', 'update.js', 'capture-logs.js', 'review.js');
 
 let refreshing = false;
 
@@ -56,12 +59,156 @@ function uniqueUrls(list, pick) {
   return out;
 }
 
+function swJsonOk(r) {
+  if (!r || r.type === 'opaqueredirect') return null;
+  if (r.status === 0 || r.status === 301 || r.status === 302 || r.status === 303 || r.status === 307 || r.status === 308) return null;
+  if (!r.ok) return null;
+  return r.json().catch(() => null);
+}
+
+function swCursorPost(path) {
+  const opts = {
+    method: 'POST',
+    credentials: 'include',
+    redirect: 'manual',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  };
+  const signal = typeof abortAfter === 'function' ? abortAfter(8000) : undefined;
+  if (signal) opts.signal = signal;
+  return fetch('https://cursor.com/api/dashboard/' + path, opts).then(swJsonOk, () => null);
+}
+
+async function fetchCursorDashboardSw() {
+  if (typeof fetch !== 'function' || typeof parseCursorDashboard !== 'function') return null;
+  try {
+    const [usage, plan, sand] = await Promise.all([
+      swCursorPost('get-current-period-usage'),
+      swCursorPost('get-plan-info'),
+      swCursorPost('get-sand-usage-status'),
+    ]);
+    let parsed = parseCursorDashboard(usage, plan, sand, Date.now());
+    if (parsed && (parsed.cursor || parsed.grokBot || parsed.grokMissing)) return parsed;
+    const summaryOpts = { credentials: 'include', redirect: 'manual' };
+    const signal = typeof abortAfter === 'function' ? abortAfter(8000) : undefined;
+    if (signal) summaryOpts.signal = signal;
+    const summary = await fetch('https://cursor.com/api/usage-summary', summaryOpts).then(swJsonOk, () => null);
+    return parseCursorDashboard(summary, plan, sand, Date.now());
+  } catch (e) {
+    return null;
+  }
+}
+
+const GROK_CREDITS_URL = 'https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig';
+
+async function fetchGrokCreditsSw() {
+  if (typeof fetch !== 'function' || typeof parseGrokCreditsConfig !== 'function') {
+    return { reason: 'parse_miss' };
+  }
+  const empty = new Uint8Array([0, 0, 0, 0, 0]);
+  try {
+    const opts = {
+      method: 'POST',
+      credentials: 'include',
+      redirect: 'manual',
+      headers: {
+        'content-type': 'application/grpc-web+proto',
+        accept: 'application/grpc-web+proto',
+        'x-grpc-web': '1',
+      },
+      body: empty,
+    };
+    const signal = typeof abortAfter === 'function' ? abortAfter(4000) : undefined;
+    if (signal) opts.signal = signal;
+    const r = await fetch(GROK_CREDITS_URL, opts);
+    if (!r || r.type === 'opaqueredirect') return { reason: 'parse_miss' };
+    if (r.status === 401) return { reason: 'need_signin' };
+    if (!r.ok) return { reason: 'parse_miss' };
+    const buf = r.arrayBuffer ? await r.arrayBuffer() : null;
+    const parsed = buf ? parseGrokCreditsConfig(buf) : null;
+    if (parsed) return { parsed };
+    return { reason: 'parse_miss' };
+  } catch (e) {
+    return { reason: 'parse_miss' };
+  }
+}
+
+function stampCapture(agent, started, trigger, sourceUrl) {
+  const now = Date.now();
+  agent.scraped_at = now;
+  agent.status = 'ok';
+  agent.capture_trigger = trigger;
+  agent.capture_source_url = sourceUrl;
+  agent.capture_duration_ms = Math.max(0, now - started);
+  return agent;
+}
+
+async function scrapeJsonAgents(list, started, trigger) {
+  const wanted = {};
+  list.forEach((a) => { wanted[a.id] = true; });
+  const done = {};
+  if (wanted.cursor || wanted['grok-bot']) {
+    const parsed = await fetchCursorDashboardSw();
+    if (parsed && parsed.cursor && wanted.cursor) {
+      await saveAgent(stampCapture({
+        id: 'cursor',
+        name: 'Cursor',
+        color: '#6E9BF5',
+        limits: parsed.cursor.limits,
+        plan: parsed.cursor.plan || undefined,
+      }, started, trigger, 'https://cursor.com/dashboard/spending'));
+      done.cursor = true;
+    }
+    if (parsed && parsed.grokBot && wanted['grok-bot']) {
+      await saveAgent(stampCapture({
+        id: 'grok-bot',
+        name: 'Grok Bot',
+        color: '#F49AC1',
+        limits: parsed.grokBot.limits,
+      }, started, trigger, 'https://cursor.com/dashboard/spending'));
+      done['grok-bot'] = true;
+    } else if (parsed && parsed.grokMissing && wanted['grok-bot']) {
+      const agent = AGENTS.find((a) => a.id === 'grok-bot');
+      if (agent) {
+        await saveFailedAttempt(agent, 'missing', 'section_missing', trigger, started, 'https://cursor.com/dashboard/spending');
+      }
+      done['grok-bot'] = true;
+    }
+  }
+  if (wanted['grok-build']) {
+    const grok = await fetchGrokCreditsSw();
+    if (grok.parsed) {
+      await saveAgent(stampCapture({
+        id: 'grok-build',
+        name: 'Grok',
+        color: '#B78CF0',
+        limits: [{
+          label: 'Weekly (SuperGrok)',
+          percent_left: 100 - grok.parsed.used,
+          resets_text: grok.parsed.reset,
+        }],
+        breakdown: grok.parsed.breakdown,
+      }, started, trigger, 'https://grok.com/?_s=usage'));
+      done['grok-build'] = true;
+    } else if (grok.reason === 'need_signin') {
+      const agent = AGENTS.find((a) => a.id === 'grok-build');
+      if (agent) await saveFailedAttempt(agent, 'failed', 'need_signin', trigger, started, agent.page);
+      done['grok-build'] = true;
+    }
+  }
+  return done;
+}
+
 async function runQuietRefresh() {
   if (refreshing) return; // 手动刷新进行中就别添乱
   const en = (await getLocal(['enabledAgents'])).enabledAgents || {};
   const list = AGENTS.filter((a) => en[a.id] !== false);
   const started = Date.now();
-  await Promise.all(uniqueUrls(list).map((u) => openAndWait(u, false, 25000, 'automatic')));
+  const jsonDone = await scrapeJsonAgents(list, started, 'automatic');
+  const rest = list.filter((a) => !jsonDone[a.id]);
+  if (rest.length) {
+    await Promise.all(uniqueUrls(rest).map((u) => openAndWait(u, false, 25000, 'automatic')));
+  }
   await recordRefreshFailures(list, started, 'automatic');
 }
 
@@ -332,7 +479,7 @@ async function recordRefreshFailures(list, started, trigger) {
     await saveFailedAttempt(
       agent,
       missing ? 'missing' : 'failed',
-      missing ? 'section_missing' : 'timeout',
+      missing ? 'section_missing' : (agent.id === 'grok-build' ? 'parse_miss' : 'timeout'),
       trigger,
       started,
       agent.id === 'grok-bot' ? 'https://cursor.com/dashboard/spending' : agent.page,
@@ -353,7 +500,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         agent,
         msg.status === 'missing' ? 'missing' : 'failed',
         msg.reason || 'read_failed',
-        'page',
+        msg.trigger || 'page',
         Number(msg.started) || Date.now(),
         msg.source_url || (sender.tab && sender.tab.url),
       ).then(() => sendResponse({ ok: true }));
@@ -600,9 +747,11 @@ async function runRefresh() {
   try {
     const en = (await getLocal(['enabledAgents'])).enabledAgents || {};
     const list = AGENTS.filter((a) => en[a.id] !== false);
+    const jsonDone = await scrapeJsonAgents(list, started, 'manual');
+    const rest = list.filter((a) => !jsonDone[a.id]);
     // 轻页面：后台并行；重页面：前台逐个，抓到即关（同一 URL 只开一次）
-    const bg = uniqueUrls(list, (a) => !a.foreground).map((u) => openAndWait(u, false, 25000, 'manual'));
-    for (const u of uniqueUrls(list, (a) => a.foreground)) await openAndWait(u, true, 25000, 'manual');
+    const bg = uniqueUrls(rest, (a) => !a.foreground).map((u) => openAndWait(u, false, 25000, 'manual'));
+    for (const u of uniqueUrls(rest, (a) => a.foreground)) await openAndWait(u, true, 25000, 'manual');
     await Promise.all(bg);
     results = await recordRefreshFailures(list, started, 'manual');
   } finally {

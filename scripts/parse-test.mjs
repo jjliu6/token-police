@@ -189,6 +189,7 @@ Weekly SuperGrok Limit
 Extra Usage Credits
 `), 'parse_miss');
   check('empty grok tab is timeout', ctx.grokCaptureReason(''), 'timeout');
+  check('open usage URL with unread text is parse_miss', ctx.grokCaptureReason('', true), 'parse_miss');
   check('login wall is need_signin', ctx.grokCaptureReason('Sign in to continue to Grok'), 'need_signin');
   check('visible SuperGrok is not blamed on login', ctx.grokCaptureReason(`
 Weekly SuperGrok Limit

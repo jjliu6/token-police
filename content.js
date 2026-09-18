@@ -35,11 +35,39 @@ function deepText(root) {
       const now = node.getAttribute && node.getAttribute('aria-valuenow');
       if (now && /^\d+(\.\d+)?$/.test(now)) out += now + '% used\n';
     }
-    if (node.shadowRoot) node.shadowRoot.childNodes.forEach(walk);
+    const shadow = node.shadowRoot || closedShadow(node);
+    if (shadow) shadow.childNodes.forEach(walk);
     if (node.childNodes) node.childNodes.forEach(walk);
   };
   walk(root || document.documentElement || document.body);
   return out;
+}
+
+function closedShadow(node) {
+  if (!node || node.nodeType !== 1) return null;
+  try {
+    if (chrome && chrome.dom && typeof chrome.dom.openOrClosedShadowRoot === 'function') {
+      return chrome.dom.openOrClosedShadowRoot(node);
+    }
+  } catch (e) {}
+  return null;
+}
+
+function frameTexts() {
+  let extra = '';
+  try {
+    const frames = document.querySelectorAll && document.querySelectorAll('iframe');
+    if (!frames) return extra;
+    for (let i = 0; i < frames.length; i++) {
+      try {
+        const doc = frames[i].contentDocument;
+        if (!doc) continue;
+        extra += '\n' + ((doc.body && doc.body.innerText) || '');
+        extra += '\n' + deepText(doc.documentElement || doc.body);
+      } catch (e) {}
+    }
+  } catch (e) {}
+  return extra;
 }
 
 function pageText() {
@@ -47,7 +75,7 @@ function pageText() {
   if (!root && !document.body) return '';
   const bodyText = (document.body && document.body.innerText) || '';
   const rootText = (root && root.innerText) || '';
-  return bodyText + '\n' + rootText + '\n' + deepText(root);
+  return bodyText + '\n' + rootText + '\n' + deepText(root) + frameTexts();
 }
 
 function makeAgents() {
@@ -155,18 +183,26 @@ function pageAgentIds() {
   const q = location.search || '';
   if (h.includes('claude.ai') && p.startsWith('/new')) return ['claude-code'];
   if (h.includes('chatgpt.com') && p.includes('/codex/cloud/settings/analytics')) return ['codex'];
-  if (h.includes('grok.com') && /[?&]_s=usage/.test(q)) return ['grok-build'];
+  if (h.includes('grok.com') && (/[?&]_s=usage/.test(q) || /(?:\?|&)cawrefresh(?:=|&|$)/.test(q) || /SuperGrok/i.test(pageText()))) {
+    return ['grok-build'];
+  }
   if (h.includes('cursor.com') && p.includes('/dashboard/spending')) return ['cursor', 'grok-bot'];
   if (h.includes('cursor.com') && p.includes('/dashboard/usage')) return ['cursor'];
   if (h.includes('gemini.google.com') && p.includes('/usage')) return ['gemini'];
   return [];
 }
 
+function grokUsageOpen() {
+  return grokUsageWatch() || /SuperGrok|Weekly SuperGrok Limit/i.test(pageText());
+}
+
 function captureFailReason(id) {
   if (id === 'grok-bot' && saved.cursor && !saved['grok-bot']) return 'section_missing';
   const T = pageText();
   if (id === 'grok-build') {
-    const fromPage = typeof grokCaptureReason === 'function' ? grokCaptureReason(T) : 'timeout';
+    const fromPage = typeof grokCaptureReason === 'function'
+      ? grokCaptureReason(T, grokUsageOpen())
+      : 'parse_miss';
     if (fromPage === 'parse_miss') return 'parse_miss';
     if (grokApi.reason) return grokApi.reason;
     return fromPage;
@@ -187,6 +223,7 @@ function reportPageOutcomes() {
         agent_id: id,
         status: missing ? 'missing' : 'failed',
         reason,
+        trigger: captureTrigger(),
         started: captureStartedAt,
         source_url: captureSourceUrl(),
       });
@@ -257,13 +294,16 @@ function cursorJsonOk(r) {
 }
 
 function cursorDashboardPost(path) {
-  return fetch('https://cursor.com/api/dashboard/' + path, {
+  const opts = {
     method: 'POST',
     credentials: 'include',
     redirect: 'manual',
     headers: { 'content-type': 'application/json' },
     body: '{}',
-  }).then(cursorJsonOk, () => null);
+  };
+  const signal = typeof abortAfter === 'function' ? abortAfter(8000) : undefined;
+  if (signal) opts.signal = signal;
+  return fetch('https://cursor.com/api/dashboard/' + path, opts).then(cursorJsonOk, () => null);
 }
 
 function cursorAgentsFromDashboard(parsed) {
@@ -321,10 +361,10 @@ function startCursorApi() {
       return;
     }
     // GET fallback: no CSRF Origin check, still cookie-auth'd.
-    return fetch('https://cursor.com/api/usage-summary', {
-      credentials: 'include',
-      redirect: 'manual',
-    }).then(cursorJsonOk, () => null).then((summary) => {
+    const summaryOpts = { credentials: 'include', redirect: 'manual' };
+    const signal = typeof abortAfter === 'function' ? abortAfter(8000) : undefined;
+    if (signal) summaryOpts.signal = signal;
+    return fetch('https://cursor.com/api/usage-summary', summaryOpts).then(cursorJsonOk, () => null).then((summary) => {
       const again = typeof parseCursorDashboard === 'function'
         ? parseCursorDashboard(summary, plan, sand, Date.now())
         : null;
@@ -372,11 +412,11 @@ function applyGrokParsed(parsed) {
 
 function startGrokApi() {
   if (grokApi.state !== 'idle') return;
-  if (!grokHost() || !inTopFrame()) return;
+  if (!grokHost()) return;
   if (typeof fetch !== 'function') return;
   grokApi.state = 'pending';
   const empty = new Uint8Array([0, 0, 0, 0, 0]);
-  fetch(GROK_CREDITS_URL, {
+  const opts = {
     method: 'POST',
     credentials: 'include',
     redirect: 'manual',
@@ -386,7 +426,10 @@ function startGrokApi() {
       'x-grpc-web': '1',
     },
     body: empty,
-  }).then((r) => {
+  };
+  const signal = typeof abortAfter === 'function' ? abortAfter(4000) : undefined;
+  if (signal) opts.signal = signal;
+  fetch(GROK_CREDITS_URL, opts).then((r) => {
     if (!r || r.type === 'opaqueredirect') return null;
     if (r.status === 401) {
       grokApi.reason = 'need_signin';
@@ -464,6 +507,10 @@ function inTopFrame() {
   catch (e) { return true; }
 }
 
+function grokIframeSurface() {
+  return grokHost() && !inTopFrame();
+}
+
 let watching = false;
 function startDomWatch() {
   if (watching || done) return;
@@ -473,15 +520,29 @@ function startDomWatch() {
   obs = new MutationObserver(tryOnce);
   obs.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
   let n = 0;
+  // Usage overlay is already on screen when this runs. Two ticks (~4s) is
+  // enough to settle the % animation; staring for 60s is not a slow-load wait.
+  const cap = grokHost() ? 2 : 30;
   iv = setInterval(() => {
     n++;
     tryOnce();
-    if (!done && n > 30) { done = true; finish(); maybeClose(); }
+    if (!done && n > cap) { done = true; finish(); maybeClose(); }
   }, 2000);
 }
 
-if (!isDispatchSurface()) startDomWatch();
-else if (grokHost() && inTopFrame()) startGrokApi();
+if (!isDispatchSurface() || grokIframeSurface()) startDomWatch();
+else if (grokHost()) {
+  startGrokApi();
+  if (typeof MutationObserver === 'function' && document.documentElement) {
+    const kick = new MutationObserver(() => {
+      if (grokUsageWatch() || (typeof parseGrokUsage === 'function' && parseGrokUsage(pageText()))) {
+        kick.disconnect();
+        startDomWatch();
+      }
+    });
+    kick.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  }
+}
 
 if (grokHost() && typeof window !== 'undefined' && window.addEventListener) {
   const onNav = () => { if (grokUsageWatch()) startDomWatch(); };

@@ -33,10 +33,10 @@ function grokTotalUsed(section, catSum, catCount) {
     const m = section.match(/(\d+)\s*%\s*used/i);
     if (m) used = parseInt(m[1], 10);
   }
-  // Category slices on this page always add up to the weekly total. Prefer
-  // that sum when the first "N% used" is a red herring or a mid-animation frame.
-  if (catCount >= 2 && catSum >= 0 && catSum <= 100) {
-    if (used == null || used < catSum - 1) used = catSum;
+  // After a weekly reset the Usage modal often shows a single slice
+  // ("Chat 2%") and no "Total Usage" heading. That one slice is the total.
+  if (catCount >= 1 && catSum >= 0 && catSum <= 100) {
+    if (used == null || (catCount >= 2 && used < catSum - 1)) used = catSum;
   }
   if (used == null || used < 0 || used > 100) return null;
   return used;
@@ -54,6 +54,241 @@ function parseGrokUsage(T) {
     reset: grokReset(section) || grokReset(T),
     breakdown,
   };
+}
+
+function looksLikeLogin(T) {
+  if (!T) return false;
+  if (/SuperGrok|Weekly SuperGrok Limit|All models|Weekly usage limit|Cursor Models|Weekly limit/i.test(T)) {
+    return false;
+  }
+  return /\b(sign in|log in|sign-in|登录|se connecter|create an account)\b/i.test(T);
+}
+
+function grokCaptureReason(T) {
+  if (parseGrokUsage(T)) return '';
+  if (looksLikeLogin(T)) return 'need_signin';
+  if (T && /Weekly SuperGrok Limit|SuperGrok|Extra Usage Credits/i.test(T)) return 'parse_miss';
+  return 'timeout';
+}
+
+function grokResetText(ms) {
+  const d = new Date(ms);
+  if (!Number.isFinite(d.getTime())) return null;
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  let h = d.getHours();
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (!h) h = 12;
+  return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear() + ' at ' + h + ':' + min + ' ' + ap;
+}
+
+function grokProductLabel(raw) {
+  const s = String(raw || '').replace(/^Grok/i, '');
+  if (/chat/i.test(s)) return 'Chat';
+  if (/build|app.?builder/i.test(s)) return 'App Builder';
+  if (/auto/i.test(s)) return 'Automations';
+  if (/imag/i.test(s)) return 'Imagine';
+  if (/voice/i.test(s)) return 'Voice';
+  if (/api/i.test(s)) return 'API';
+  return null;
+}
+
+function grokBytes(raw) {
+  if (!raw) return null;
+  if (raw instanceof Uint8Array) return raw;
+  if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
+  if (typeof raw === 'string') {
+    if (typeof TextEncoder === 'function') return new TextEncoder().encode(raw);
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i) & 0xff;
+    return out;
+  }
+  if (Array.isArray(raw)) return Uint8Array.from(raw);
+  return null;
+}
+
+function grokReadVarint(bytes, pos) {
+  let value = 0, shift = 0;
+  while (pos < bytes.length) {
+    const b = bytes[pos++];
+    value |= (b & 0x7f) << shift;
+    if (!(b & 0x80)) return { value, pos };
+    shift += 7;
+    if (shift > 35) break;
+  }
+  return null;
+}
+
+function grokProtoFields(bytes, visit) {
+  let pos = 0;
+  while (pos < bytes.length) {
+    const key = grokReadVarint(bytes, pos);
+    if (!key) return;
+    const number = key.value >>> 3;
+    const wire = key.value & 7;
+    pos = key.pos;
+    if (wire === 0) {
+      const v = grokReadVarint(bytes, pos);
+      if (!v) return;
+      visit(number, wire, v.value);
+      pos = v.pos;
+    } else if (wire === 1) {
+      if (pos + 8 > bytes.length) return;
+      visit(number, wire, bytes.subarray(pos, pos + 8));
+      pos += 8;
+    } else if (wire === 2) {
+      const len = grokReadVarint(bytes, pos);
+      if (!len || pos + len.value > bytes.length) return;
+      pos = len.pos;
+      visit(number, wire, bytes.subarray(pos, pos + len.value));
+      pos += len.value;
+    } else if (wire === 5) {
+      if (pos + 4 > bytes.length) return;
+      visit(number, wire, bytes.subarray(pos, pos + 4));
+      pos += 4;
+    } else return;
+  }
+}
+
+function grokProtoBytesField(bytes, field) {
+  let found = null;
+  grokProtoFields(bytes, (number, wire, value) => {
+    if (found || number !== field || wire !== 2) return;
+    found = value;
+  });
+  return found;
+}
+
+function grokFloat32(bytes) {
+  if (!bytes || bytes.length < 4) return null;
+  return new DataView(bytes.buffer, bytes.byteOffset, 4).getFloat32(0, true);
+}
+
+function grokProtoTimestampMs(bytes) {
+  let seconds = 0, nanos = 0;
+  grokProtoFields(bytes, (number, wire, value) => {
+    if (wire !== 0) return;
+    if (number === 1) seconds = value;
+    if (number === 2) nanos = value;
+  });
+  if (!seconds) return null;
+  return seconds * 1000 + Math.floor(nanos / 1e6);
+}
+
+function grokGrpcWebPayload(bytes) {
+  if (!bytes || !bytes.length) return null;
+  if (bytes[0] === 0x7b) return null; // JSON
+  if (bytes.length >= 5 && (bytes[0] === 0 || bytes[0] === 0x80)) {
+    const chunks = [];
+    let pos = 0;
+    while (pos + 5 <= bytes.length) {
+      const flags = bytes[pos];
+      const len = ((bytes[pos + 1] * 0x1000000) + (bytes[pos + 2] << 16) + (bytes[pos + 3] << 8) + bytes[pos + 4]) >>> 0;
+      pos += 5;
+      if (len < 0 || pos + len > bytes.length) break;
+      const payload = bytes.subarray(pos, pos + len);
+      pos += len;
+      if (!(flags & 0x80)) chunks.push(payload);
+    }
+    if (chunks.length) {
+      if (chunks.length === 1) return chunks[0];
+      let n = 0;
+      chunks.forEach((c) => { n += c.length; });
+      const out = new Uint8Array(n);
+      let o = 0;
+      chunks.forEach((c) => { out.set(c, o); o += c.length; });
+      return out;
+    }
+  }
+  return bytes;
+}
+
+function grokTryJson(bytes) {
+  if (!bytes || !bytes.length || bytes[0] !== 0x7b) return null;
+  try {
+    const text = typeof TextDecoder === 'function'
+      ? new TextDecoder('utf-8').decode(bytes)
+      : String.fromCharCode.apply(null, bytes);
+    return JSON.parse(text);
+  } catch (e) {
+    return null;
+  }
+}
+
+function grokCreditsFromConfig(config) {
+  if (!config || typeof config !== 'object') return null;
+  let used = config.creditUsagePercent;
+  if (used == null) used = config.usagePercent;
+  if (used == null) return null;
+  used = Math.round(Number(used));
+  if (!Number.isFinite(used) || used < 0 || used > 100) return null;
+  const period = config.currentPeriod && typeof config.currentPeriod === 'object' ? config.currentPeriod : {};
+  const end = period.end || config.billingPeriodEnd;
+  const endMs = end ? Date.parse(end) : NaN;
+  const breakdown = [];
+  const pu = config.productUsage;
+  if (Array.isArray(pu)) {
+    pu.forEach((item) => {
+      const name = grokProductLabel(item && (item.product || item.name));
+      if (!name || item.usagePercent == null) return;
+      const pct = Math.round(Number(item.usagePercent));
+      if (pct >= 0 && pct <= 100) breakdown.push({ name, percent: pct });
+    });
+  }
+  return {
+    used,
+    reset: Number.isFinite(endMs) ? grokResetText(endMs) : null,
+    breakdown,
+  };
+}
+
+function parseGrokCreditsJson(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  return grokCreditsFromConfig(obj.config && typeof obj.config === 'object' ? obj.config : obj);
+}
+
+function parseGrokCreditsConfig(raw) {
+  const bytes = grokBytes(raw);
+  if (!bytes || !bytes.length) return null;
+  const json = grokTryJson(bytes);
+  if (json) return parseGrokCreditsJson(json);
+  const payload = grokGrpcWebPayload(bytes);
+  if (!payload) return null;
+  const config = grokProtoBytesField(payload, 1);
+  if (!config) return parseGrokCreditsJson(payload);
+  let used = null, usedPresent = false, endMs = null;
+  const breakdown = [];
+  grokProtoFields(config, (number, wire, value) => {
+    if (number === 1 && wire === 5) {
+      used = grokFloat32(value);
+      usedPresent = true;
+    }
+    if (number === 5 && wire === 2) endMs = grokProtoTimestampMs(value);
+    if (number === 7 && wire === 2) {
+      let code = null, pct = null;
+      grokProtoFields(value, (n, w, v) => {
+        if (n === 1 && w === 0) code = v;
+        if (n === 2 && w === 5) pct = grokFloat32(v);
+        if (n === 1 && w === 2) code = typeof TextDecoder === 'function'
+          ? new TextDecoder('utf-8').decode(v)
+          : '';
+      });
+      const name = grokProductLabel(code);
+      if (name != null && pct != null) {
+        const rounded = Math.round(pct);
+        if (rounded >= 0 && rounded <= 100) breakdown.push({ name, percent: rounded });
+      }
+    }
+  });
+  if (!usedPresent) used = 0;
+  used = Math.round(Number(used));
+  if (!Number.isFinite(used) || used < 0 || used > 100) return null;
+  if (!usedPresent && endMs == null && !breakdown.length) return null;
+  return { used, reset: endMs ? grokResetText(endMs) : null, breakdown };
 }
 
 // Cursor's spending page is a heavy SPA. In a background tab Chrome often

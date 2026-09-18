@@ -293,8 +293,8 @@ if (!rr || rr.cursor !== 'ok' || rr.gemini !== 'ok') problems.push(`refresh resu
 if (!rr || rr['grok-bot'] !== 'missing') problems.push(`grok-bot should be 'missing' when cursor was read but no Grok Bot section, got ${JSON.stringify(rr)}`);
 if (!rr || rr['grok-build'] !== 'fail') problems.push(`an agent whose page never reported should stay 'fail', got ${JSON.stringify(rr)}`);
 const manualFailures = (store.captureLogs || []).filter((x) => x.trigger === 'manual' && x.status === 'failed');
-if (!manualFailures.some((x) => x.agent_id === 'grok-build' && x.reason === 'read_failed')) {
-  problems.push(`manual refresh failures must be logged, got ${JSON.stringify(manualFailures)}`);
+if (!manualFailures.some((x) => x.agent_id === 'grok-build' && x.reason === 'timeout')) {
+  problems.push(`manual refresh failures must be logged as timeout, got ${JSON.stringify(manualFailures)}`);
 }
 const missingLog = (store.captureLogs || []).find((x) =>
   x.trigger === 'manual' && x.agent_id === 'grok-bot' && x.status === 'missing');

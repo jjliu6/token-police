@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "default_locale": "en",
   "name": "__MSG_extName__",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "description": "__MSG_extDesc__",
   "action": {
     "default_title": "__MSG_extName__",
@@ -41,6 +41,12 @@
       "js": ["parse.js", "conversation-adapters.js", "content.js"],
       "run_at": "document_start",
       "all_frames": true
+    },
+    {
+      "matches": ["https://grok.com/*"],
+      "js": ["grok-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ]
 }

@@ -3,7 +3,8 @@
 // - 重页面(Cursor/Grok)：浏览器会冻结后台标签页导致抓不到，所以逐个"短暂切到前台"、
 //   抓到就自动关，一个接一个，尽量少打扰。
 // - 只刷新用户在面板里勾选的产品（enabledAgents，缺省全开）。
-// - 刷新结束后按 agent 记录成/败（refresh.results），面板据此提示"没抓到，可能未登录"。
+// - 刷新结束后按 agent 记录成/败（refresh.results）。失败原因要诚实：超时、解析失败、
+//   登录页，而不是一律写成“可能未登录”。
 
 importScripts('agents.js', 'i18n.js', 'update.js', 'capture-logs.js', 'review.js');
 
@@ -311,7 +312,9 @@ function clearCaptureLogs() {
 }
 
 async function recordRefreshFailures(list, started, trigger) {
-  const map = (await getLocal(['agents'])).agents || {};
+  const stored = await getLocal(['agents', 'latestAttempts']);
+  const map = stored.agents || {};
+  const attempts = stored.latestAttempts || {};
   const fresh = (id) => !!(map[id] && map[id].scraped_at >= started);
   const statuses = {};
   for (const agent of list) {
@@ -319,12 +322,17 @@ async function recordRefreshFailures(list, started, trigger) {
       statuses[agent.id] = 'ok';
       continue;
     }
+    const already = attempts[agent.id];
+    if (already && already.attempted_at >= started && already.status && already.status !== 'success') {
+      statuses[agent.id] = already.status === 'missing' ? 'missing' : 'fail';
+      continue;
+    }
     const missing = agent.id === 'grok-bot' && fresh('cursor');
     statuses[agent.id] = missing ? 'missing' : 'fail';
     await saveFailedAttempt(
       agent,
       missing ? 'missing' : 'failed',
-      missing ? 'section_missing' : 'read_failed',
+      missing ? 'section_missing' : 'timeout',
       trigger,
       started,
       agent.id === 'grok-bot' ? 'https://cursor.com/dashboard/spending' : agent.page,

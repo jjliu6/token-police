@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const ctx = {};
+const ctx = { Uint8Array, ArrayBuffer, DataView, TextEncoder, TextDecoder, Date };
 vm.runInNewContext(readFileSync(resolve(root, 'parse.js'), 'utf8'), ctx, { filename: 'parse.js' });
 const { parseGrokUsage } = ctx;
 if (typeof parseGrokUsage !== 'function') {
@@ -153,6 +153,118 @@ $0.00
 
 {
   check('not the usage view', parseGrokUsage('just chatting with grok about code'), null);
+}
+
+{
+  const v163 = `
+Weekly SuperGrok Limit
+2% used
+Resets September 25, 2026 at 2:20 AM
+Chat 2%
+Extra Usage Credits
+$0.00
+Auto Top-Up
+`;
+  const p = parseGrokUsage(v163);
+  check('v1.6.3 screenshot: 2% used', p && p.used, 2);
+  check('v1.6.3 screenshot: remaining', p && leftover(p.used), 98);
+  check('v1.6.3 screenshot: Chat slice', p && p.breakdown.find((x) => x.name === 'Chat')?.percent, 2);
+  check('v1.6.3 screenshot: reset', p && p.reset, 'September 25, 2026 at 2:20 AM');
+}
+
+{
+  const chatOnly = `
+Weekly SuperGrok Limit SuperGrok
+Resets September 25, 2026 at 2:20 AM
+Chat 2%
+Extra Usage Credits
+`;
+  const p = parseGrokUsage(chatOnly);
+  check('single Chat slice is the weekly total after reset', p && p.used, 2);
+}
+
+{
+  check('usage modal with SuperGrok but no numbers is parse_miss', ctx.grokCaptureReason(`
+Weekly SuperGrok Limit
+Extra Usage Credits
+`), 'parse_miss');
+  check('empty grok tab is timeout', ctx.grokCaptureReason(''), 'timeout');
+  check('login wall is need_signin', ctx.grokCaptureReason('Sign in to continue to Grok'), 'need_signin');
+  check('visible SuperGrok is not blamed on login', ctx.grokCaptureReason(`
+Weekly SuperGrok Limit
+Sign in
+Extra Usage Credits
+`), 'parse_miss');
+}
+
+function encodeVarint(n) {
+  const out = [];
+  let v = n >>> 0;
+  while (v > 0x7f) {
+    out.push((v & 0x7f) | 0x80);
+    v >>>= 7;
+  }
+  out.push(v);
+  return Uint8Array.from(out);
+}
+
+function concatBytes(...parts) {
+  const arrs = parts.map((p) => (p instanceof Uint8Array ? p : Uint8Array.from(p)));
+  const out = new Uint8Array(arrs.reduce((s, a) => s + a.length, 0));
+  let o = 0;
+  arrs.forEach((a) => { out.set(a, o); o += a.length; });
+  return out;
+}
+
+function encodeKey(field, wire) {
+  return encodeVarint((field << 3) | wire);
+}
+
+function encodeLen(field, bytes) {
+  return concatBytes(encodeKey(field, 2), encodeVarint(bytes.length), bytes);
+}
+
+function encodeFixed32(field, floatVal) {
+  const buf = new ArrayBuffer(4);
+  new DataView(buf).setFloat32(0, floatVal, true);
+  return concatBytes(encodeKey(field, 5), new Uint8Array(buf));
+}
+
+function encodeTimestamp(seconds) {
+  return concatBytes(encodeKey(1, 0), encodeVarint(seconds));
+}
+
+function grpcWebFrame(msg) {
+  const header = new Uint8Array(5);
+  header[0] = 0;
+  new DataView(header.buffer).setUint32(1, msg.length, false);
+  return concatBytes(header, msg);
+}
+
+{
+  const end = Date.parse('2026-09-25T09:20:00Z');
+  const local = ctx.grokResetText(end);
+  const config = concatBytes(
+    encodeFixed32(1, 2),
+    encodeLen(5, encodeTimestamp(Math.floor(end / 1000))),
+  );
+  const framed = grpcWebFrame(encodeLen(1, config));
+  const p = ctx.parseGrokCreditsConfig(framed);
+  check('credits protobuf: 2% used', p && p.used, 2);
+  check('credits protobuf: reset text', p && p.reset, local);
+}
+
+{
+  const json = JSON.stringify({
+    config: {
+      creditUsagePercent: 2,
+      currentPeriod: { end: '2026-09-25T09:20:00.000Z' },
+      productUsage: [{ product: 'GrokChat', usagePercent: 2 }],
+    },
+  });
+  const p = ctx.parseGrokCreditsConfig(json);
+  check('credits JSON: 2% used', p && p.used, 2);
+  check('credits JSON: Chat slice', p && p.breakdown.find((x) => x.name === 'Chat')?.percent, 2);
 }
 
 const { parseCursorDashboard } = ctx;

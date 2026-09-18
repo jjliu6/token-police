@@ -9,16 +9,59 @@
 const CROSSCHECK_QUERY_FILL_MAX = 1500;
 const CROSSCHECK_COMPOSER_MAX = 8000;
 
-function defaultCrosscheckPrompt() {
-  if (typeof t === 'function') return t('crosscheckPromptDefault');
-  return 'Below is a full development session between another coding agent and a user. Independently review whether it correctly understood and completed the user\'s request. Check its code changes, PR, test results and completion claims. Do not assume the previous agent\'s conclusions are correct. Point out omissions, errors, potential regressions, and anything still unverified.';
+function defaultCrosscheckPrompt(kind) {
+  const key = kind === 'code' ? 'crosscheckPromptDefaultCode' : 'crosscheckPromptDefaultChat';
+  if (typeof t === 'function') return t(key);
+  if (kind === 'code') {
+    return 'Below is a full development session between another coding agent and a user. Independently review whether it correctly understood and completed the user\'s request. Check its code changes, PR, test results and completion claims. Do not assume the previous agent\'s conclusions are correct. Point out omissions, errors, potential regressions, and anything still unverified.';
+  }
+  return 'Below is a conversation between another assistant and a user. Independently review whether it correctly understood and answered the user\'s request. Check the reasoning, claims, and completeness of the reply. Do not assume the previous assistant\'s conclusions are correct. Point out omissions, errors, and anything still unverified.';
 }
 
-// Empty box (or whitespace-only) falls back to the i18n default. That is the
-// wanted behavior — same `stored || default` pattern as dispatchPrompt.
-function resolveCrosscheckPrompt(stored) {
+function isStockCrosscheckPrompt(s) {
+  const text = String(s || '').trim();
+  if (!text) return true;
+  const keys = ['crosscheckPromptDefault', 'crosscheckPromptDefaultChat', 'crosscheckPromptDefaultCode'];
+  const langs = (typeof I18N === 'object' && I18N) ? Object.keys(I18N) : [];
+  for (let i = 0; i < langs.length; i++) {
+    const pack = I18N[langs[i]];
+    if (!pack) continue;
+    for (let k = 0; k < keys.length; k++) {
+      if (pack[keys[k]] && pack[keys[k]] === text) return true;
+    }
+  }
+  return false;
+}
+
+// Empty box (or whitespace-only) falls back to the i18n default for that
+// kind. Chat must not get the coding "PR / tests / code changes" instruction.
+function resolveCrosscheckPrompt(stored, kind) {
   const s = stored == null ? '' : String(stored);
-  return s.trim() ? s : defaultCrosscheckPrompt();
+  return s.trim() ? s : defaultCrosscheckPrompt(kind);
+}
+
+function crosscheckSourceName(meta) {
+  const id = meta && meta.sourceAgent;
+  if (!id) return '';
+  if (typeof dispatchById === 'function') {
+    const a = dispatchById(id);
+    if (a && a.name) return a.name;
+  }
+  if (typeof AGENTS !== 'undefined' && Array.isArray(AGENTS)) {
+    for (let i = 0; i < AGENTS.length; i++) {
+      if (AGENTS[i] && AGENTS[i].id === id && AGENTS[i].name) return AGENTS[i].name;
+    }
+  }
+  return '';
+}
+
+function crosscheckKindOf(meta) {
+  return (meta && meta.sourceKind === 'code') ? 'code' : 'chat';
+}
+
+function crosscheckReviewerPool(kind, skipId) {
+  const want = kind === 'code' ? 'code' : 'chat';
+  return agentsForKind(want).filter((a) => canDispatch(a) && a.id !== skipId);
 }
 
 function conversationPlain(session) {
@@ -78,17 +121,18 @@ function sessionSummary(session) {
   const turns = (session && session.conversation) || [];
   const chars = conversationPlain(session).length;
   const meta = detectGithubContext(session);
+  const tr = (key, vars, fallback) => (typeof t === 'function' ? t(key, vars) : fallback);
   const bits = [
-    `${turns.length} messages`,
-    `${chars} chars`,
+    tr('crosscheckSummaryMessages', { n: turns.length }, `${turns.length} messages`),
+    tr('crosscheckSummaryChars', { n: chars }, `${chars} chars`),
   ];
-  if (meta.repository) bits.push('repo ' + meta.repository);
-  if (meta.pullRequest) bits.push('PR linked');
+  if (meta.repository) bits.push(tr('crosscheckSummaryRepo', { name: meta.repository }, 'repo ' + meta.repository));
+  if (meta.pullRequest) bits.push(tr('crosscheckSummaryPr', null, 'PR linked'));
   return bits.join(' · ');
 }
 
 function assembleReviewText(session, instruction) {
-  const prompt = resolveCrosscheckPrompt(instruction);
+  const prompt = resolveCrosscheckPrompt(instruction, crosscheckKindOf(session));
   const meta = detectGithubContext(session);
   const head = [
     prompt.trim(),
@@ -119,7 +163,7 @@ function reviewPayload(session, instruction) {
   const meta = detectGithubContext(session);
   const turns = (session && session.conversation) || [];
   const short = [
-    resolveCrosscheckPrompt(instruction).trim(),
+    resolveCrosscheckPrompt(instruction, crosscheckKindOf(session)).trim(),
     '',
     'The full session is in conversation.md (downloaded locally, and attached here if this composer accepts files). Do not assume the previous agent was correct.',
     '',
@@ -138,14 +182,21 @@ function reviewPayload(session, instruction) {
   };
 }
 
-// Highest remaining quota among dispatchable reviewers that already have a
-// leftover number. ChatGPT (quotaId null) never wins. Ties keep
-// DISPATCH_TARGETS order. No AUTO_MIN_LEFT floor — Cross-check is "额度最多",
-// not Dispatch's "ready" pool.
-function pickCrosscheckReviewer(map) {
-  const pool = DISPATCH_TARGETS.filter((a) => canDispatch(a) && a.quotaId && leftoverOf(a, map) != null);
+// Highest remaining quota among dispatchable reviewers of the same kind as
+// the source (chat↔chat, code↔code). Skip the source agent. ChatGPT
+// (quotaId null) never wins. Ties keep DISPATCH_TARGETS order. No
+// AUTO_MIN_LEFT floor — Cross-check is "额度最多", not Dispatch's "ready" pool.
+function pickCrosscheckReviewer(map, opts) {
+  const kind = (opts && opts.kind) || 'chat';
+  const skipId = opts && opts.skipId;
+  const pool = crosscheckReviewerPool(kind, skipId).filter((a) => a.quotaId && leftoverOf(a, map) != null);
   if (!pool.length) return null;
   return pool.reduce((best, a) => (leftoverOf(a, map) > leftoverOf(best, map) ? a : best));
+}
+
+function firstCrosscheckReviewer(kind, skipId) {
+  const pool = crosscheckReviewerPool(kind, skipId);
+  return pool.length ? pool[0] : null;
 }
 
 // Prefill by default. Auto-send is the same gate as Dispatch: only chat

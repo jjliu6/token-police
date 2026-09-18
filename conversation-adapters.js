@@ -1,14 +1,12 @@
 // Per-host transcript extractors for Cross-check.
 //
-// v1 source: ChatGPT chat only (chatgpt.com, not Codex). That page has kept
-// `data-message-author-role` stable for years; every other host waits until
-// this path is proven. There is no shared extractor — a site redesign breaks
+// Source is the current tab. ChatGPT, Claude, Grok, Gemini, Codex and Cursor
+// conversation pages are supported; usage/settings pages of those products are
+// named but unsupported. There is no shared extractor — a site redesign breaks
 // these selectors and that is expected.
 //
-// This module is a classic script (content_scripts + tests via vm). It reads
-// the page DOM; it never calls a model API.
-
-const CROSSCHECK_V1_SOURCE = 'chatgpt';
+// This module is a classic script (content_scripts + popup + tests via vm).
+// It reads the page DOM; it never calls a model API.
 
 function crosscheckHost(loc) {
   try {
@@ -35,8 +33,27 @@ function crosscheckHref(loc) {
   }
 }
 
-// ChatGPT chat vs Codex / auth / settings. Codex shares the host but not the
-// conversation DOM this adapter knows how to read.
+function crosscheckHash(loc) {
+  try {
+    return String((loc && loc.hash) || '');
+  } catch (e) {
+    return '';
+  }
+}
+
+function crosscheckBlob(loc) {
+  return (crosscheckPath(loc) + ' ' + crosscheckHref(loc) + ' ' + crosscheckHash(loc)).toLowerCase();
+}
+
+function isUsageLike(loc) {
+  const blob = crosscheckBlob(loc);
+  if (blob.includes('/auth') || blob.includes('/backend-api')) return true;
+  if (blob.includes('settings/usage') || blob.includes('_s=usage')) return true;
+  if (/\/(usage|spending|dashboard|analytics|account|billing)(\/|$|\?|#)/.test(blob)) return true;
+  if (blob.includes('/settings/') && (blob.includes('usage') || blob.includes('analytics'))) return true;
+  return false;
+}
+
 function isChatGptChat(loc) {
   const h = crosscheckHost(loc);
   if (!h.includes('chatgpt.com')) return false;
@@ -51,34 +68,40 @@ function detectCrosscheckSource(loc) {
   const href = crosscheckHref(loc);
   const h = crosscheckHost(loc);
   const p = crosscheckPath(loc);
-  if (isChatGptChat(loc)) {
-    return {
-      sourceAgent: 'chatgpt',
-      sourceKind: 'chat',
-      supported: true,
-      sessionUrl: href,
-    };
-  }
-  if (h.includes('chatgpt.com') && p.includes('/codex')) {
-    return { sourceAgent: 'codex', sourceKind: 'code', supported: false, sessionUrl: href };
+  if (h.includes('chatgpt.com')) {
+    if (p.includes('/codex')) {
+      const usage = p.includes('/settings') || p.includes('/analytics') || isUsageLike(loc);
+      return { sourceAgent: 'codex', sourceKind: 'code', supported: !usage, sessionUrl: href };
+    }
+    if (p.includes('/auth') || p.includes('/backend-api')) {
+      return { sourceAgent: 'chatgpt', sourceKind: 'chat', supported: false, sessionUrl: href };
+    }
+    return { sourceAgent: 'chatgpt', sourceKind: 'chat', supported: true, sessionUrl: href };
   }
   if (h.includes('claude.ai')) {
     const code = /^\/code(\/|$)/.test(p);
-    return {
-      sourceAgent: code ? 'claude-code' : 'claude-chat',
-      sourceKind: code ? 'code' : 'chat',
-      supported: false,
-      sessionUrl: href,
-    };
+    const agent = code ? 'claude-code' : 'claude-chat';
+    const kind = code ? 'code' : 'chat';
+    if (!code && isUsageLike(loc)) {
+      return { sourceAgent: agent, sourceKind: kind, supported: false, sessionUrl: href };
+    }
+    return { sourceAgent: agent, sourceKind: kind, supported: true, sessionUrl: href };
   }
   if (h.includes('grok.com')) {
-    return { sourceAgent: 'grok-build', sourceKind: 'chat', supported: false, sessionUrl: href };
+    if (isUsageLike(loc)) {
+      return { sourceAgent: 'grok-build', sourceKind: 'chat', supported: false, sessionUrl: href };
+    }
+    return { sourceAgent: 'grok-build', sourceKind: 'chat', supported: true, sessionUrl: href };
   }
   if (h.includes('cursor.com')) {
-    return { sourceAgent: 'cursor', sourceKind: 'code', supported: false, sessionUrl: href };
+    const agents = /\/agents(\/|$)/.test(p);
+    return { sourceAgent: 'cursor', sourceKind: 'code', supported: agents, sessionUrl: href };
   }
   if (h.includes('gemini.google.com')) {
-    return { sourceAgent: 'gemini', sourceKind: 'chat', supported: false, sessionUrl: href };
+    if (isUsageLike(loc) || p.includes('/usage')) {
+      return { sourceAgent: 'gemini', sourceKind: 'chat', supported: false, sessionUrl: href };
+    }
+    return { sourceAgent: 'gemini', sourceKind: 'chat', supported: true, sessionUrl: href };
   }
   return { sourceAgent: null, sourceKind: null, supported: false, sessionUrl: href };
 }
@@ -125,6 +148,15 @@ function closestMatch(el, test) {
   return null;
 }
 
+function isAncestor(anc, el) {
+  let n = el && (el.parentElement || el.parentNode);
+  while (n) {
+    if (n === anc) return true;
+    n = n.parentElement || n.parentNode || null;
+  }
+  return false;
+}
+
 function inChatGptComposer(el) {
   if (!el) return false;
   try {
@@ -140,6 +172,19 @@ function inChatGptComposer(el) {
   });
 }
 
+function inComposer(el) {
+  if (inChatGptComposer(el)) return true;
+  try {
+    if (el.closest && el.closest('textarea, [contenteditable="true"], [data-testid="composer"]')) return true;
+  } catch (e) {}
+  return !!closestMatch(el, (n) => {
+    const tag = (n.tagName || '').toUpperCase();
+    if (tag === 'TEXTAREA') return true;
+    const ce = n.getAttribute && n.getAttribute('contenteditable');
+    return ce === 'true';
+  });
+}
+
 function chatGptMessageBody(el) {
   const body = qs(el, '.markdown, .whitespace-pre-wrap, [class*="markdown"], [class*="whitespace-pre-wrap"]');
   return nodeText(body || el);
@@ -151,7 +196,7 @@ function collectHrefs(el) {
   qsa(el, 'a[href]').forEach((a) => {
     const href = (a.getAttribute && a.getAttribute('href')) || a.href || '';
     if (!href || href === '#' || /^javascript:/i.test(href)) return;
-    if (/^https?:\/\/(chatgpt\.com|chat\.openai\.com)\b/i.test(href)) return;
+    if (/^https?:\/\/(chatgpt\.com|chat\.openai\.com|claude\.ai|grok\.com|gemini\.google\.com|cursor\.com)\b/i.test(href)) return;
     if (seen[href]) return;
     seen[href] = true;
     out.push(href);
@@ -203,23 +248,134 @@ function roleFromTurn(el) {
   return '';
 }
 
+function pushMessage(out, role, el) {
+  if (!role) return;
+  const text = chatGptMessageBody(el);
+  const attachments = collectAttachments(el);
+  const links = collectHrefs(el);
+  if (!text && !attachments.length && !links.length) return;
+  const msg = { role, text };
+  if (attachments.length) msg.attachments = attachments;
+  if (links.length) msg.links = links;
+  out.push(msg);
+}
+
 function extractChatGptMessages(doc) {
   const turns = chatGptTurnNodes(doc);
   const out = [];
   for (let i = 0; i < turns.length; i++) {
     const el = turns[i];
-    const role = roleFromTurn(el);
-    if (!role) continue;
-    const text = chatGptMessageBody(el);
-    const attachments = collectAttachments(el);
-    const links = collectHrefs(el);
-    if (!text && !attachments.length && !links.length) continue;
-    const msg = { role, text };
-    if (attachments.length) msg.attachments = attachments;
-    if (links.length) msg.links = links;
-    out.push(msg);
+    pushMessage(out, roleFromTurn(el), el);
   }
   return out;
+}
+
+function extractPairedMessages(doc, groups) {
+  const sels = [];
+  groups.forEach((g) => { (g.sels || []).forEach((s) => sels.push(s)); });
+  if (!sels.length) return [];
+  const order = qsa(doc, sels.join(', '));
+  const out = [];
+  for (let i = 0; i < order.length; i++) {
+    const el = order[i];
+    if (inComposer(el)) continue;
+    let nested = false;
+    for (let j = 0; j < order.length; j++) {
+      if (i !== j && isAncestor(order[j], el)) { nested = true; break; }
+    }
+    if (nested) continue;
+    let role = '';
+    for (let g = 0; g < groups.length; g++) {
+      if (groupOwns(el, groups[g])) { role = groups[g].role; break; }
+    }
+    pushMessage(out, role, el);
+  }
+  return out;
+}
+
+function groupOwns(el, group) {
+  const sels = group && group.sels ? group.sels : [];
+  for (let i = 0; i < sels.length; i++) {
+    if (elMatchesSimple(el, sels[i])) return true;
+  }
+  return false;
+}
+
+// Tiny matcher for the selectors this file actually uses. Not a CSS engine.
+function elMatchesSimple(el, sel) {
+  if (!el || !sel) return false;
+  const s = String(sel).trim();
+  const tag = (el.tagName || '').toUpperCase();
+  if (/^[a-z][\w-]*$/i.test(s)) return tag === s.toUpperCase();
+  if (s[0] === '.' && s.indexOf('[') < 0) {
+    const cls = s.slice(1);
+    return new RegExp('(^|\\s)' + cls.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)').test(el.className || '');
+  }
+  let m = s.match(/^\[class\*=["']?([^"'\]]+)["']?\]$/);
+  if (m) return String(el.className || '').indexOf(m[1]) >= 0;
+  m = s.match(/^\[data-testid=["']([^"']+)["']\]$/);
+  if (m) return (el.getAttribute && el.getAttribute('data-testid')) === m[1];
+  m = s.match(/^\[data-testid\^=["']([^"']+)["']\]$/);
+  if (m) return String((el.getAttribute && el.getAttribute('data-testid')) || '').indexOf(m[1]) === 0;
+  m = s.match(/^\[data-message-author-role=["']([^"']+)["']\]$/);
+  if (m) return (el.getAttribute && el.getAttribute('data-message-author-role')) === m[1];
+  m = s.match(/^\[data-message-role=["']([^"']+)["']\]$/);
+  if (m) return (el.getAttribute && el.getAttribute('data-message-role')) === m[1];
+  m = s.match(/^\[data-role=["']([^"']+)["']\]$/);
+  if (m) return (el.getAttribute && el.getAttribute('data-role')) === m[1];
+  m = s.match(/^\[data-turn=["']([^"']+)["']\]$/);
+  if (m) return (el.getAttribute && el.getAttribute('data-turn')) === m[1];
+  return false;
+}
+
+function extractClaudeMessages(doc) {
+  return extractPairedMessages(doc, [
+    { role: 'user', sels: ['[data-testid="user-message"]', '.font-user-message', '[class*="font-user-message"]'] },
+    { role: 'assistant', sels: ['[data-testid="assistant-message"]', '.font-claude-response', '[class*="font-claude-response"]'] },
+  ]);
+}
+
+function extractGrokMessages(doc) {
+  return extractPairedMessages(doc, [
+    { role: 'user', sels: ['[data-testid="user-message"]'] },
+    { role: 'assistant', sels: ['[data-testid="grok-response"]'] },
+  ]);
+}
+
+function extractGeminiMessages(doc) {
+  return extractPairedMessages(doc, [
+    { role: 'user', sels: ['user-query', '.query-text'] },
+    { role: 'assistant', sels: ['model-response', '.model-response-text'] },
+  ]);
+}
+
+function extractCursorMessages(doc) {
+  const gpt = extractChatGptMessages(doc);
+  if (gpt.length) return gpt;
+  return extractPairedMessages(doc, [
+    { role: 'user', sels: ['[data-message-role="user"]', '[data-role="user"]'] },
+    { role: 'assistant', sels: ['[data-message-role="assistant"]', '[data-role="assistant"]'] },
+  ]);
+}
+
+function extractCodexMessages(doc) {
+  const gpt = extractChatGptMessages(doc);
+  if (gpt.length) return gpt;
+  return extractPairedMessages(doc, [
+    { role: 'user', sels: ['[data-message-author-role="user"]'] },
+    { role: 'assistant', sels: ['[data-message-author-role="assistant"]'] },
+  ]);
+}
+
+function extractMessagesFor(meta, doc) {
+  const agent = meta && meta.sourceAgent;
+  if (agent === 'chatgpt') return extractChatGptMessages(doc);
+  if (agent === 'codex') return extractCodexMessages(doc);
+  if (agent === 'claude-chat' || agent === 'claude-code') return extractClaudeMessages(doc);
+  if (agent === 'grok-build' || agent === 'grok-build-code') return extractGrokMessages(doc);
+  if (agent === 'gemini') return extractGeminiMessages(doc);
+  if (agent === 'cursor') return extractCursorMessages(doc);
+  return extractChatGptMessages(doc);
 }
 
 function sleepMs(ms) {
@@ -244,7 +400,7 @@ function chatGptScroller(doc) {
 
 // Best-effort: ChatGPT lazy-loads older turns as you scroll up. A few trips
 // to scrollTop=0 is enough for a typical session; we stop once the count
-// stops growing so capture cannot hang.
+// stops growing so capture cannot hang. Other hosts get the same scroll nudge.
 function loadChatGptHistory(doc, opts) {
   const skip = opts && opts.skipScroll;
   if (skip) return Promise.resolve();
@@ -296,7 +452,7 @@ function extractConversation(win, opts) {
   }
   if (!doc) return Promise.resolve(emptySession(meta, 'empty'));
   return loadChatGptHistory(doc, opts).then(() => {
-    const conversation = extractChatGptMessages(doc);
+    const conversation = extractMessagesFor(meta, doc);
     if (!conversation.length) return emptySession(meta, 'empty');
     return {
       ok: true,

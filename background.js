@@ -385,7 +385,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg && msg.type === 'reviewOpen' && msg.job) {
-    openDispatchJobs([msg.job], { tile: false }).then((opened) => sendResponse(opened));
+    const windowId = (msg.windowId != null && Number.isFinite(Number(msg.windowId)))
+      ? Number(msg.windowId)
+      : undefined;
+    openDispatchJobs([msg.job], { tile: false, active: true, windowId }).then((opened) => {
+      const one = opened && opened[0];
+      const tabId = one && one.tabId;
+      if (tabId != null && chrome.tabs && chrome.tabs.update) {
+        chrome.tabs.update(tabId, { active: true }, (tab) => {
+          void chrome.runtime.lastError;
+          const wid = windowId != null ? windowId : (tab && tab.windowId);
+          if (wid != null && chrome.windows && chrome.windows.update) {
+            chrome.windows.update(wid, { focused: true }, () => {
+              void chrome.runtime.lastError;
+              sendResponse(opened);
+            });
+          } else sendResponse(opened);
+        });
+        return;
+      }
+      sendResponse(opened);
+    });
     return true;
   }
 });
@@ -464,7 +484,9 @@ function openDispatchJobs(jobs, opts) {
       });
       return;
     }
-    chrome.tabs.create({ url: job.url, active: false }, (tab) => afterOpen(job, tab, resolve));
+    const createOpts = { url: job.url, active: !!(opts && opts.active) };
+    if (opts && opts.windowId != null) createOpts.windowId = opts.windowId;
+    chrome.tabs.create(createOpts, (tab) => afterOpen(job, tab, resolve));
   })), Promise.resolve()).then(() => opened);
 }
 

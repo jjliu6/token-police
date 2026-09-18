@@ -344,6 +344,9 @@ function inTopFrame() {
   catch (e) { return true; }
 }
 
+// Injected at document_idle (see manifest). v1.6.1 used document_start so
+// Cursor JSON could start earlier; inactive refresh tabs then froze before
+// this watcher ran, and every agent failed together at the 25s tab-kill.
 if (!isDispatchSurface()) {
   tryOnce();
   if (!done) {

@@ -3,7 +3,7 @@
 // - 重页面(Cursor/Grok)：浏览器会冻结后台标签页导致抓不到，所以逐个"短暂切到前台"、
 //   抓到就自动关，一个接一个，尽量少打扰。
 // - 只刷新用户在面板里勾选的产品（enabledAgents，缺省全开）。
-// - 刷新结束后按 agent 记录成/败（refresh.results），面板据此提示"没抓到，可能未登录"。
+// - 刷新结束后按 agent 记录成/败（refresh.results）。失败文案不要默认写成“可能未登录”。
 
 importScripts('agents.js', 'i18n.js', 'update.js', 'capture-logs.js', 'review.js');
 

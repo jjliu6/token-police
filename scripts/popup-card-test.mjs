@@ -503,6 +503,7 @@ console.log('ok  Logs view sorts, filters, escapes scraped strings, and shows it
 const failProblems = [];
 const failHtml = ctx.card('grok-build', grok, [], true);
 if (!failHtml.includes("Last refresh couldn't read this page")) failProblems.push('failed card should warn about the failed refresh');
+if (failHtml.includes('sign in') || failHtml.includes('登录')) failProblems.push('generic fail must not blame login');
 if (!failHtml.includes('data-open="grok-build"')) failProblems.push('failed card should link to the usage page');
 if (ctx.card('grok-build', grok, [], false).includes('class="fail"')) failProblems.push('ok card must not show the failure line');
 store.refresh = { running: false, started: Date.now(), finished: Date.now(), results: { cursor: 'fail' } };

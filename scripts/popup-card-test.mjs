@@ -282,8 +282,17 @@ if ((els.settings.innerHTML.match(/data-agent="[^"]+" checked/g) || []).length !
 if (!els.settings.innerHTML.includes('data-agent="grok-bot"') || !els.settings.innerHTML.includes('data-agent="gemini"')) {
   setProblems.push('settings should list Grok Bot and Gemini');
 }
-if ((els.settings.innerHTML.match(/data-pref="[^"]+" checked/g) || []).length !== 5) {
-  setProblems.push('autoRefresh, notifyLow, showHair, checkUpdates and moveReminder toggles should default to checked');
+if ((els.settings.innerHTML.match(/data-pref="[^"]+" checked/g) || []).length !== 4) {
+  setProblems.push('notifyLow, showHair, checkUpdates and moveReminder toggles should default to checked');
+}
+if (!els.settings.innerHTML.includes('data-pref="autoRefreshInterval"')) {
+  setProblems.push('settings should have an auto-check interval select');
+}
+if (!els.settings.innerHTML.includes('value="60" selected')) {
+  setProblems.push('auto-check should default to 1 hour');
+}
+if (els.settings.innerHTML.includes('Hourly auto-check') || els.settings.innerHTML.includes('每小时自动检查')) {
+  setProblems.push('interval-neutral Auto-check label must not say hourly');
 }
 if (!els.settings.innerHTML.includes('data-pref="moveReminder" checked')) {
   setProblems.push('moveReminder toggle should exist and default to checked');
@@ -298,13 +307,19 @@ ctx.render();
 if (!els.settings.innerHTML.includes('data-pref="checkUpdates"')) setProblems.push('settings should have a checkUpdates toggle');
 store.autoRefresh = false;
 ctx.render();
-if (els.settings.innerHTML.includes('data-pref="autoRefresh" checked')) {
-  setProblems.push('autoRefresh=false should render unchecked');
+if (!els.settings.innerHTML.includes('value="0" selected')) {
+  setProblems.push('autoRefresh=false should select Off');
 }
 if (!els.settings.innerHTML.includes('data-pref="notifyLow" checked')) {
   setProblems.push('notifyLow should stay checked when only autoRefresh is off');
 }
 delete store.autoRefresh;
+store.autoRefreshInterval = 15;
+ctx.render();
+if (!els.settings.innerHTML.includes('value="15" selected')) {
+  setProblems.push('autoRefreshInterval=15 should select 15 min');
+}
+delete store.autoRefreshInterval;
 ctx.render();
 store.enabledAgents = { codex: false };
 ctx.render();

@@ -20,14 +20,13 @@ function clearBadge() {
   chrome.action.setBadgeText({ text: '' });
 }
 
-// 每小时静默自动检查（autoRefresh，默认开）：所有勾选的产品统一在后台标签页尽力抓，
+// 静默自动检查（默认每 60 分钟）：所有勾选的产品统一在后台标签页尽力抓，
 // 绝不抢焦点。重页面(Cursor/Grok)在后台可能被浏览器节流渲染不出来——抓不到就保留
 // 原数据，同时在卡片与本地日志里记录失败；要保证最新走手动 Refresh。
-// 只在闹钟还不存在时才创建。service worker 会被反复唤醒又休眠，每次冷启动都重跑
-// syncAlarm/syncUpdateAlarm；而 chrome.alarms.create 用同一个名字再建一次，会取消旧闹钟、
-// 把周期倒计时清零。频繁重启就意味着倒计时永远走不到点——闹钟从不触发。先 get 一下，
-// 没有才建，已有就别碰它的计时。（开关切换时对应的 clear 已经先把闹钟删掉，所以再打开时
-// get 拿到的是空，会正常重建。）
+// 只在闹钟还不存在、或周期对不上时才 create。service worker 会被反复唤醒又休眠，
+// 每次冷启动都重跑 syncAlarm/syncUpdateAlarm；chrome.alarms.create 用同一个名字再建
+// 一次会取消旧闹钟、把周期倒计时清零。频繁重启就意味着倒计时永远走不到点。
+// 先 get：同周期的已有闹钟别碰；关掉或改间隔才 clear / 重建。
 function ensureAlarm(name, info) {
   chrome.alarms.get(name, (existing) => {
     void chrome.runtime.lastError;
@@ -37,9 +36,17 @@ function ensureAlarm(name, info) {
 
 function syncAlarm() {
   if (!chrome.alarms) return;
-  chrome.storage.local.get(['autoRefresh'], (res) => {
-    if (res.autoRefresh !== false) ensureAlarm('quietRefresh', { periodInMinutes: 60 });
-    else chrome.alarms.clear('quietRefresh', () => void chrome.runtime.lastError);
+  chrome.storage.local.get(['autoRefresh', 'autoRefreshInterval'], (res) => {
+    const mins = resolveAutoRefreshMinutes(res);
+    if (!mins) {
+      chrome.alarms.clear('quietRefresh', () => void chrome.runtime.lastError);
+      return;
+    }
+    chrome.alarms.get('quietRefresh', (existing) => {
+      void chrome.runtime.lastError;
+      if (existing && existing.periodInMinutes === mins) return;
+      chrome.alarms.create('quietRefresh', { periodInMinutes: mins });
+    });
   });
 }
 
@@ -111,7 +118,7 @@ if (chrome.alarms) {
 
 chrome.storage.onChanged.addListener((ch, area) => {
   if (area !== 'local' || !ch) return;
-  if (ch.autoRefresh) syncAlarm();
+  if (ch.autoRefresh || ch.autoRefreshInterval) syncAlarm();
   if (ch.checkUpdates) {
     syncUpdateAlarm();
     // 关掉：把结果也清掉，面板上不再显示；打开：马上查一次

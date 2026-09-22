@@ -44,8 +44,14 @@ const I18N = {
     tokens: '{n} tokens',
     tracked: 'Tracked:',
     gearTitle: 'Settings',
-    autoCheck: 'Hourly auto-check',
-    autoCheckTip: 'Every hour, quietly re-checks all tracked agents in background tabs — never steals focus. A page that won’t render in a background tab (can happen with Cursor/Grok) just keeps its last data; click Refresh for a guaranteed update.',
+    autoCheck: 'Auto-check',
+    autoCheckTip: 'On the interval you pick, quietly re-checks all tracked agents in background tabs — never steals focus. A page that won’t render in a background tab (can happen with Cursor/Grok) just keeps its last data; click Refresh for a guaranteed update.',
+    autoCheckOff: 'Off',
+    autoCheck15m: '15 min',
+    autoCheck30m: '30 min',
+    autoCheck1h: '1 h',
+    autoCheck2h: '2 h',
+    autoCheck4h: '4 h',
     notifyLow: 'Low-quota alerts',
     notifyLowTip: 'Notify when a tracked agent drops below 15% (and again below 5%) remaining.',
     checkUpdates: 'Check for updates',
@@ -219,8 +225,14 @@ const I18N = {
     tokens: '{n} tokens',
     tracked: 'Suivis :',
     gearTitle: 'Réglages',
-    autoCheck: 'Vérif. auto chaque heure',
-    autoCheckTip: 'Chaque heure, re-vérifie discrètement tous les agents cochés dans des onglets en arrière-plan — sans jamais voler le focus. Une page qui ne se rend pas en fond (ça arrive avec Cursor/Grok) garde sa dernière valeur ; clique Actualiser pour un vrai refresh.',
+    autoCheck: 'Vérif. auto',
+    autoCheckTip: 'Selon l’intervalle choisi, re-vérifie discrètement tous les agents cochés dans des onglets en arrière-plan — sans jamais voler le focus. Une page qui ne se rend pas en fond (ça arrive avec Cursor/Grok) garde sa dernière valeur ; clique Actualiser pour un vrai refresh.',
+    autoCheckOff: 'Arrêt',
+    autoCheck15m: '15 min',
+    autoCheck30m: '30 min',
+    autoCheck1h: '1 h',
+    autoCheck2h: '2 h',
+    autoCheck4h: '4 h',
     notifyLow: 'Alertes quota bas',
     notifyLowTip: 'Une notif dès qu’un agent suivi passe sous 15 % (puis sous 5 %) restants.',
     checkUpdates: 'Vérifier les mises à jour',
@@ -394,8 +406,14 @@ const I18N = {
     tokens: '{n} tokens',
     tracked: '跟踪：',
     gearTitle: '设置',
-    autoCheck: '每小时自动检查',
-    autoCheckTip: '每小时在后台标签页悄悄检查所有勾选的产品，绝不抢焦点。个别页面（常见于 Cursor/Grok）在后台渲染不出来时保持原数据；要保证最新就点「刷新」。',
+    autoCheck: '自动检查',
+    autoCheckTip: '按所选间隔在后台标签页悄悄检查所有勾选的产品，绝不抢焦点。个别页面（常见于 Cursor/Grok）在后台渲染不出来时保持原数据；要保证最新就点「刷新」。',
+    autoCheckOff: '关闭',
+    autoCheck15m: '15 分',
+    autoCheck30m: '30 分',
+    autoCheck1h: '1 小时',
+    autoCheck2h: '2 小时',
+    autoCheck4h: '4 小时',
     notifyLow: '低额度提醒',
     notifyLowTip: '跟踪的产品剩余额度跌破 15%（以及 5%）时弹出通知。',
     checkUpdates: '检查更新',
@@ -611,6 +629,25 @@ function loadLang(done) {
     applyStoredLang(res && res.uiLang);
     finish();
   });
+}
+
+// Quiet auto-check interval. 0 = off. Default 60 matches the old hourly toggle.
+const AUTO_REFRESH_PRESETS = [0, 15, 30, 60, 120, 240];
+const AUTO_REFRESH_DEFAULT_MIN = 60;
+const AUTO_REFRESH_LABEL = {
+  0: 'autoCheckOff',
+  15: 'autoCheck15m',
+  30: 'autoCheck30m',
+  60: 'autoCheck1h',
+  120: 'autoCheck2h',
+  240: 'autoCheck4h',
+};
+
+function resolveAutoRefreshMinutes(res) {
+  const n = Number(res && res.autoRefreshInterval);
+  if (AUTO_REFRESH_PRESETS.indexOf(n) >= 0) return n;
+  if (res && res.autoRefresh === false) return 0;
+  return AUTO_REFRESH_DEFAULT_MIN;
 }
 
 function setLang(lang, done) {

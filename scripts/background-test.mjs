@@ -233,15 +233,18 @@ await notify(8, now + 480000);
 if (lows().length !== 3) problems.push('notifyLow=false should suppress notifications');
 await new Promise((r) => ctxObj.chrome.storage.local.set({ notifyLow: true }, r));
 
-// 9) 闹钟：默认创建；autoRefresh=false 清除；true 恢复
+// 9) 闹钟：默认 60 分钟；autoRefresh=false 清除；改间隔才重建
 if (!alarms.created.some((a) => a.name === 'quietRefresh' && a.periodInMinutes === 60)) {
   problems.push('startup should create the hourly quietRefresh alarm');
 }
 await new Promise((r) => ctxObj.chrome.storage.local.set({ autoRefresh: false }, r));
 await tick(10);
 if (alarms.cleared < 1) problems.push('autoRefresh=false should clear the alarm');
-await new Promise((r) => ctxObj.chrome.storage.local.set({ autoRefresh: true }, r));
+await new Promise((r) => ctxObj.chrome.storage.local.set({ autoRefresh: true, autoRefreshInterval: 15 }, r));
 await tick(10);
+if (!alarms.created.some((a) => a.name === 'quietRefresh' && a.periodInMinutes === 15)) {
+  problems.push('autoRefreshInterval=15 should recreate quietRefresh at 15 minutes');
+}
 
 // 10) 静默检查：所有勾选产品都在后台标签页尝试（cursor 已取消勾选 → 不开）
 const before = createdTabs.length;
@@ -367,7 +370,16 @@ const qrCreatedBefore = alarms.created.filter((a) => a.name === 'quietRefresh').
 await new Promise((r) => ctxObj.chrome.storage.local.set({ autoRefresh: true }, r));
 await tick(10);
 if (alarms.created.filter((a) => a.name === 'quietRefresh').length !== qrCreatedBefore) {
-  problems.push('re-syncing must not recreate an existing quietRefresh alarm (that would reset its hourly countdown so it never fires)');
+  problems.push('re-syncing must not recreate an existing quietRefresh alarm (that would reset its countdown so it never fires)');
+}
+const qrAfterSame = alarms.created.filter((a) => a.name === 'quietRefresh').length;
+await new Promise((r) => ctxObj.chrome.storage.local.set({ autoRefreshInterval: 120, autoRefresh: true }, r));
+await tick(10);
+if (!alarms.created.some((a) => a.name === 'quietRefresh' && a.periodInMinutes === 120)) {
+  problems.push('changing the interval must recreate quietRefresh with the new period');
+}
+if (alarms.created.filter((a) => a.name === 'quietRefresh').length <= qrAfterSame) {
+  problems.push('changing autoRefreshInterval should create a new quietRefresh alarm');
 }
 
 // 11) 动一动提醒：默认开；2 小时内烧掉 >10% 才提醒；2 小时冷却；关掉开关就不提醒；只算重置之后的消耗

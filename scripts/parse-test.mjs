@@ -198,6 +198,53 @@ if (typeof parseCursorDashboard !== 'function') {
   check('empty dashboard json is null', parseCursorDashboard({}, {}, {}, Date.now()), null);
 }
 
+const { parseCodexUsage } = ctx;
+if (typeof parseCodexUsage !== 'function') {
+  console.error('parseCodexUsage was not loaded from parse.js');
+  process.exit(1);
+}
+
+const CODEX_ANALYTICS = `
+Codex and Work Analytics
+Usage
+Weekly usage limit
+Codex and ChatGPT share this limit
+44% remaining
+Resets Sep 26, 2026 at 3:00 AM PT
+5-hour usage limit
+100% remaining
+Resets 8:12 PM
+Usage limit resets
+Full reset · Use reset
+Credits remaining
+0
+`;
+
+{
+  const p = parseCodexUsage(CODEX_ANALYTICS);
+  check('codex weekly remaining', p && p.weekly, 44);
+  check('codex weekly reset is the dated line, not the 5-hour clock', p && p.weeklyReset, 'Sep 26, 2026 at 3:00 AM PT');
+  check('codex 5-hour remaining', p && p.five, 100);
+  check('codex 5-hour reset stays time-only', p && p.fiveReset, '8:12 PM');
+  check('codex credits', p && p.credits, '0');
+}
+
+{
+  const weeklyOnly = `
+Weekly usage limit
+82% remaining
+Resets in 5 days
+`;
+  const p = parseCodexUsage(weeklyOnly);
+  check('codex weekly-only remaining', p && p.weekly, 82);
+  check('codex weekly-only reset', p && p.weeklyReset, 'in 5 days');
+  check('codex weekly-only has no 5-hour row', p && p.five, null);
+}
+
+{
+  check('codex chat page is not usage', parseCodexUsage('What can I help with?'), null);
+}
+
 if (failed) {
   console.error(`\n${failed} test(s) failed`);
   process.exit(1);

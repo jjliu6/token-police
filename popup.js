@@ -29,7 +29,9 @@ const ago = (ts) => {
 // 把各家五花八门的"重置时间"文字，统一解析成一个真实的日期
 function parseReset(txt, now) {
   if (!txt) return null;
-  const t = txt.trim();
+  const t = txt.trim()
+    .replace(/\s+\((?:PT|PST|PDT|ET|EST|EDT|CT|CST|CDT|MT|MST|MDT|UTC|GMT)\)\s*$/i, '')
+    .replace(/\s+(?:PT|PST|PDT|ET|EST|EDT|CT|CST|CDT|MT|MST|MDT|UTC|GMT)\s*$/i, '');
   let m;
   // "(31 days)" 这种直接给了天数（Cursor）
   if ((m = t.match(/\((\d+)\s*days?\)/i))) { const d = new Date(now); d.setDate(d.getDate() + +m[1]); return d; }

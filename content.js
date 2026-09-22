@@ -49,12 +49,13 @@ function makeAgents() {
   }
 
   if (h.includes('chatgpt.com')) {
-    const wk = pct(/Weekly usage limit[\s\S]{0,40}?(\d+)%\s*remaining/i);
-    if (wk == null) return one(null);
-    const fh = pct(/5[\s-]?hour usage limit[\s\S]{0,40}?(\d+)%\s*remaining/i);
-    const limits = [{ label: 'Weekly', percent_left: wk, resets_text: null }];
-    if (fh != null) limits.push({ label: '5-hour limit', percent_left: fh, resets_text: g(/Resets\s+(\d{1,2}:\d{2}\s*[AP]M)/i) });
-    return one({ id: 'codex', name: 'Codex', color: '#5CD6B3', limits, credits: g(/Credits remaining[\s\S]{0,20}?(\d[\d,]*)/i) });
+    const parsed = parseCodexUsage(T);
+    if (!parsed) return one(null);
+    const limits = [{ label: 'Weekly', percent_left: parsed.weekly, resets_text: parsed.weeklyReset }];
+    if (parsed.five != null) {
+      limits.push({ label: '5-hour limit', percent_left: parsed.five, resets_text: parsed.fiveReset });
+    }
+    return one({ id: 'codex', name: 'Codex', color: '#5CD6B3', limits, credits: parsed.credits });
   }
 
   if (h.includes('grok.com')) {

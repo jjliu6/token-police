@@ -608,6 +608,26 @@ if (newCards.length) {
   console.error(newCards.join('\n'));
   process.exit(1);
 }
+const cx = {
+  id: 'codex', name: 'Codex', scraped_at: Date.now(),
+  limits: [
+    { label: 'Weekly', percent_left: 44, resets_text: 'Sep 26, 2026 at 3:00 AM PT' },
+    { label: '5-hour limit', percent_left: 100, resets_text: '8:12 PM' },
+  ],
+};
+const cxHtml = ctx.card('codex', cx, [], false);
+if (!cxHtml.includes('>44%</b>')) newCards.push('Codex card should show 44% remaining');
+if (!/class="r">reset in \d+d</.test(cxHtml)) {
+  newCards.push(`Codex weekly reset should render as "reset in Nd" like other cards, got: ${cxHtml}`);
+}
+if (!cxHtml.includes('5-hour limit') && !cxHtml.includes('5h')) {
+  newCards.push('Codex card should still show the 5-hour bar');
+}
+const r6 = ctx.parseReset('Sep 26, 2026 at 3:00 AM PT', new Date('2026-09-21T12:00:00'));
+if (!r6 || r6.getMonth() !== 8 || r6.getDate() !== 26) {
+  newCards.push(`Codex "Sep 26, 2026 at 3:00 AM PT" should parse to Sep 26, got ${r6}`);
+}
+
 console.log('ok  Grok Bot and Gemini cards render with parsed reset countdowns');
 
 // --- 7-day sparkline ---

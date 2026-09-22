@@ -164,3 +164,55 @@ function parseCursorDashboard(usage, plan, sand, now) {
   if (!cursor && !grokBot && !grokMissing) return null;
   return { cursor, grokBot, grokMissing };
 }
+
+function codexPctRemaining(block) {
+  if (!block) return null;
+  const m = block.match(/(\d+)\s*%\s*remaining/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return null;
+  return n;
+}
+
+function codexResetsText(block) {
+  if (!block) return null;
+  const m = block.match(/\bResets\s+(?:on\s+|at\s+)?([^\n]+)/i);
+  if (!m) return null;
+  const s = m[1].trim().replace(/\s+/g, ' ');
+  if (!s || /^use\b/i.test(s)) return null;
+  return s;
+}
+
+function codexBlock(T, startRe, endRe) {
+  const start = T.search(startRe);
+  if (start < 0) return null;
+  const rest = T.slice(start);
+  const endRel = rest.search(endRe);
+  const end = endRel < 0 ? Math.min(rest.length, 420) : Math.min(rest.length, endRel);
+  return rest.slice(0, end);
+}
+
+function parseCodexUsage(T) {
+  if (!T || !/Weekly usage limit/i.test(T)) return null;
+  const weeklyBlock = codexBlock(
+    T,
+    /Weekly usage limit/i,
+    /5[\s-]?hour usage limit|Usage limit resets|Credits remaining/i
+  );
+  const weekly = codexPctRemaining(weeklyBlock);
+  if (weekly == null) return null;
+  const fiveBlock = codexBlock(
+    T,
+    /5[\s-]?hour usage limit/i,
+    /Weekly usage limit|Usage limit resets|Credits remaining/i
+  );
+  const five = codexPctRemaining(fiveBlock);
+  const creditsM = T.match(/Credits remaining[\s\S]{0,20}?(\d[\d,]*)/i);
+  return {
+    weekly,
+    weeklyReset: codexResetsText(weeklyBlock),
+    five,
+    fiveReset: five == null ? null : codexResetsText(fiveBlock),
+    credits: creditsM ? creditsM[1] : null,
+  };
+}

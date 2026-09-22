@@ -183,6 +183,23 @@ Upgrade
 }
 
 {
+  const CODEX = `
+Weekly usage limit
+44% remaining
+Resets Sep 26, 2026 at 3:00 AM PT
+5-hour usage limit
+100% remaining
+Resets 8:12 PM
+`;
+  const p = runPage({ host: 'chatgpt.com', path: '/codex/cloud/settings/analytics', text: CODEX });
+  const c = p.agents()[0];
+  check(c && c.id === 'codex' && c.limits[0].percent_left === 44, `codex weekly remaining, got ${JSON.stringify(c)}`);
+  check(c && c.limits[0].resets_text === 'Sep 26, 2026 at 3:00 AM PT', `codex weekly reset, got ${c && c.limits[0].resets_text}`);
+  check(c && c.limits[1] && c.limits[1].percent_left === 100 && c.limits[1].resets_text === '8:12 PM',
+    `codex 5-hour row, got ${JSON.stringify(c && c.limits[1])}`);
+}
+
+{
   const busy = GEMINI.replace('Current usage\n0% used\nResets at 2:29 PM', 'Current usage\n42% used').replace('Weekly limit\nResets Sep 6 at 8:29 AM\n0% used', 'Weekly limit\nResets Sep 6 at 8:29 AM\n17% used');
   const g = runPage({ host: 'gemini.google.com', text: busy }).agents()[0];
   check(g && g.limits[0].percent_left === 83, 'Gemini weekly 17% used → 83% left');
@@ -301,5 +318,6 @@ if (problems.length) {
 console.log('ok  Cursor spending page reports Cursor (4% left) and Grok Bot (87% left) from one scrape');
 console.log('ok  Missing / late Grok Bot section: Cursor saved, page waits, closes once done');
 console.log('ok  Gemini usage page reports weekly + current usage, PRO plan');
+console.log('ok  Codex analytics page reports weekly reset text (not null)');
 console.log('ok  Frozen spending page still saves Cursor + Grok Bot from dashboard JSON');
 console.log('\nContent test passed.');

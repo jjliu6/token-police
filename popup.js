@@ -1028,9 +1028,13 @@ function renderSettings(en, prefs) {
   const agents = AGENTS.map((a) =>
     `<label><input type="checkbox" data-agent="${a.id}"${en[a.id] !== false ? ' checked' : ''}>${a.name}</label>`
   ).join('');
-  // 功能开关：每小时静默自动检查、低额度通知、发量小人、每天检查更新、动一动提醒（全部默认开）
+  // 功能开关：自动检查间隔、低额度通知、发量小人、每天检查更新、动一动提醒
+  const mins = resolveAutoRefreshMinutes(prefs);
+  const intervalOpts = AUTO_REFRESH_PRESETS.map((n) =>
+    `<option value="${n}"${n === mins ? ' selected' : ''}>${t(AUTO_REFRESH_LABEL[n])}</option>`
+  ).join('');
+  const interval = `<label class="ival" title="${t('autoCheckTip')}"><span>${t('autoCheck')}</span><select data-pref="autoRefreshInterval">${intervalOpts}</select></label>`;
   const toggles = [
-    ['autoRefresh', t('autoCheck'), t('autoCheckTip'), true],
     ['notifyLow', t('notifyLow'), t('notifyLowTip'), true],
     ['showHair', t('showHair'), t('showHairTip'), true],
     ['checkUpdates', t('checkUpdates'), t('checkUpdatesTip'), true],
@@ -1039,7 +1043,7 @@ function renderSettings(en, prefs) {
     const on = prefs[k] == null ? dflt : prefs[k] !== false;
     return `<label title="${tip}"><input type="checkbox" data-pref="${k}"${on ? ' checked' : ''}>${label}</label>`;
   }).join('');
-  box.innerHTML = `<span class="st">${t('tracked')}</span>${agents}<span class="brk"></span>${toggles}`;
+  box.innerHTML = `<span class="st">${t('tracked')}</span>${agents}<span class="brk"></span>${interval}${toggles}`;
 }
 
 // 面板底部的版本行：
@@ -1295,7 +1299,7 @@ function downloadLogs(kind) {
 }
 
 function render() {
-  chrome.storage.local.get(['agents', 'history', 'refresh', 'latestAttempts', 'enabledAgents', 'autoRefresh', 'notifyLow', 'showHair', 'moveReminder', 'activityPick', 'activityDoneAt', 'lastMovedAt', 'buddyPos', 'hairBoostPct', 'activityOffer', 'checkUpdates', 'updateCheck'], (res) => {
+  chrome.storage.local.get(['agents', 'history', 'refresh', 'latestAttempts', 'enabledAgents', 'autoRefresh', 'autoRefreshInterval', 'notifyLow', 'showHair', 'moveReminder', 'activityPick', 'activityDoneAt', 'lastMovedAt', 'buddyPos', 'hairBoostPct', 'activityOffer', 'checkUpdates', 'updateCheck'], (res) => {
     const map = res.agents || {};
     const hist = res.history || [];
     const en = res.enabledAgents || {};
@@ -1326,7 +1330,7 @@ function render() {
           : false;
         return card(id, map[id], byId[id], failed(id) || attemptFail, attempt);
       }).join('');
-    renderSettings(en, { autoRefresh: res.autoRefresh, notifyLow: res.notifyLow, showHair: res.showHair, moveReminder: res.moveReminder, checkUpdates: res.checkUpdates });
+    renderSettings(en, { autoRefresh: res.autoRefresh, autoRefreshInterval: res.autoRefreshInterval, notifyLow: res.notifyLow, showHair: res.showHair, moveReminder: res.moveReminder, checkUpdates: res.checkUpdates });
     const pct = avgPct(map, shown);
     const boost = clampHairBoost(pct, res.hairBoostPct);
     if (pct != null && (res.hairBoostPct || 0) !== boost) {
@@ -1414,7 +1418,12 @@ if (settingsBox) {
       return;
     }
     const pref = el.dataset.pref;
-    if (pref === 'autoRefresh' || pref === 'notifyLow' || pref === 'showHair' || pref === 'moveReminder' || pref === 'checkUpdates') {
+    if (pref === 'autoRefreshInterval') {
+      const mins = resolveAutoRefreshMinutes({ autoRefreshInterval: Number(el.value) });
+      chrome.storage.local.set({ autoRefreshInterval: mins, autoRefresh: mins !== 0 });
+      return;
+    }
+    if (pref === 'notifyLow' || pref === 'showHair' || pref === 'moveReminder' || pref === 'checkUpdates') {
       chrome.storage.local.set({ [pref]: checked });
     }
   });

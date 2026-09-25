@@ -192,6 +192,49 @@ function codexBlock(T, startRe, endRe) {
   return rest.slice(0, end);
 }
 
+function claudePctUsed(block) {
+  if (!block) return null;
+  const m = block.match(/(\d+)\s*%\s*used/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return null;
+  return n;
+}
+
+function claudeResetsText(block) {
+  if (!block) return null;
+  const m = block.match(/\bResets\s+([^\n]+)/i);
+  if (!m) return null;
+  const s = m[1].trim().replace(/\s+/g, ' ');
+  return s || null;
+}
+
+// Claude usage: legacy "All models" / "Current session", or 2026-09
+// "This week" / "Current session". Ignore Fable's extra weekly row and
+// "This week's usage by product" (Claude Code 98% is share-of-week, not leftover).
+function parseClaudeUsage(T) {
+  if (!T) return null;
+  const weeklyBlock = codexBlock(
+    T,
+    /All models|(?<!Fable\s)This week(?!['’]s)/i,
+    /Current session|Fable this week|Usage credits|This week['’]s usage/i
+  );
+  const weekly = claudePctUsed(weeklyBlock);
+  if (weekly == null) return null;
+  const sessionBlock = codexBlock(
+    T,
+    /Current session/i,
+    /This week(?!['’]s)|All models|Fable this week|Usage credits/i
+  );
+  const session = claudePctUsed(sessionBlock);
+  return {
+    weekly,
+    weeklyReset: claudeResetsText(weeklyBlock),
+    session,
+    sessionReset: session == null ? null : claudeResetsText(sessionBlock),
+  };
+}
+
 function parseCodexUsage(T) {
   if (!T || !/Weekly usage limit/i.test(T)) return null;
   const weeklyBlock = codexBlock(

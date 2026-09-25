@@ -40,11 +40,20 @@ function makeAgents() {
   const one = (a) => ({ agents: a ? [a] : [], waiting: false });
 
   if (h.includes('claude.ai')) {
-    const wu = pct(/All models[\s\S]{0,60}?(\d+)%\s*used/i);
-    if (wu == null) return one(null);
-    const su = pct(/Current session[\s\S]{0,60}?(\d+)%\s*used/i);
-    const limits = [{ label: 'Weekly (All models)', percent_left: 100 - wu, resets_text: g(/All models[\s\S]{0,120}?Resets\s+([^\n]+)/i) }];
-    if (su != null) limits.push({ label: 'Session (5h)', percent_left: 100 - su, resets_text: g(/Current session[\s\S]{0,90}?Resets\s+([^\n]+)/i) });
+    const parsed = parseClaudeUsage(T);
+    if (!parsed) return one(null);
+    const limits = [{
+      label: 'Weekly (All models)',
+      percent_left: 100 - parsed.weekly,
+      resets_text: parsed.weeklyReset,
+    }];
+    if (parsed.session != null) {
+      limits.push({
+        label: 'Session (5h)',
+        percent_left: 100 - parsed.session,
+        resets_text: parsed.sessionReset,
+      });
+    }
     return one({ id: 'claude-code', name: 'Claude Code', color: '#D97757', limits });
   }
 

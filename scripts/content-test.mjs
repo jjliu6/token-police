@@ -217,6 +217,29 @@ Resets 8:12 PM
   const c = p.agents()[0];
   check(c && c.id === 'claude-code' && c.limits[0].percent_left === 70 && c.limits[1].percent_left === 90, `claude page, got ${JSON.stringify(c)}`);
 }
+{
+  const NEW_CLAUDE = `
+Current session
+Resets at 6:30 AM
+8% used
+This week
+Resets at 5:00 PM
+84% used
+Fable this week
+72% used
+This week's usage by product
+Claude Code
+98%
+`;
+  const p = runPage({ host: 'claude.ai', text: NEW_CLAUDE });
+  const c = p.agents()[0];
+  check(c && c.id === 'claude-code', `new claude page should still be Claude Code, got ${JSON.stringify(c)}`);
+  check(c && c.limits[0].percent_left === 16 && c.limits[0].resets_text === 'at 5:00 PM',
+    `new claude weekly leftover from This week 84%, got ${JSON.stringify(c && c.limits[0])}`);
+  check(c && c.limits[1] && c.limits[1].percent_left === 92 && c.limits[1].resets_text === 'at 6:30 AM',
+    `new claude session leftover from 8% used, got ${JSON.stringify(c && c.limits[1])}`);
+  check(c && c.limits.length === 2, `new claude page must not add a Fable or product card, got ${c && c.limits.length} limits`);
+}
 
 function jsonOk(body) {
   return { ok: true, status: 200, type: 'basic', json: async () => JSON.parse(JSON.stringify(body)) };

@@ -1,0 +1,6 @@
+# Model weights and render intermediates — regenerate with the scripts.
+.cache/
+build/
+
+# Rendered deliverables (sent directly; regenerate with render/encode.py)
+out/

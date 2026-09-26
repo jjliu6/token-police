@@ -198,6 +198,54 @@ if (typeof parseCursorDashboard !== 'function') {
   check('empty dashboard json is null', parseCursorDashboard({}, {}, {}, Date.now()), null);
 }
 
+const { parseClaudeUsage } = ctx;
+if (typeof parseClaudeUsage !== 'function') {
+  console.error('parseClaudeUsage was not loaded from parse.js');
+  process.exit(1);
+}
+
+const CLAUDE_USAGE_2026_09 = `
+Your usage Max (5x)
+On track. You should reach today's reset with room to spare.
+Current session
+Resets at 6:30 AM
+8% used
+This week
+Resets at 5:00 PM
+84% used
+Fable this week
+Separate weekly limit for Fable
+Resets at 5:00 PM
+72% used
+Resets
+Get extra wiggle room to explore Opus 5.5. Expires Oct 23.
+Usage credits
+$0
+This week's usage by product
+Claude Code
+98%
+`;
+
+{
+  const p = parseClaudeUsage(CLAUDE_USAGE_2026_09);
+  check('claude 2026-09 weekly used is This week, not Fable or product', p && p.weekly, 84);
+  check('claude 2026-09 weekly reset', p && p.weeklyReset, 'at 5:00 PM');
+  check('claude 2026-09 session used', p && p.session, 8);
+  check('claude 2026-09 session reset', p && p.sessionReset, 'at 6:30 AM');
+}
+
+{
+  const p = parseClaudeUsage('All models\n30% used\nResets in 2 days\nCurrent session\n10% used\nResets in 1 hr 58 min');
+  check('claude legacy All models weekly', p && p.weekly, 30);
+  check('claude legacy weekly reset', p && p.weeklyReset, 'in 2 days');
+  check('claude legacy session', p && p.session, 10);
+  check('claude legacy session reset', p && p.sessionReset, 'in 1 hr 58 min');
+}
+
+{
+  check('claude chat page is not usage', parseClaudeUsage('How can I help you today?'), null);
+}
+
 const { parseCodexUsage } = ctx;
 if (typeof parseCodexUsage !== 'function') {
   console.error('parseCodexUsage was not loaded from parse.js');

@@ -167,7 +167,8 @@ function parseCursorDashboard(usage, plan, sand, now) {
 
 function codexPctRemaining(block) {
   if (!block) return null;
-  const m = block.match(/(\d+)\s*%\s*remaining/i);
+  // 旧版 "44% remaining"，2026-10 新版 "97% left"
+  const m = block.match(/(\d+)\s*%\s*(?:remaining|left)/i);
   if (!m) return null;
   const n = parseInt(m[1], 10);
   if (!Number.isFinite(n) || n < 0 || n > 100) return null;
@@ -178,7 +179,8 @@ function codexResetsText(block) {
   if (!block) return null;
   const m = block.match(/\bResets\s+(?:on\s+|at\s+)?([^\n]+)/i);
   if (!m) return null;
-  const s = m[1].trim().replace(/\s+/g, ' ');
+  // 新版有时 innerText 把 "Resets in 6d 4h" 和 "97% left" 拼在同一行，砍掉百分比尾巴
+  const s = m[1].replace(/\s*\d+\s*%\s*(?:remaining|left)\b.*$/i, '').trim().replace(/\s+/g, ' ');
   if (!s || /^use\b/i.test(s)) return null;
   return s;
 }
@@ -235,22 +237,23 @@ function parseClaudeUsage(T) {
   };
 }
 
+// Codex usage. 两种页面文案：
+// - 旧（/codex/cloud/settings/analytics）："Weekly usage limit / 44% remaining / Resets Sep 26…"
+// - 新（/settings/usage?tab=overview）："Weekly limit / Resets in 6d 4h / 97% left"，
+//   页面下方 Analytics 区有复数 "Weekly limits" 表头，要排除。
 function parseCodexUsage(T) {
-  if (!T || !/Weekly usage limit/i.test(T)) return null;
-  const weeklyBlock = codexBlock(
-    T,
-    /Weekly usage limit/i,
-    /5[\s-]?hour usage limit|Usage limit resets|Credits remaining/i
-  );
+  if (!T) return null;
+  const WEEKLY = /Weekly (?:usage )?limit(?!s)/i;
+  const FIVE = /5[\s-]?hour (?:usage )?limit(?!s)/i;
+  const END = /Usage limit resets|Credits remaining|\d[\d,]*\s+credits remaining|^\s*Credits\s*$/im;
+  if (!WEEKLY.test(T)) return null;
+  const weeklyBlock = codexBlock(T, WEEKLY, new RegExp(`${FIVE.source}|${END.source}`, 'im'));
   const weekly = codexPctRemaining(weeklyBlock);
   if (weekly == null) return null;
-  const fiveBlock = codexBlock(
-    T,
-    /5[\s-]?hour usage limit/i,
-    /Weekly usage limit|Usage limit resets|Credits remaining/i
-  );
+  const fiveBlock = codexBlock(T, FIVE, new RegExp(`${WEEKLY.source}|${END.source}`, 'im'));
   const five = codexPctRemaining(fiveBlock);
-  const creditsM = T.match(/Credits remaining[\s\S]{0,20}?(\d[\d,]*)/i);
+  const creditsM = T.match(/Credits remaining[\s\S]{0,20}?(\d[\d,]*)/i)
+    || T.match(/(\d[\d,]*)\s+credits remaining/i);
   return {
     weekly,
     weeklyReset: codexResetsText(weeklyBlock),

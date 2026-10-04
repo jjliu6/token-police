@@ -18,8 +18,9 @@ const AGENTS = [
     name: 'Codex',
     color: '#5CD6B3',
     kind: 'code',
-    page: 'https://chatgpt.com/codex/cloud/settings/analytics#usage',
-    scrape: ['https://chatgpt.com/codex/cloud/settings/analytics?cawrefresh=1#usage'],
+    // 2026-10 起用量搬到了 ChatGPT 通用设置页（旧 /codex/cloud/settings/analytics 不再有额度数字）
+    page: 'https://chatgpt.com/settings/usage?tab=overview',
+    scrape: ['https://chatgpt.com/settings/usage?tab=overview&cawrefresh=1'],
     foreground: false,
   },
   {

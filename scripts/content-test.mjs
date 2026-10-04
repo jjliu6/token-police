@@ -200,6 +200,24 @@ Resets 8:12 PM
 }
 
 {
+  const NEW_CODEX = `
+Plan limits
+5-hour limit
+Resets in 5h 0m
+100% left
+Weekly limit
+Resets in 6d 4h
+97% left
+0 credits remaining
+`;
+  const p = runPage({ host: 'chatgpt.com', path: '/settings/usage', search: '?tab=overview', text: NEW_CODEX });
+  const c = p.agents()[0];
+  check(c && c.id === 'codex' && c.limits[0].percent_left === 97, `new codex weekly left, got ${JSON.stringify(c)}`);
+  check(c && c.limits[1] && c.limits[1].percent_left === 100 && c.limits[1].resets_text === 'in 5h 0m',
+    `new codex 5-hour row, got ${JSON.stringify(c && c.limits[1])}`);
+}
+
+{
   const busy = GEMINI.replace('Current usage\n0% used\nResets at 2:29 PM', 'Current usage\n42% used').replace('Weekly limit\nResets Sep 6 at 8:29 AM\n0% used', 'Weekly limit\nResets Sep 6 at 8:29 AM\n17% used');
   const g = runPage({ host: 'gemini.google.com', text: busy }).agents()[0];
   check(g && g.limits[0].percent_left === 83, 'Gemini weekly 17% used → 83% left');

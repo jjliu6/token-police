@@ -289,6 +289,47 @@ Resets in 5 days
   check('codex weekly-only has no 5-hour row', p && p.five, null);
 }
 
+// 2026-10 新版 chatgpt.com/settings/usage?tab=overview（5 小时在前，周在后，"% left"）
+const CODEX_OVERVIEW = `
+Plan limits
+Shared across Codex, Work, Workspace Agents, and ChatGPT for Excel.
+5-hour limit
+Resets in 5h 0m
+100% left
+Weekly limit
+Resets in 6d 4h
+97% left
+Credits
+Buy credits or turn on automatic reload to continue using Work and Codex when you reach usage limits.
+0 credits remaining
+Current balance
+Automatic reload
+Usage limit resets
+Available 3
+`;
+
+{
+  const p = parseCodexUsage(CODEX_OVERVIEW);
+  check('codex overview weekly left', p && p.weekly, 97);
+  check('codex overview weekly reset', p && p.weeklyReset, 'in 6d 4h');
+  check('codex overview 5-hour left', p && p.five, 100);
+  check('codex overview 5-hour reset', p && p.fiveReset, 'in 5h 0m');
+  check('codex overview credits', p && p.credits, '0');
+}
+
+{
+  // innerText 可能把重置时间和百分比拼成一行
+  const joined = CODEX_OVERVIEW.replace('Resets in 6d 4h\n97% left', 'Resets in 6d 4h 97% left');
+  const p = parseCodexUsage(joined);
+  check('codex overview joined line weekly', p && p.weekly, 97);
+  check('codex overview joined line reset has no percent tail', p && p.weeklyReset, 'in 6d 4h');
+}
+
+{
+  // Analytics 标签页的 "Weekly limits" 表头不是额度行
+  check('codex analytics tab is not usage', parseCodexUsage('Plan usage history\n5-hour limits\nWeekly limits\nPeriod\n% of limit used'), null);
+}
+
 {
   check('codex chat page is not usage', parseCodexUsage('What can I help with?'), null);
 }

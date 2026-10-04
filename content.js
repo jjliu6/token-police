@@ -145,7 +145,7 @@ function pageAgentIds() {
   const p = location.pathname || '';
   const q = location.search || '';
   if (h.includes('claude.ai') && p.startsWith('/new')) return ['claude-code'];
-  if (h.includes('chatgpt.com') && p.includes('/codex/cloud/settings/analytics')) return ['codex'];
+  if (h.includes('chatgpt.com') && (p.includes('/settings/usage') || p.includes('/codex/cloud/settings/analytics'))) return ['codex'];
   if (h.includes('grok.com') && /[?&]_s=usage/.test(q)) return ['grok-build'];
   if (h.includes('cursor.com') && p.includes('/dashboard/spending')) return ['cursor', 'grok-bot'];
   if (h.includes('cursor.com') && p.includes('/dashboard/usage')) return ['cursor'];
@@ -344,7 +344,7 @@ function isDispatchSurface() {
   if (h.includes('claude.ai') && /^\/code(\/|$)/.test(p)) return true;
   if (h.includes('claude.ai') && /^\/new(\/|$)/.test(p) && !/settings\/usage/.test(hash)) return true;
   if (h.includes('chatgpt.com') && /\/codex(\/|$)/.test(p) && !p.includes('/settings')) return true;
-  if (h.includes('chatgpt.com') && !p.includes('/codex') && !p.includes('/auth')) return true;
+  if (h.includes('chatgpt.com') && !p.includes('/codex') && !p.includes('/auth') && !p.includes('/settings')) return true;
   if (h.includes('grok.com') && !/[?&]_s=usage/.test(q)) return true;
   return false;
 }

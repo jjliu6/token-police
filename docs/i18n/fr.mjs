@@ -10,10 +10,10 @@
 // drift apart silently.
 
 export default {
-  'meta.title': 'Token Police — ton quota de coding IA, d’un coup d’œil',
-  'meta.description': 'Extension Chrome gratuite et open source : le quota restant de Claude Code, Codex, Grok, Cursor, Grok Bot et Gemini — resets, cadence de conso, alertes. Pas de compte, rien ne quitte ton navigateur.',
-  'meta.ogTitle': 'Token Police — ton quota de coding IA, d’un coup d’œil',
-  'meta.ogDescription': 'Extension Chrome gratuite : le quota restant de Claude Code, Codex, Cursor, Grok et Gemini, dans un seul panneau. Télécharge la dernière version.',
+  'meta.title': 'Token Police — extension quota Claude Code, Codex, Cursor',
+  'meta.description': 'Extension Chrome gratuite et open source : le quota restant de Claude Code, Codex, Cursor, Grok et Gemini — resets, cadence, alertes. Rien ne quitte le navigateur. Pas un guide pour raccourcir les prompts.',
+  'meta.ogTitle': 'Token Police — extension quota Claude Code, Codex, Cursor',
+  'meta.ogDescription': 'Extension Chrome gratuite : le quota restant de Claude Code, Codex, Cursor, Grok et Gemini, dans un seul panneau. Pas un guide de prompts.',
   'brand': 'Token Police',
   'nav.features': 'Fonctionnalités', 'nav.install': 'Installer', 'nav.faq': 'FAQ', 'nav.share': 'Partager',
   'hero.eyebrow': 'Gratuit · Open source · Extension Chrome',
@@ -114,4 +114,6 @@ export default {
   'share.copy': 'Copier le lien',
   'foot.built': 'Fait par <a href="https://x.com/jjl13579" target="_blank" rel="noopener">Junjie Liu</a> chez <a href="https://philosophie.ai" target="_blank" rel="noopener">Philosophie AI</a> · Licence MIT · <a href="https://github.com/jjliu6/token-police" target="_blank" rel="noopener">Code sur GitHub</a>',
   'foot.disclaimer': 'Non officiel. Aucun lien avec Anthropic, OpenAI, xAI, Cursor ou Google. L’extension ne lit que les chiffres déjà affichés sur la page d’usage de chaque produit.',
+  'seo.disambiguation': 'Token Police est une extension Chrome pour le quota Claude Code, Codex et Cursor. Ce n’est pas un guide pour raccourcir les prompts.',
+  'seo.sameAs': 'Aussi sur <a href="https://www.producthunt.com/products/token-police">Product Hunt</a> et <a href="https://philosophie.ai">Philosophie AI</a>. Page canonique : <a href="https://token-police.philosophie.ai/fr/">token-police.philosophie.ai/fr/</a>.',
 };

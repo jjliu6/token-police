@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://token-police.philosophie.ai/en/</loc>
+    <lastmod>2026-10-07</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://token-police.philosophie.ai/en/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://token-police.philosophie.ai/fr/"/>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://token-police.philosophie.ai/zh/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://token-police.philosophie.ai/en/"/>
+  </url>
+  <url>
+    <loc>https://token-police.philosophie.ai/fr/</loc>
+    <lastmod>2026-10-07</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://token-police.philosophie.ai/en/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://token-police.philosophie.ai/fr/"/>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://token-police.philosophie.ai/zh/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://token-police.philosophie.ai/en/"/>
+  </url>
+  <url>
+    <loc>https://token-police.philosophie.ai/zh/</loc>
+    <lastmod>2026-10-07</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://token-police.philosophie.ai/en/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://token-police.philosophie.ai/fr/"/>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://token-police.philosophie.ai/zh/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://token-police.philosophie.ai/en/"/>
+  </url>
+</urlset>

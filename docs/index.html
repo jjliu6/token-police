@@ -16,27 +16,48 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- build:root-redirect -->
-<title data-i18n="meta.title">Token Police — see your remaining AI coding quota at a glance</title>
-<meta name="description" data-i18n-content="meta.description" content="A free, open-source Chrome extension that shows how much usage you have left for Claude Code, Codex, Grok, Cursor, Grok Bot and Gemini — with reset times, burn rate and low-quota alerts. No account, nothing leaves your browser.">
+<title data-i18n="meta.title">Token Police — Claude Code, Codex and Cursor quota extension</title>
+<meta name="description" data-i18n-content="meta.description" content="Free Chrome extension for remaining Claude Code, Codex, Cursor, Grok and Gemini quota — reset times, burn rate, low-quota alerts. Local only, no API keys. Not a prompt-shortening guide.">
 <link rel="icon" href="/icon-128.png">
 <link rel="canonical" href="{{canonical}}">
 {{hreflangLinks}}
-<meta property="og:title" data-i18n-content="meta.ogTitle" content="Token Police — your AI coding quota, at a glance">
-<meta property="og:description" data-i18n-content="meta.ogDescription" content="Free Chrome extension: remaining usage for Claude Code, Codex, Cursor, Grok and Gemini in one side panel. Download the latest release.">
+<meta property="og:title" data-i18n-content="meta.ogTitle" content="Token Police — Claude Code, Codex and Cursor quota extension">
+<meta property="og:description" data-i18n-content="meta.ogDescription" content="Free Chrome extension: remaining Claude Code, Codex, Cursor, Grok and Gemini quota in one side panel. Not a prompt-cost guide.">
 <!-- 1200×630. X / Slack drop the preview if this is the 128px favicon. -->
 <meta property="og:image" content="https://token-police.philosophie.ai/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" data-i18n-content="meta.ogTitle" content="Token Police — your AI coding quota, at a glance">
+<meta property="og:image:alt" data-i18n-content="meta.ogTitle" content="Token Police — Claude Code, Codex and Cursor quota extension">
 <meta property="og:site_name" data-i18n-content="brand" content="Token Police">
 <meta property="og:type" content="website">
 <meta property="og:url" content="{{canonical}}">
 <meta property="og:locale" content="{{ogLocale}}">
 {{ogLocaleAlternates}}
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" data-i18n-content="meta.ogTitle" content="Token Police — your AI coding quota, at a glance">
-<meta name="twitter:description" data-i18n-content="meta.ogDescription" content="Free Chrome extension: remaining usage for Claude Code, Codex, Cursor, Grok and Gemini in one side panel. Download the latest release.">
+<meta name="twitter:title" data-i18n-content="meta.ogTitle" content="Token Police — Claude Code, Codex and Cursor quota extension">
+<meta name="twitter:description" data-i18n-content="meta.ogDescription" content="Free Chrome extension: remaining Claude Code, Codex, Cursor, Grok and Gemini quota in one side panel. Not a prompt-cost guide.">
 <meta name="twitter:image" content="https://token-police.philosophie.ai/og-image.png">
+<link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Token Police",
+  "applicationCategory": "BrowserApplication",
+  "operatingSystem": "Chrome",
+  "url": "{{canonical}}",
+  "description": "Free Chrome extension that shows remaining Claude Code, Codex, Cursor, Grok and Gemini quota, with reset times and burn rate. Not a prompt-shortening guide.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "Junjie Liu", "url": "https://philosophie.ai" },
+  "downloadUrl": "https://github.com/jjliu6/token-police/releases/latest/download/token-police.zip",
+  "codeRepository": "https://github.com/jjliu6/token-police",
+  "sameAs": [
+    "https://github.com/jjliu6/token-police",
+    "https://www.producthunt.com/products/token-police",
+    "https://philosophie.ai"
+  ]
+}
+</script>
 <style>
   /* ---------- design tokens (aligned with the side-panel chrome) ---------- */
   :root {
@@ -259,6 +280,7 @@
       <span class="eyebrow" data-i18n="hero.eyebrow">Free · Open source · Chrome extension</span>
       <h1 data-i18n-html="hero.h1">Know how much AI coding quota you have <span class="hl">left</span> — at a glance.</h1>
       <p class="lead" data-i18n="hero.lead">One side panel shows your remaining usage for Claude Code, Codex, Cursor, Grok, Grok Bot and Gemini — with reset times, burn rate and low-quota alerts. No account linking, no API keys, and nothing leaves your browser.</p>
+      <p class="compat" data-i18n="seo.disambiguation">Token Police is a Chrome extension for Claude Code, Codex and Cursor quota. It is not a guide for shortening prompts.</p>
 
       <div class="cta">
         <a class="btn btn-primary" id="download" href="https://github.com/jjliu6/token-police/releases/latest/download/token-police.zip">
@@ -570,6 +592,7 @@
   <div class="wrap">
     <p data-i18n-html="foot.built">Built by <a href="https://x.com/jjl13579" target="_blank" rel="noopener">Junjie Liu</a> at <a href="https://philosophie.ai" target="_blank" rel="noopener">Philosophie AI</a> · MIT License · <a href="https://github.com/jjliu6/token-police" target="_blank" rel="noopener">Source on GitHub</a></p>
     <p data-i18n="foot.disclaimer">Unofficial. Not affiliated with Anthropic, OpenAI, xAI, Cursor or Google. It only reads usage numbers already shown on each product's own page.</p>
+    <p data-i18n-html="seo.sameAs">Also on <a href="https://www.producthunt.com/products/token-police">Product Hunt</a> and <a href="https://philosophie.ai">Philosophie AI</a>. Canonical page: <a href="https://token-police.philosophie.ai/en/">token-police.philosophie.ai/en/</a>.</p>
   </div>
 </footer>
 

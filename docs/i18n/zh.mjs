@@ -10,10 +10,10 @@
 // drift apart silently.
 
 export default {
-  'meta.title': 'Token Police — 一眼看清你的 AI 编程额度还剩多少',
-  'meta.description': '免费开源的 Chrome 扩展，显示 Claude Code、Codex、Grok、Cursor、Grok Bot 和 Gemini 还剩多少额度——包括重置时间、消耗速度和低额度提醒。不用账号，数据不出你的浏览器。',
-  'meta.ogTitle': 'Token Police — 你的 AI 编程额度，一眼看清',
-  'meta.ogDescription': '免费 Chrome 扩展：Claude Code、Codex、Cursor、Grok 和 Gemini 的剩余额度，集中在一个侧边栏。下载最新版本。',
+  'meta.title': 'Token Police — Claude Code、Codex、Cursor 额度扩展',
+  'meta.description': '免费开源的 Chrome 扩展，查看 Claude Code、Codex、Cursor、Grok 和 Gemini 还剩多少额度，含重置时间和消耗速度。数据不出浏览器。不是省 token 的提示词指南。',
+  'meta.ogTitle': 'Token Police — Claude Code、Codex、Cursor 额度扩展',
+  'meta.ogDescription': '免费 Chrome 扩展：Claude Code、Codex、Cursor、Grok 和 Gemini 的剩余额度，集中在一个侧边栏。不是提示词省 token 指南。',
   'brand': 'Token Police',
   'nav.features': '功能', 'nav.install': '安装', 'nav.faq': '常见问题', 'nav.share': '分享',
   'hero.eyebrow': '免费 · 开源 · Chrome 扩展',
@@ -114,4 +114,6 @@ export default {
   'share.copy': '复制链接',
   'foot.built': '由 <a href="https://x.com/jjl13579" target="_blank" rel="noopener">Junjie Liu</a> @ <a href="https://philosophie.ai" target="_blank" rel="noopener">Philosophie AI</a> 构建 · MIT 协议 · <a href="https://github.com/jjliu6/token-police" target="_blank" rel="noopener">GitHub 源码</a>',
   'foot.disclaimer': '非官方项目，与 Anthropic、OpenAI、xAI、Cursor、Google 均无关联。它只读取各产品页面上已经展示的用量数字。',
+  'seo.disambiguation': 'Token Police 是查看 Claude Code、Codex、Cursor 剩余额度的 Chrome 扩展，不是缩短提示词的指南。',
+  'seo.sameAs': '也发布在 <a href="https://www.producthunt.com/products/token-police">Product Hunt</a> 和 <a href="https://philosophie.ai">Philosophie AI</a>。规范地址：<a href="https://token-police.philosophie.ai/zh/">token-police.philosophie.ai/zh/</a>。',
 };

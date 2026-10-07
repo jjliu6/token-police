@@ -1,5 +1,9 @@
 # Token Police
 
+Chrome extension for remaining **Claude Code, Codex, Cursor, Grok and Gemini quota** — reset times, burn rate and low-quota alerts in one side panel. No API keys, nothing leaves the browser.
+
+This is the product, not a prompt-shortening guide. Canonical page: <https://token-police.philosophie.ai/en/en/> · 中文 <https://token-police.philosophie.ai/en/zh/> · français <https://token-police.philosophie.ai/en/fr/>.
+
 A Chrome (Manifest V3) browser extension that shows your remaining usage for
 **Claude Code, Codex, Grok, Cursor, Grok Bot and Gemini** at a glance — in one popup.
 
@@ -20,7 +24,7 @@ versioned copy (`token_police-<version>.zip`) on the
 several versions around.
 
 **Not a GitHub person?** The same download plus step-by-step install instructions live on the
-[product landing page](https://token-police.philosophie.ai/) — send that link to
+[product landing page](https://token-police.philosophie.ai/en/) — send that link to
 anyone who just wants the extension. It shows the same latest version as the button above.
 
 <sub>Want the newest unreleased code instead? Grab the
@@ -45,7 +49,7 @@ it installs the same way, just with a few extra development files in the folder.
 - If a refresh can't read a page (usually because you're signed out), the card says so and links straight to that product's usage page.
 - The bottom of the panel shows the **installed version** (e.g. `v1.2.1`). Once a day it asks GitHub which
   release is the newest; when there is a newer one, that line turns into a **"New version vX.Y.Z available — download ↗"**
-  link to the [landing page](https://token-police.philosophie.ai/). That check is the only network request
+  link to the [landing page](https://token-police.philosophie.ai/en/). That check is the only network request
   the extension makes — it carries no account or usage data — and you can turn it off in ⚙.
 - No API and no account linking — it reads the numbers straight off each tool's own usage page that you're already logged into.
 - Everything stays local in your browser (`chrome.storage.local`). Your usage data is never sent to any server.
@@ -120,7 +124,7 @@ that the Download badge above and the in-panel update check both look at.
 ### Landing page
 
 `docs/index.html` is the landing page for people who don't use GitHub:
-<https://token-police.philosophie.ai/>. It is a template that
+<https://token-police.philosophie.ai/en/>. It is a template that
 `scripts/build-pages.mjs` renders once per language (`npm run build:pages`
 → `dist/site`):
 

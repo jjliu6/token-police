@@ -9,13 +9,63 @@ function grokUsageSection(T) {
   return rest.slice(0, end);
 }
 
+function grokJoinUsedDigits(section) {
+  return section.replace(
+    /((?:\d[\t ]*\n?)*)(\d)[\t ]*(?:\n[\t ]*)*%[\t ]*(?:\n[\t ]*)*used/gi,
+    (_, a, d) => (String(a) + d).replace(/\s+/g, '') + '% used'
+  );
+}
+
+function grokHeadlineUsed(section) {
+  const s = grokJoinUsedDigits(section);
+  const re = /(\d+)\s*%\s*used/gi;
+  let m;
+  while ((m = re.exec(s))) {
+    const n = parseInt(m[1], 10);
+    if (n < 0 || n > 100) continue;
+    const tail = (s.slice(Math.max(0, m.index - 80), m.index).split(/\n/).pop() || '').trim();
+    // Slice aria ("App Builder 10% used") is not the weekly headline.
+    if (/^[A-Za-z][A-Za-z0-9]*(?:\s+[A-Za-z][A-Za-z0-9]*){0,4}$/.test(tail)
+        && !/^(?:total usage|weekly supergrok limit|supergrok)$/i.test(tail)) {
+      continue;
+    }
+    return n;
+  }
+  return null;
+}
+
+function grokSkipSliceWord(w) {
+  return /^(used|limit|usage|resets?|credits?|upgrade|weekly|total|supergrok|am|pm|auto|top-?up|buy|extra)$/i.test(w);
+}
+
+function grokSliceNameBefore(before) {
+  const words = String(before).trim().split(/\s+/).filter(Boolean);
+  const taken = [];
+  for (let i = words.length - 1; i >= 0 && taken.length < 4; i--) {
+    const w = words[i];
+    if (!/^[A-Za-z][A-Za-z0-9]*$/.test(w) || grokSkipSliceWord(w)) break;
+    taken.unshift(w);
+  }
+  return taken.length ? taken.join(' ') : null;
+}
+
 function grokCategories(section) {
-  const names = ['Chat', 'App Builder', 'Automations', 'Imagine', 'Voice', 'API'];
+  const flat = String(section).replace(/[ \t]*[\n\r]+[ \t]*/g, ' ').replace(/\s+/g, ' ');
+  const re = /(\d{1,3}) ?%/g;
   const bd = [];
-  for (const nm of names) {
-    const re = new RegExp(nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*(\\d+)\\s*%', 'i');
-    const m = section.match(re);
-    if (m) bd.push({ name: nm, percent: parseInt(m[1], 10) });
+  const seen = new Set();
+  let m;
+  while ((m = re.exec(flat))) {
+    const percent = parseInt(m[1], 10);
+    if (percent < 0 || percent > 100) continue;
+    const after = flat.slice(m.index + m[0].length, m.index + m[0].length + 8);
+    if (/^\s*used\b/i.test(after)) continue;
+    const name = grokSliceNameBefore(flat.slice(0, m.index));
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    bd.push({ name, percent });
   }
   return bd;
 }
@@ -25,34 +75,15 @@ function grokReset(T) {
   return m ? m[1].trim() : null;
 }
 
-function grokTotalUsed(section, catSum, catCount) {
-  let used = null;
-  const total = section.match(/Total Usage[\s\S]{0,200}?(\d+)\s*%/i);
-  if (total) used = parseInt(total[1], 10);
-  if (used == null) {
-    const m = section.match(/(\d+)\s*%\s*used/i);
-    if (m) used = parseInt(m[1], 10);
-  }
-  // Category slices on this page always add up to the weekly total. Prefer
-  // that sum when the first "N% used" is a red herring or a mid-animation frame.
-  if (catCount >= 2 && catSum >= 0 && catSum <= 100) {
-    if (used == null || used < catSum - 1) used = catSum;
-  }
-  if (used == null || used < 0 || used > 100) return null;
-  return used;
-}
-
 function parseGrokUsage(T) {
   if (!T || !/SuperGrok/i.test(T)) return null;
   const section = grokUsageSection(T);
-  const breakdown = grokCategories(section);
-  const catSum = breakdown.reduce((s, x) => s + x.percent, 0);
-  const used = grokTotalUsed(section, catSum, breakdown.length);
+  const used = grokHeadlineUsed(section);
   if (used == null) return null;
   return {
     used,
     reset: grokReset(section) || grokReset(T),
-    breakdown,
+    breakdown: grokCategories(section),
   };
 }
 

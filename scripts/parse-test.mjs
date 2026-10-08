@@ -101,8 +101,7 @@ Imagine 1% used
 Extra Usage Credits
 `;
   const p = parseGrokUsage(aria);
-  check('category aria-labels summing to total', p && p.used, 33);
-  check('does not treat App Builder 10% as the weekly total', p && leftover(p.used), 67);
+  check('slice aria-labels without a weekly headline fail closed', p, null);
 }
 
 {
@@ -121,7 +120,7 @@ Imagine 1%
 Extra Usage Credits
 `;
   const p = parseGrokUsage(splitDigits);
-  check('split "33% used" digits still resolve via category sum', p && p.used, 33);
+  check('split "33% used" digits still resolve via the headline', p && p.used, 33);
 }
 
 {
@@ -135,7 +134,7 @@ Imagine 1%
 Extra Usage Credits
 `;
   const p = parseGrokUsage(noTotal);
-  check('fallback to category sum when Total Usage is not in the text', p && p.used, 33);
+  check('slices without a weekly "N% used" headline fail closed', p, null);
 }
 
 {
@@ -149,6 +148,54 @@ $0.00
 `;
   const p = parseGrokUsage(empty);
   check('0% used is valid (100% remaining)', p && leftover(p.used), 100);
+}
+
+const GROK_OCT_2026 = `
+Usage
+Weekly limit reached
+You hit your weekly limit. Switch to SuperGrok Plus for more usage.
+Weekly SuperGrok Limit
+100% used
+Resets October 8, 2026 at 11:20 AM
+Chat 41%
+Grok Build 38%
+Automations 12%
+App Builder 9%
+Extra Usage Credits
+$0.00
+Additional Credits
+Auto Top-Up
+`;
+
+{
+  const p = parseGrokUsage(GROK_OCT_2026);
+  check('2026-10 usage modal: weekly headline is 100% used', p && p.used, 100);
+  check('2026-10 usage modal: leftover is 0, not Grok Build 38', p && leftover(p.used), 0);
+  check('2026-10 usage modal: reset', p && p.reset, 'October 8, 2026 at 11:20 AM');
+  check('2026-10 slices keep Chat / Grok Build / Automations / App Builder', p && p.breakdown.map((x) => x.name + ' ' + x.percent), [
+    'Chat 41', 'Grok Build 38', 'Automations 12', 'App Builder 9',
+  ]);
+}
+
+{
+  const unknownSlice = `
+Weekly SuperGrok Limit SuperGrok
+Resets October 8, 2026 at 11:20 AM
+40% used
+Chat 21%
+Widgets 11%
+Automations 8%
+Extra Usage Credits
+`;
+  const p = parseGrokUsage(unknownSlice);
+  check('unknown slice does not become leftover', p && leftover(p.used), 60);
+  check('unknown slice is still a category', p && p.breakdown.find((x) => x.name === 'Widgets')?.percent, 11);
+}
+
+{
+  const noisyUsed = `chat history\nGrok Build 38%\nYour disk is 9% used\n${GROK_OCT_2026}`;
+  const p = parseGrokUsage(noisyUsed);
+  check('chat-history percents cannot override the weekly headline', p && leftover(p.used), 0);
 }
 
 {

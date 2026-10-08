@@ -272,6 +272,45 @@ if (problems.length) {
 console.log('ok  Default UI is English (ignores Chrome UI language zh-CN)');
 console.log('ok  Grok card shows 67% remaining with Chat/Build/Auto/Img slices');
 
+{
+  const oct = parseCtx.parseGrokUsage(`
+Weekly SuperGrok Limit
+100% used
+Resets October 8, 2026 at 11:20 AM
+Chat 41%
+Grok Build 38%
+Automations 12%
+App Builder 9%
+Extra Usage Credits
+`);
+  if (!oct || oct.used !== 100) {
+    console.error('2026-10 fixture should parse 100% used, got', oct);
+    process.exit(1);
+  }
+  const grokFull = {
+    id: 'grok-build',
+    name: 'Grok',
+    color: '#B78CF0',
+    scraped_at: Date.now(),
+    limits: [{ label: 'Weekly (SuperGrok)', percent_left: 100 - oct.used, resets_text: oct.reset }],
+    breakdown: oct.breakdown,
+  };
+  const htmlFull = ctx.card('grok-build', grokFull, []);
+  const fullProblems = [];
+  if (!htmlFull.includes('>0%</b>')) fullProblems.push('100% used headline must render 0% remaining');
+  if (htmlFull.includes('>38%</b>')) fullProblems.push('must not show Grok Build 38% as leftover');
+  if (!htmlFull.includes('Chat 41%')) fullProblems.push('missing Chat 41%');
+  if (!htmlFull.includes('Grok Build 38%')) fullProblems.push('missing Grok Build 38% slice');
+  if (!htmlFull.includes('Auto 12%')) fullProblems.push('missing Auto 12%');
+  if (!htmlFull.includes('Build 9%')) fullProblems.push('missing App Builder 9% (Build)');
+  if (fullProblems.length) {
+    console.error(htmlFull);
+    console.error(fullProblems.join('\n'));
+    process.exit(1);
+  }
+  console.log('ok  Grok card at weekly cap shows 0% left with Chat/Grok Build/Auto/Build slices');
+}
+
 // --- Tracked-agents settings ---
 const setProblems = [];
 if (!els.settings.innerHTML.includes('Claude Code')) setProblems.push('settings should list Claude Code');

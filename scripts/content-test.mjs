@@ -19,8 +19,15 @@ function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchI
   let body = { innerText: text, childNodes: [] };
   let observerCb = null;
   let intervalCb = null;
+  let nowMs = Date.now();
+  const FakeDate = function FakeDate(...args) {
+    return args.length ? new Date(...args) : new Date(nowMs);
+  };
+  FakeDate.now = () => nowMs;
+  FakeDate.parse = Date.parse;
+  FakeDate.UTC = Date.UTC;
   const ctxObj = {
-    Date,
+    Date: FakeDate,
     Promise,
     setTimeout,
     fetch: fetchImpl,
@@ -42,6 +49,7 @@ function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchI
     agents: () => sent.filter((m) => m.type === 'agentData').map((m) => m.agent),
     closed: () => sent.some((m) => m.type === 'closeMe'),
     failures: () => sent.filter((m) => m.type === 'pageCaptureFailed'),
+    advance: (ms) => { nowMs += ms; },
   };
 }
 
@@ -172,6 +180,37 @@ Upgrade
   for (let i = 0; i < 31; i++) p.tick();
   check(p.agents().length === 0, 'grok chat home should not scrape usage');
   check(!p.closed(), 'grok chat tab must not auto-close');
+}
+{
+  const GROK_USAGE = `
+Weekly SuperGrok Limit
+100% used
+Resets October 8, 2026 at 11:20 AM
+Chat 41%
+Grok Build 38%
+Automations 12%
+App Builder 9%
+Extra Usage Credits
+`;
+  const p = runPage({ host: 'grok.com', path: '/', search: '?_s=usage&cawrefresh=1', text: GROK_USAGE });
+  p.advance(1300);
+  p.tick();
+  const grok = p.agents().find((a) => a.id === 'grok-build');
+  check(grok && grok.limits[0].percent_left === 0, `Grok leftover must be 0 from 100% used, got ${JSON.stringify(grok)}`);
+  check(grok && grok.breakdown && grok.breakdown.map((x) => x.name).join() === 'Chat,Grok Build,Automations,App Builder',
+    `Grok slices, got ${JSON.stringify(grok && grok.breakdown)}`);
+}
+{
+  const slicesOnly = `
+Weekly SuperGrok Limit
+Chat 41%
+Grok Build 38%
+Automations 12%
+App Builder 9%
+Extra Usage Credits
+`;
+  const p = runPage({ host: 'grok.com', path: '/', search: '?_s=usage&cawrefresh=1', text: slicesOnly });
+  check(p.agents().length === 0, 'Grok without a weekly headline must not invent leftover%');
 }
 {
   const p = runPage({ host: 'claude.ai', path: '/new', text: 'All models\n10% used' });

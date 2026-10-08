@@ -146,6 +146,7 @@ function logo(id, c) {
 
 const BD_COLOR = {
   Chat: '#5ccf9e',
+  'Grok Build': '#8b7cf6',
   'App Builder': '#6E9BF5',
   Automations: '#e6b45c',
   Imagine: '#e57373',
@@ -154,6 +155,7 @@ const BD_COLOR = {
 };
 const BD_SHORT_KEY = {
   Chat: 'chat',
+  'Grok Build': 'grokBuild',
   'App Builder': 'build',
   Automations: 'auto',
   Imagine: 'imagine',
@@ -189,10 +191,18 @@ function bdShort(name) {
   return key ? t(key) : esc(name);
 }
 
+function bdColor(name) {
+  if (BD_COLOR[name]) return BD_COLOR[name];
+  let h = 0;
+  const s = String(name || '');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return 'hsl(' + (h % 360) + ' 42% 62%)';
+}
+
 function breakdownBar(bd) {
   if (!bd || !bd.length) return '';
   const segs = bd.map((x) => {
-    const c = BD_COLOR[x.name] || '#8a92a0';
+    const c = bdColor(x.name);
     const p = Math.max(0, Math.min(100, +x.percent || 0));
     return `<i title="${esc(x.name)} ${p}%" style="width:${p}%;background:${c}"></i>`;
   }).join('');

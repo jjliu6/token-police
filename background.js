@@ -9,6 +9,16 @@ importScripts('agents.js', 'i18n.js', 'update.js', 'capture-logs.js', 'review.js
 
 let refreshing = false;
 
+// 本轮刷新打开的抓取标签页：tabId → { url, trigger }。content.js 在页面 URL 已被 SPA 改写、
+// 认不出自己是抓取页时会来问（scrapeInfo），用原始 URL 判断该抓谁。
+const scrapeTabs = {};
+
+// 等页面多久：轻页面后台 25s 够用；重页面（Cursor/Grok 的 SPA）首屏加载慢，content.js
+// 自己最多盯 36s 后会先把失败原因和文字样本报回来、再自关，所以这里只是兜底时限。
+const LIGHT_PAGE_MS = 25000;
+const HEAVY_PAGE_MS = 50000;
+const QUIET_PAGE_MS = 40000;
+
 if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 }
@@ -67,7 +77,7 @@ async function runQuietRefresh() {
   const en = (await getLocal(['enabledAgents'])).enabledAgents || {};
   const list = AGENTS.filter((a) => en[a.id] !== false);
   const started = Date.now();
-  await Promise.all(uniqueUrls(list).map((u) => openAndWait(u, false, 25000, 'automatic')));
+  await Promise.all(uniqueUrls(list).map((u) => openAndWait(u, false, QUIET_PAGE_MS, 'automatic')));
   await recordRefreshFailures(list, started, 'automatic');
 }
 
@@ -271,7 +281,7 @@ function saveAgent(a) {
   return writeQueue;
 }
 
-function saveFailedAttempt(agent, status, reason, trigger, started, sourceUrl) {
+function saveFailedAttempt(agent, status, reason, trigger, started, sourceUrl, detail) {
   const run = () => new Promise((resolve) => {
     chrome.storage.local.get(['captureLogs', 'latestAttempts'], (res) => {
       const timestamp = Date.now();
@@ -291,6 +301,7 @@ function saveFailedAttempt(agent, status, reason, trigger, started, sourceUrl) {
         plan: null,
         source_url: sanitizeSourceUrl(sourceUrl || agent.page),
         extension_version: chrome.runtime.getManifest().version,
+        detail: detail ? String(detail).slice(0, 1500) : '',
       };
       const logs = pruneCaptureLogs([...(res.captureLogs || []), log], timestamp);
       const latestAttempts = Object.assign({}, res.latestAttempts, {
@@ -317,9 +328,14 @@ function clearCaptureLogs() {
   return writeQueue;
 }
 
+// 刷新结束后对账。页面自己已经报过失败（带原因和样本）的就不再重复记；
+// 一声不吭就被杀掉的标签页（页面压根没加载到 content.js 运行）记成 tab_timeout。
 async function recordRefreshFailures(list, started, trigger) {
-  const map = (await getLocal(['agents'])).agents || {};
+  const res = await getLocal(['agents', 'latestAttempts']);
+  const map = res.agents || {};
+  const attempts = res.latestAttempts || {};
   const fresh = (id) => !!(map[id] && map[id].scraped_at >= started);
+  const reported = (id) => !!(attempts[id] && attempts[id].status !== 'success' && attempts[id].attempted_at >= started);
   const statuses = {};
   for (const agent of list) {
     if (fresh(agent.id)) {
@@ -328,10 +344,11 @@ async function recordRefreshFailures(list, started, trigger) {
     }
     const missing = agent.id === 'grok-bot' && fresh('cursor');
     statuses[agent.id] = missing ? 'missing' : 'fail';
+    if (reported(agent.id)) continue;
     await saveFailedAttempt(
       agent,
       missing ? 'missing' : 'failed',
-      missing ? 'section_missing' : 'read_failed',
+      missing ? 'section_missing' : 'tab_timeout',
       trigger,
       started,
       agent.id === 'grok-bot' ? 'https://cursor.com/dashboard/spending' : agent.page,
@@ -348,16 +365,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'pageCaptureFailed' && typeof msg.agent_id === 'string') {
     const agent = AGENTS.find((a) => a.id === msg.agent_id);
     if (agent) {
+      const trigger = (msg.trigger === 'manual' || msg.trigger === 'automatic') ? msg.trigger : 'page';
       saveFailedAttempt(
         agent,
         msg.status === 'missing' ? 'missing' : 'failed',
         msg.reason || 'read_failed',
-        'page',
+        trigger,
         Number(msg.started) || Date.now(),
         msg.source_url || (sender.tab && sender.tab.url),
+        msg.detail,
       ).then(() => sendResponse({ ok: true }));
       return true;
     }
+  }
+  if (msg && msg.type === 'scrapeInfo') {
+    const tid = sender && sender.tab && sender.tab.id;
+    sendResponse(tid != null && scrapeTabs[tid] ? scrapeTabs[tid] : null);
+    return false;
   }
   if (msg && msg.type === 'clearCaptureLogs') {
     clearCaptureLogs().then(() => sendResponse({ ok: true }));
@@ -592,11 +616,13 @@ function openAndWait(url, active, maxMs, trigger) {
     chrome.tabs.create({ url: target, active }, (tab) => {
       const tid = tab && tab.id;
       if (tid == null) return resolve();
+      scrapeTabs[tid] = { url: target, trigger: trigger || 'manual' };
       let finished = false;
       const timer = setTimeout(() => {
         if (finished) return;
         finished = true;
         chrome.tabs.onRemoved.removeListener(onRemoved);
+        delete scrapeTabs[tid];
         chrome.tabs.remove(tid, () => void chrome.runtime.lastError);
         resolve();
       }, maxMs);
@@ -605,6 +631,7 @@ function openAndWait(url, active, maxMs, trigger) {
         finished = true;
         clearTimeout(timer);
         chrome.tabs.onRemoved.removeListener(onRemoved);
+        delete scrapeTabs[tid];
         resolve();
       }
       chrome.tabs.onRemoved.addListener(onRemoved);
@@ -622,8 +649,8 @@ async function runRefresh() {
     const en = (await getLocal(['enabledAgents'])).enabledAgents || {};
     const list = AGENTS.filter((a) => en[a.id] !== false);
     // 轻页面：后台并行；重页面：前台逐个，抓到即关（同一 URL 只开一次）
-    const bg = uniqueUrls(list, (a) => !a.foreground).map((u) => openAndWait(u, false, 25000, 'manual'));
-    for (const u of uniqueUrls(list, (a) => a.foreground)) await openAndWait(u, true, 25000, 'manual');
+    const bg = uniqueUrls(list, (a) => !a.foreground).map((u) => openAndWait(u, false, LIGHT_PAGE_MS, 'manual'));
+    for (const u of uniqueUrls(list, (a) => a.foreground)) await openAndWait(u, true, HEAVY_PAGE_MS, 'manual');
     await Promise.all(bg);
     results = await recordRefreshFailures(list, started, 'manual');
   } finally {

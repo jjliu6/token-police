@@ -9,13 +9,27 @@ function grokUsageSection(T) {
   return rest.slice(0, end);
 }
 
+// Category slices under the weekly bar. Grok renames these every few months
+// ("App Builder" became "Grok Build" in 2026-10), so known names come first and
+// anything else shaped like "Some Name 7%" on its own line is picked up too.
+const GROK_CATEGORY_NAMES = ['Chat', 'Grok Build', 'App Builder', 'Automations', 'Imagine', 'Voice', 'API', 'Companions'];
 function grokCategories(section) {
-  const names = ['Chat', 'App Builder', 'Automations', 'Imagine', 'Voice', 'API'];
   const bd = [];
-  for (const nm of names) {
-    const re = new RegExp(nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*(\\d+)\\s*%', 'i');
+  const taken = [];
+  for (const nm of GROK_CATEGORY_NAMES) {
+    const re = new RegExp('(^|[\\n•·\\s])' + nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\n?\\s*(\\d+)\\s*%', 'i');
     const m = section.match(re);
-    if (m) bd.push({ name: nm, percent: parseInt(m[1], 10) });
+    if (m) { bd.push({ name: nm, percent: parseInt(m[2], 10) }); taken.push(m.index); }
+  }
+  // Generic "Name N%" lines the list above does not know yet (new slices).
+  const generic = /(^|\n)\s*[•·]?\s*([A-Z][A-Za-z][A-Za-z &]{1,24}?)\s*\n?\s*(\d{1,3})\s*%\s*(?=\n|$)/g;
+  let g;
+  while ((g = generic.exec(section))) {
+    const name = g[2].trim();
+    if (/used|usage|limit|total|reset|credit/i.test(name)) continue;
+    if (bd.some((x) => x.name.toLowerCase() === name.toLowerCase())) continue;
+    if (taken.some((i) => Math.abs(i - g.index) < 3)) continue;
+    bd.push({ name, percent: parseInt(g[3], 10) });
   }
   return bd;
 }
@@ -261,4 +275,292 @@ function parseCodexUsage(T) {
     fiveReset: five == null ? null : codexResetsText(fiveBlock),
     credits: creditsM ? creditsM[1] : null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Grok REST self-learning.
+//
+// The usage dialog on grok.com is drawn from a JSON request the page makes.
+// grok-rest-tap.js (MAIN world) hands every grok.com /rest/ JSON response to
+// content.js. Once the DOM scrape has succeeded a single time we *correlate*
+// those responses with the numbers we just read: which leaf equals "10% used",
+// which leaf is the reset timestamp, where the category slices live. The result
+// is a small "map" (request to replay + JSON paths). From then on a refresh
+// replays that request itself — no dialog, no animation, no background-tab
+// throttling — and the DOM is only a fallback that re-teaches the map when the
+// API shape changes. These functions are pure so they can be unit-tested.
+// ---------------------------------------------------------------------------
+
+function grokParseResetMs(text) {
+  if (!text) return null;
+  const t = String(text).trim().replace(/\s+at\s+/i, ' ').replace(/\s+(PT|PST|PDT|ET|EST|EDT|UTC|GMT)$/i, '');
+  const ms = Date.parse(t);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function grokFormatReset(ms) {
+  const d = new Date(ms);
+  if (!Number.isFinite(d.getTime())) return null;
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  let h = d.getHours();
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} at ${h}:${mm} ${ap}`;
+}
+
+// Flatten JSON into [{ path: ['a','0','b'], key: 'b', value, parent }] leaves.
+function grokJsonLeaves(json, maxLeaves) {
+  const out = [];
+  const limit = maxLeaves || 4000;
+  const walk = (node, path, depth) => {
+    if (out.length >= limit || depth > 12) return;
+    if (node === null || typeof node !== 'object') {
+      out.push({ path, key: path.length ? path[path.length - 1] : '', value: node });
+      return;
+    }
+    const keys = Array.isArray(node) ? node.map((_, i) => String(i)) : Object.keys(node);
+    for (const k of keys) {
+      if (out.length >= limit) return;
+      const child = node[k];
+      if (child !== null && typeof child === 'object') walk(child, path.concat(k), depth + 1);
+      else out.push({ path: path.concat(k), key: k, value: child, parent: node, parentPath: path });
+    }
+  };
+  walk(json, [], 0);
+  return out;
+}
+
+function grokGetPath(json, path) {
+  let cur = json;
+  for (const k of path || []) {
+    if (cur === null || typeof cur !== 'object' || !(k in cur)) return undefined;
+    cur = cur[k];
+  }
+  return cur;
+}
+
+// How a numeric leaf relates to "N% used": percent used, fraction used,
+// percent remaining, fraction remaining. Returns the kind or null.
+function grokUsedKind(value, used) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  if (Math.abs(value - used) < 0.5) return 'used';
+  if (Math.abs((100 - value) - used) < 0.5 && value >= 0 && value <= 100) return 'remaining';
+  if (value >= 0 && value <= 1 && Math.abs(value * 100 - used) < 0.5) return 'usedFraction';
+  if (value >= 0 && value <= 1 && Math.abs((1 - value) * 100 - used) < 0.5) return 'remainingFraction';
+  return null;
+}
+
+function grokUsedFromKind(value, kind) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  let used;
+  if (kind === 'used') used = value;
+  else if (kind === 'remaining') used = 100 - value;
+  else if (kind === 'usedFraction') used = value * 100;
+  else if (kind === 'remainingFraction') used = (1 - value) * 100;
+  else return null;
+  used = Math.round(used);
+  if (used < 0 || used > 100) return null;
+  return used;
+}
+
+function grokResetKind(value, resetMs) {
+  if (resetMs == null) return null;
+  const TOL = 120000;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (Math.abs(value - resetMs) <= TOL) return 'ms';
+    if (Math.abs(value * 1000 - resetMs) <= TOL) return 's';
+    return null;
+  }
+  if (typeof value === 'string' && value.length >= 8 && value.length <= 40) {
+    const ms = Date.parse(value);
+    if (Number.isFinite(ms) && Math.abs(ms - resetMs) <= TOL) return 'iso';
+  }
+  return null;
+}
+
+function grokResetFromKind(value, kind) {
+  if (kind === 'ms' && typeof value === 'number') return value;
+  if (kind === 's' && typeof value === 'number') return value * 1000;
+  if (kind === 'iso' && typeof value === 'string') {
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? ms : null;
+  }
+  return null;
+}
+
+const GROK_USED_HINT = /used|usage|consum|spent|percent|pct|utiliz/i;
+const GROK_REMAIN_HINT = /remain|left|avail/i;
+const GROK_URL_HINT = /usage|limit|quota|billing|subscription|rate/i;
+const GROK_DROP_HEADERS = /^(cookie|authorization|content-length|host|origin|referer|user-agent|sec-|accept-encoding|connection)/i;
+
+function grokNorm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+function grokCleanHeaders(headers) {
+  const out = {};
+  Object.keys(headers || {}).forEach((k) => {
+    if (GROK_DROP_HEADERS.test(k)) return;
+    const v = headers[k];
+    if (typeof v === 'string' && v.length < 2000) out[k] = v;
+  });
+  return out;
+}
+
+function grokPathHasKind(leaf, hintRe) {
+  return (leaf.path || []).some((k) => hintRe.test(String(k)));
+}
+
+// Learn where the category slices live. Two shapes are recognised:
+//  - fixed path:  { chatPercent: 16, automationsPercent: 6 }  → one entry per slice
+//  - array:       { breakdown: [{ name: 'Chat', percent: 16 }, ...] }
+//                 → one rule that reads *every* element, so new slices show up by themselves.
+function grokLearnBreakdown(leaves, breakdown) {
+  const rules = [];
+  for (const cat of breakdown || []) {
+    const want = grokNorm(cat.name);
+    if (!want) continue;
+    let hit = null;
+    for (const leaf of leaves) {
+      const kind = grokUsedKind(leaf.value, cat.percent);
+      if (!kind || kind === 'remaining' || kind === 'remainingFraction') continue;
+      // array element whose sibling string names the category
+      const parent = leaf.parent;
+      if (parent && !Array.isArray(parent) && leaf.parentPath && leaf.parentPath.length && /^\d+$/.test(leaf.parentPath[leaf.parentPath.length - 1])) {
+        const nameKey = Object.keys(parent).find((k) => typeof parent[k] === 'string' && grokNorm(parent[k]) === want);
+        if (nameKey) {
+          hit = { type: 'array', arrayPath: leaf.parentPath.slice(0, -1), nameKey, valueKey: leaf.key, kind };
+          break;
+        }
+      }
+      if (leaf.path.some((k) => grokNorm(k).includes(want))) {
+        hit = { type: 'path', name: cat.name, path: leaf.path, kind };
+        break;
+      }
+    }
+    if (!hit) continue;
+    if (hit.type === 'array') {
+      if (!rules.some((r) => r.type === 'array' && r.arrayPath.join('/') === hit.arrayPath.join('/'))) rules.push(hit);
+    } else rules.push(hit);
+  }
+  return rules;
+}
+
+function grokReadBreakdown(rules, json) {
+  const out = [];
+  for (const r of rules || []) {
+    if (r.type === 'array') {
+      const arr = grokGetPath(json, r.arrayPath);
+      if (!Array.isArray(arr)) continue;
+      arr.forEach((el) => {
+        if (!el || typeof el !== 'object') return;
+        const name = el[r.nameKey];
+        const pct = grokUsedFromKind(el[r.valueKey], r.kind);
+        if (typeof name === 'string' && name && pct != null) out.push({ name, percent: pct });
+      });
+    } else if (r.type === 'path') {
+      const pct = grokUsedFromKind(grokGetPath(json, r.path), r.kind);
+      if (pct != null) out.push({ name: r.name, percent: pct });
+    }
+  }
+  return out;
+}
+
+// candidates: [{ url, method, body, headers, status, json }] seen by the tap.
+// parsed: the DOM result { used, reset, breakdown }. Returns a map or null.
+function learnGrokApiMap(candidates, parsed, now) {
+  if (!parsed || parsed.used == null || !Array.isArray(candidates) || !candidates.length) return null;
+  const resetMs = grokParseResetMs(parsed.reset);
+  let best = null;
+  for (const c of candidates) {
+    if (!c || !c.url || c.json == null || typeof c.json !== 'object') continue;
+    if (c.status != null && (c.status < 200 || c.status >= 300)) continue;
+    const leaves = grokJsonLeaves(c.json);
+    let usedLeaf = null, usedKind = null, usedScore = -Infinity, usedHinted = false;
+    for (const leaf of leaves) {
+      const kind = grokUsedKind(leaf.value, parsed.used);
+      if (!kind) continue;
+      const remainingKind = kind === 'remaining' || kind === 'remainingFraction';
+      let score = 0;
+      const hinted = grokPathHasKind(leaf, remainingKind ? GROK_REMAIN_HINT : GROK_USED_HINT);
+      if (hinted) score += 2;
+      else if (grokPathHasKind(leaf, remainingKind ? GROK_USED_HINT : GROK_REMAIN_HINT)) score -= 2;
+      if (kind === 'used') score += 1; // prefer the plain percent reading on ties
+      if (leaf.path.length <= 3) score += 0.5;
+      if (score > usedScore) { usedScore = score; usedLeaf = leaf; usedKind = kind; usedHinted = hinted; }
+    }
+    if (!usedLeaf) continue;
+    let resetLeaf = null, resetKind = null;
+    if (resetMs != null) {
+      for (const leaf of leaves) {
+        const kind = grokResetKind(leaf.value, resetMs);
+        if (kind) { resetLeaf = leaf; resetKind = kind; break; }
+      }
+    }
+    const urlHinted = GROK_URL_HINT.test(c.url);
+    // A bare number equal to the total with no hint anywhere (key name, reset
+    // timestamp alongside, usage-ish URL) is a coincidence, not a map.
+    if (!usedHinted && !resetLeaf && !urlHinted) continue;
+    let score = 2 + Math.max(0, usedScore) + (resetLeaf ? 2 : 0) + (urlHinted ? 1 : 0);
+    if (usedScore < 0) score -= 2;
+    if (score < 3) continue;
+    if (best && score <= best.score) continue;
+    best = {
+      score,
+      map: {
+        version: 1,
+        learnedAt: now == null ? Date.now() : now,
+        request: {
+          url: c.url,
+          method: (c.method || 'GET').toUpperCase(),
+          headers: grokCleanHeaders(c.headers),
+          body: typeof c.body === 'string' ? c.body : null,
+        },
+        used: { path: usedLeaf.path, kind: usedKind },
+        reset: resetLeaf ? { path: resetLeaf.path, kind: resetKind } : null,
+        breakdown: grokLearnBreakdown(leaves, parsed.breakdown),
+      },
+    };
+  }
+  return best ? best.map : null;
+}
+
+// Apply a learned map to a fresh JSON response. Null when the shape no longer fits.
+function readGrokApiMap(map, json) {
+  if (!map || !map.used || !json || typeof json !== 'object') return null;
+  const used = grokUsedFromKind(grokGetPath(json, map.used.path), map.used.kind);
+  if (used == null) return null;
+  let resetAt = null;
+  if (map.reset) resetAt = grokResetFromKind(grokGetPath(json, map.reset.path), map.reset.kind);
+  return { used, resetAt, breakdown: grokReadBreakdown(map.breakdown, json) };
+}
+
+// ---------------------------------------------------------------------------
+// Failure triage. "read_failed" told nobody anything; these say *which layer*
+// broke so the card can give a real hint and the log carries a text sample.
+// ---------------------------------------------------------------------------
+function classifyCaptureFailure(host, text) {
+  const T = (text || '').replace(/\s+/g, ' ').trim();
+  if (T.length < 40) return 'blank_page';
+  if (/\b(sign in|log in|login|se connecter|登录|登入)\b/i.test(T) && !/\d\s*%/.test(T)) return 'login_required';
+  if ((host || '').includes('grok.com')) {
+    if (!/SuperGrok|Weekly[^.]{0,20}Limit|Total Usage|Extra Usage Credits/i.test(T)) return 'usage_view_closed';
+    return 'parse_failed';
+  }
+  if (!/\d\s*%/.test(T)) return 'usage_view_closed';
+  return 'parse_failed';
+}
+
+// A short, email-free sample of the page text around the usage block for the
+// local log. Everything stays on the machine; this exists so a layout change
+// can be fixed from the log instead of from guesswork.
+function captureTextSample(text, max) {
+  const limit = max || 700;
+  let T = (text || '').replace(/[ \t]+/g, ' ').replace(/\n{2,}/g, '\n').trim();
+  T = T.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[email]');
+  const anchor = T.search(/SuperGrok|Weekly|Usage|usage limit|Current usage|Cursor Models/i);
+  const start = anchor > 200 ? anchor - 200 : 0;
+  let s = T.slice(start, start + limit);
+  if (start > 0) s = '…' + s;
+  if (start + limit < T.length) s += '…';
+  return s;
 }

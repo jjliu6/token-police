@@ -70,7 +70,8 @@ function makeAgents() {
   if (h.includes('grok.com')) {
     const parsed = parseGrokUsage(T);
     if (!parsed) return one(null);
-    return one({ id: 'grok-build', name: 'Grok', color: '#B78CF0',
+    grokLastParsed = parsed;
+    return one({ id: 'grok-build', name: 'Grok', color: '#B78CF0', source: 'dom',
       limits: [{ label: 'Weekly (SuperGrok)', percent_left: 100 - parsed.used, resets_text: parsed.reset }],
       breakdown: parsed.breakdown });
   }
@@ -127,23 +128,44 @@ function makeAgents() {
 // 各自 get→改→set 会互相覆盖，所以由 background 排队串行写。
 const captureStartedAt = Date.now();
 
+// 刷新时 background 打开的 URL 带有 ?_s=usage&cawrefresh=1&cawtrigger=…。有的 SPA 会在
+// 我们（document_idle）运行之前把地址栏改写掉，那样这里就认不出"这是个抓取页"。
+// 所以 background 记着它开过哪些标签页；URL 认不出时问一句，拿原始 URL 当作判断依据。
+let scrapeOverride = null;
+function L() { return scrapeOverride || location; }
+
+function storageGet(keys) {
+  return new Promise((resolve) => {
+    try {
+      if (!chrome.storage || !chrome.storage.local) return resolve({});
+      chrome.storage.local.get(keys, (res) => { void chrome.runtime.lastError; resolve(res || {}); });
+    } catch (e) { resolve({}); }
+  });
+}
+function storageSet(obj) {
+  try {
+    if (!chrome.storage || !chrome.storage.local) return;
+    chrome.storage.local.set(obj, () => void chrome.runtime.lastError);
+  } catch (e) {}
+}
+
 function captureTrigger() {
-  const m = (location.search || '').match(/[?&]cawtrigger=([^&]+)/);
+  const m = (L().search || '').match(/[?&]cawtrigger=([^&]+)/);
   if (m && decodeURIComponent(m[1]) === 'automatic') return 'automatic';
   if (m && decodeURIComponent(m[1]) === 'manual') return 'manual';
-  if (/(?:\?|&)cawrefresh(?:=|&|$)/.test(location.search || '')) return 'manual';
+  if (/(?:\?|&)cawrefresh(?:=|&|$)/.test(L().search || '')) return 'manual';
   return 'page';
 }
 
 function captureSourceUrl() {
   if (location.href) return location.href;
-  return `https://${location.hostname}${location.pathname || '/'}${location.search || ''}${location.hash || ''}`;
+  return `https://${L().hostname}${L().pathname || '/'}${L().search || ''}${L().hash || ''}`;
 }
 
 function pageAgentIds() {
-  const h = location.hostname;
-  const p = location.pathname || '';
-  const q = location.search || '';
+  const h = L().hostname;
+  const p = L().pathname || '';
+  const q = L().search || '';
   if (h.includes('claude.ai') && p.startsWith('/new')) return ['claude-code'];
   if (h.includes('chatgpt.com') && (p.includes('/settings/usage') || p.includes('/codex/cloud/settings/analytics'))) return ['codex'];
   if (h.includes('grok.com') && /[?&]_s=usage/.test(q)) return ['grok-build'];
@@ -153,17 +175,42 @@ function pageAgentIds() {
   return [];
 }
 
+// 页面上该有的产品没抓到 → 告诉 background。以前只在用户自己开的页上报、并且一律写
+// "read_failed"；现在手动/自动刷新也上报，而且分清是哪一层坏了（页面没渲染 / 要登录 /
+// 弹窗没打开 / 文字变了没认出），再附一段页面文字样本到本地日志。下次再坏，看日志就能修。
+function failureDetail(id, text) {
+  const bits = [];
+  if (id === 'grok-build') {
+    bits.push(grokRest.detail || 'api=idle');
+    const seen = [];
+    grokRest.seen.forEach((u) => { if (seen.indexOf(u) < 0 && seen.length < 12) seen.push(u); });
+    bits.push('rest=[' + seen.join(', ') + ']');
+  }
+  bits.push('text=' + JSON.stringify(captureTextSample(text)));
+  return bits.join('; ').slice(0, 1500);
+}
+
+function pageText() {
+  if (!document.body) return '';
+  try { return (document.body.innerText || '') + '\n' + deepText(document.body); } catch (e) { return document.body.innerText || ''; }
+}
+
 function reportPageOutcomes() {
-  if (captureTrigger() !== 'page') return;
-  pageAgentIds().forEach((id) => {
+  const ids = pageAgentIds();
+  if (!ids.length) return;
+  const text = ids.some((id) => !saved[id]) ? pageText() : '';
+  ids.forEach((id) => {
     if (saved[id]) return;
     const missing = id === 'grok-bot' && !!saved.cursor;
+    const reason = missing ? 'section_missing' : classifyCaptureFailure(L().hostname, text);
     try {
       chrome.runtime.sendMessage({
         type: 'pageCaptureFailed',
         agent_id: id,
         status: missing ? 'missing' : 'failed',
-        reason: missing ? 'section_missing' : 'read_failed',
+        reason,
+        detail: missing ? '' : failureDetail(id, text),
+        trigger: captureTrigger(),
         started: captureStartedAt,
         source_url: captureSourceUrl(),
       });
@@ -188,7 +235,7 @@ function save(a, done) {
 }
 
 function closeIfAuto() {
-  if (location.search.includes('cawrefresh')) {
+  if ((L().search || '').includes('cawrefresh')) {
     try { chrome.runtime.sendMessage({ type: 'closeMe' }); } catch (e) {}
   }
 }
@@ -199,6 +246,7 @@ function closeIfAuto() {
 // 所以同一读数要稳住一小会儿才存。
 let done = false, closing = false, inflight = 0, iv = null, obs = null;
 const saved = {};
+let grokLastParsed = null;
 let grokHold = { sig: '', t: 0 };
 function grokStable(a) {
   const pct = a.limits && a.limits[0] ? a.limits[0].percent_left : '';
@@ -214,14 +262,112 @@ function finish() { if (obs) obs.disconnect(); if (iv) clearInterval(iv); }
 // 所有该存的都存完、并且 background 都收到了，才关掉自动打开的页
 function maybeClose() {
   if (!done || inflight > 0 || closing) return;
+  // Grok DOM 抓成功、但接口响应还没转交过来：多等一小会儿把接口学会再关页
+  if (grokRest.learnPending && !grokRest.learned && grokRest.holdUntil && Date.now() < grokRest.holdUntil) {
+    setTimeout(maybeClose, 250);
+    return;
+  }
   closing = true;
   reportPageOutcomes();
   closeIfAuto();
 }
 function cursorDashboardPath() {
-  const h = location.hostname || '';
-  const p = location.pathname || '';
+  const h = L().hostname || '';
+  const p = L().pathname || '';
   return h.includes('cursor.com') && p.includes('/dashboard/');
+}
+
+// ---------------------------------------------------------------------------
+// Grok：先走"学会的接口"，DOM 只做兜底 + 老师。
+// grok-rest-tap.js（MAIN world）把页面收到的 /rest/ JSON 转交过来；DOM 抓到数字时用
+// parse.js 的 learnGrokApiMap 对答案，把"哪个请求、哪个字段"存成 grokApiMap。
+// 以后每次刷新：页一加载就自己重放这个请求（同源、带 cookie），2 秒内出数，
+// 不等弹窗、不怕后台标签页被冻结。接口形状变了 → 读不出来 → 回到 DOM，再学一次。
+// ---------------------------------------------------------------------------
+const grokRest = {
+  state: 'idle', // idle | pending | done | failed
+  agent: null,
+  detail: '',
+  candidates: [],
+  seen: [],
+  learnPending: null,
+  learned: false,
+  holdUntil: 0,
+};
+
+function isGrokUsagePage() {
+  return (L().hostname || '').includes('grok.com') && /[?&]_s=usage/.test(L().search || '') && inTopFrame();
+}
+
+function grokRestListen() {
+  if (!isGrokUsagePage() || typeof window === 'undefined' || !window.addEventListener) return;
+  window.addEventListener('message', (ev) => {
+    if (ev.source !== window || !ev.data || ev.data.__tokenPolice !== 'grok-rest') return;
+    const c = ev.data;
+    let label = '';
+    try { const u = new URL(c.url); label = u.pathname; } catch (e) { label = String(c.url || ''); }
+    if (c.text == null) { grokRest.seen.push(label + ' [' + (c.contentType || '?') + ']'); return; }
+    let json = null;
+    try { json = JSON.parse(c.text); } catch (e) { grokRest.seen.push(label + ' [bad-json]'); return; }
+    grokRest.seen.push(label);
+    grokRest.candidates.push({ url: c.url, method: c.method, body: c.body, headers: c.headers, status: c.status, json });
+    if (grokRest.candidates.length > 60) grokRest.candidates.shift();
+    if (grokRest.learnPending) grokLearn();
+  });
+  try { window.postMessage({ __tokenPolice: 'grok-rest-ready' }, '*'); } catch (e) {}
+}
+
+function grokLearn() {
+  const parsed = grokRest.learnPending;
+  if (!parsed) return false;
+  const map = learnGrokApiMap(grokRest.candidates, parsed, Date.now());
+  if (!map) return false;
+  grokRest.learned = true;
+  grokRest.learnPending = null;
+  storageSet({ grokApiMap: map });
+  return true;
+}
+
+function grokAgentFromApi(read) {
+  const a = {
+    id: 'grok-build',
+    name: 'Grok',
+    color: '#B78CF0',
+    source: 'api',
+    limits: [{
+      label: 'Weekly (SuperGrok)',
+      percent_left: 100 - read.used,
+      resets_text: read.resetAt != null ? grokFormatReset(read.resetAt) : null,
+    }],
+  };
+  if (read.breakdown && read.breakdown.length) a.breakdown = read.breakdown;
+  return a;
+}
+
+function startGrokApi() {
+  if (grokRest.state !== 'idle') return;
+  if (!isGrokUsagePage() || typeof fetch !== 'function') return;
+  grokRest.state = 'pending';
+  const fail = (why) => { grokRest.state = 'failed'; grokRest.detail = 'api=' + why; tryOnce(); };
+  storageGet(['grokApiMap']).then((res) => {
+    const map = res && res.grokApiMap;
+    if (!map || !map.request || !map.request.url) return fail('no_map');
+    const req = map.request;
+    const init = { method: req.method || 'GET', credentials: 'include', redirect: 'manual', headers: req.headers || {} };
+    if (req.body != null && init.method !== 'GET' && init.method !== 'HEAD') init.body = req.body;
+    return fetch(req.url, init).then((r) => {
+      if (!r || r.type === 'opaqueredirect' || r.status === 0) return fail('redirect');
+      if (!r.ok) return fail('http_' + r.status);
+      return r.json().then((json) => {
+        const read = readGrokApiMap(map, json);
+        if (!read) return fail('shape_mismatch');
+        grokRest.agent = grokAgentFromApi(read);
+        grokRest.detail = 'api=ok';
+        grokRest.state = 'done';
+        tryOnce();
+      }, () => fail('not_json'));
+    }, () => fail('fetch_error'));
+  }).catch(() => fail('error'));
 }
 
 function cursorJsonOk(r) {
@@ -314,16 +460,24 @@ function startCursorApi() {
 function tryOnce() {
   if (done) return;
   startCursorApi();
+  startGrokApi();
   const r = makeAgents();
-  const extra = cursorApi.state === 'done' ? cursorApi.agents : [];
+  let extra = cursorApi.state === 'done' ? cursorApi.agents : [];
+  // 接口读到的 Grok 数字优先于 DOM（更快、更稳）；DOM 的那份用来教接口
+  if (grokRest.state === 'done' && grokRest.agent) extra = [grokRest.agent].concat(extra);
   let pending = !!r.waiting;
-  r.agents.concat(extra).forEach((a) => {
+  extra.concat(r.agents).forEach((a) => {
     if (saved[a.id]) return; // 每个产品只存一次
-    if (a.id === 'grok-build' && !grokStable(a)) { pending = true; return; }
+    if (a.id === 'grok-build' && a.source !== 'api' && !grokStable(a)) { pending = true; return; }
     saved[a.id] = true;
+    if (a.id === 'grok-build' && a.source !== 'api' && grokLastParsed) {
+      grokRest.learnPending = grokLastParsed;
+      if (!grokLearn()) grokRest.holdUntil = Date.now() + 2500;
+    }
     inflight++;
     save(a, () => { inflight--; maybeClose(); });
   });
+  if (isGrokUsagePage() && grokRest.state === 'pending' && !saved['grok-build']) pending = true;
   const grokResolved = !!saved['grok-bot'] || cursorApi.grokMissing;
   if (grokResolved) pending = false;
   else if (r.waiting || cursorApi.grokUnknown) pending = true;
@@ -335,10 +489,10 @@ function tryOnce() {
 }
 
 function isDispatchSurface() {
-  const h = location.hostname || '';
-  const p = location.pathname || '';
-  const q = location.search || '';
-  const hash = location.hash || '';
+  const h = L().hostname || '';
+  const p = L().pathname || '';
+  const q = L().search || '';
+  const hash = L().hash || '';
   if (h.includes('cursor.com') && /^\/agents(\/|$)/.test(p)) return true;
   if (h.includes('gemini.google.com') && /^\/app(\/|$)/.test(p)) return true;
   if (h.includes('claude.ai') && /^\/code(\/|$)/.test(p)) return true;
@@ -357,7 +511,10 @@ function inTopFrame() {
 // Injected at document_idle (see manifest). v1.6.1 used document_start so
 // Cursor JSON could start earlier; inactive refresh tabs then froze before
 // this watcher ran, and every agent failed together at the 25s tab-kill.
-if (!isDispatchSurface()) {
+// 最多盯 36 秒：比 background 杀页的时限短，这样失败原因和文字样本能先报回去。
+const USAGE_WATCH_TICKS = 18;
+function beginUsageWatch() {
+  grokRestListen();
   tryOnce();
   if (!done) {
     obs = new MutationObserver(tryOnce);
@@ -366,10 +523,29 @@ if (!isDispatchSurface()) {
     iv = setInterval(() => {
       n++;
       tryOnce();
-      if (!done && n > 30) { done = true; finish(); maybeClose(); }
+      if (!done && n > USAGE_WATCH_TICKS) { done = true; finish(); maybeClose(); }
     }, 2000);
   }
 }
+
+// URL 看不出是抓取页（SPA 可能已经改写了地址）→ 问 background 这个标签页是不是它开的
+function askScrapeInfo() {
+  if (!inTopFrame() || typeof URL !== 'function') return;
+  try {
+    chrome.runtime.sendMessage({ type: 'scrapeInfo' }, (info) => {
+      void chrome.runtime.lastError;
+      if (!info || !info.url) return;
+      let u = null;
+      try { u = new URL(info.url); } catch (e) { return; }
+      scrapeOverride = u;
+      if (isDispatchSurface()) { scrapeOverride = null; return; }
+      beginUsageWatch();
+    });
+  } catch (e) {}
+}
+
+if (!isDispatchSurface()) beginUsageWatch();
+else askScrapeInfo();
 
 function isFillableComposer(el) {
   if (!el) return false;

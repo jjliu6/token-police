@@ -57,8 +57,22 @@ if (manifest) {
     if ((cs.js || []).includes('content.js') && cs.run_at !== 'document_idle') {
       fail('content.js must run_at document_idle (document_start freezes background usage tabs).');
     }
+    // grok-rest-tap.js is the one MAIN-world script: it only mirrors grok.com
+    // /rest/ JSON responses to content.js so the Grok quota can be read from
+    // the API the page itself uses (see parse.js learnGrokApiMap). Keep it
+    // alone, grok-only, top-frame, document_start — never bundle content.js
+    // with it or let it near another host.
+    if ((cs.js || []).includes('grok-rest-tap.js')) {
+      if ((cs.js || []).length !== 1) fail('grok-rest-tap.js must be injected on its own (no other scripts in its block).');
+      if (cs.world !== 'MAIN') fail('grok-rest-tap.js must run in world MAIN (it wraps the page\'s fetch).');
+      if (cs.run_at !== 'document_start') fail('grok-rest-tap.js must run_at document_start (requests fire before idle).');
+      if (cs.all_frames) fail('grok-rest-tap.js must not run in sub-frames.');
+      if ((cs.matches || []).some((m) => !m.startsWith('https://grok.com/'))) fail('grok-rest-tap.js may only match grok.com.');
+    } else if (cs.world === 'MAIN') {
+      fail('only grok-rest-tap.js may run in world MAIN.');
+    }
     if ((cs.js || []).includes('grok-hook.js')) {
-      fail('do not inject grok-hook.js; restore idle DOM scrape instead of MAIN-world hooks.');
+      fail('grok-hook.js is gone; the MAIN-world tap is grok-rest-tap.js.');
     }
   }
 

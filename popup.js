@@ -147,6 +147,7 @@ function logo(id, c) {
 const BD_COLOR = {
   Chat: '#5ccf9e',
   'App Builder': '#6E9BF5',
+  'Grok Build': '#6E9BF5',
   Automations: '#e6b45c',
   Imagine: '#e57373',
   Voice: '#B78CF0',
@@ -155,6 +156,7 @@ const BD_COLOR = {
 const BD_SHORT_KEY = {
   Chat: 'chat',
   'App Builder': 'build',
+  'Grok Build': 'build',
   Automations: 'auto',
   Imagine: 'imagine',
   Voice: 'voice',
@@ -945,8 +947,19 @@ function openLink(id) {
   return `<a href="#" data-open="${id}">${t('openPage')} ↗</a>`;
 }
 
-function failText(fail) {
-  return fail === 'missing' ? t('sectionMissing') : t('fetchFailed');
+// 失败原因 → 卡片文案。content.js 现在会说清楚是哪一层坏了（见 parse.js classifyCaptureFailure），
+// 不再一律"没抓到数据"。
+const FAIL_REASON_KEYS = {
+  usage_view_closed: 'reasonViewClosed',
+  login_required: 'reasonLogin',
+  parse_failed: 'reasonParse',
+  blank_page: 'reasonBlank',
+  tab_timeout: 'reasonTimeout',
+};
+function failText(fail, attempt) {
+  if (fail === 'missing') return t('sectionMissing');
+  const key = attempt && attempt.status !== 'success' && FAIL_REASON_KEYS[attempt.reason];
+  return key ? t(key) : t('fetchFailed');
 }
 
 const STALE_WARNING_MS = 2 * 3600000;
@@ -966,7 +979,7 @@ function card(id, a, hist, fail, latestAttempt) {
     return `<div class="card">
       <div class="chead"><div class="name">${logo(id, meta.color)}${meta.name}</div></div>
       <div class="empty">${t('empty')} ${openLink(id)}</div>
-      ${fail ? `<div class="fail">⚠ ${failText(fail)}</div>` : ''}
+      ${fail ? `<div class="fail">⚠ ${failText(fail, latestAttempt)}</div>` : ''}
     </div>`;
   }
   const L = a.limits || [], p0 = L[0], p1 = L[1];
@@ -993,7 +1006,7 @@ function card(id, a, hist, fail, latestAttempt) {
   let burn = '';
   if (est) burn = `<div class="burn" style="color:${est.color}">🔥 ${est.text}</div>`;
   const failLine = fail
-    ? `<div class="fail">⚠ ${failText(fail)} ${openLink(id)}</div>`
+    ? `<div class="fail">⚠ ${failText(fail, latestAttempt)} ${openLink(id)}</div>`
     : '';
   const freshness = stale
     ? `<div class="freshness${stale === 2 ? ' cache' : ''}">⚠ ${t(stale === 2 ? 'stale24h' : 'stale2h')}</div>`
@@ -1242,10 +1255,15 @@ function renderLogRows() {
     const detail = entry.status === 'success'
       ? `${entry.percent_left == null ? '' : `${esc(entry.percent_left + '%')} · `}${limits}`
       : esc(entry.reason || 'read_failed');
+    // 失败条目附带的诊断（接口状态、看到的请求、页面文字样本）折叠起来，复制给开发者即可定位
+    const diag = entry.status !== 'success' && entry.detail
+      ? `<details class="log-diag"><summary>${esc(t('logDiag'))}</summary><pre>${esc(entry.detail)}</pre></details>`
+      : '';
     return `<article class="log-row">
       <div class="log-top"><span><b>${esc(entry.agent_name || entry.agent_id)}</b> · ${esc(logTriggerLabel(entry.trigger))}</span><span class="log-status ${esc(entry.status)}">${esc(entry.status)}</span></div>
       <div class="log-meta">${esc(new Date(entry.timestamp).toLocaleString())} · ${esc(entry.duration_ms || 0)}ms</div>
       ${detail ? `<div class="log-detail">${detail}</div>` : ''}
+      ${diag}
       <div class="log-meta">${esc(entry.source_url || '')} · v${esc(entry.extension_version || '')}</div>
     </article>`;
   }).join('');
@@ -1310,7 +1328,7 @@ function render() {
     hist.forEach((e) => { (byId[e.id] = byId[e.id] || []).push(e); });
     const rf = res.refresh || {};
     // 兜底：MV3 service worker 可能中途被回收，refresh.running 会永远留在 true。
-    // 一轮刷新最长约 100 秒，started 超过 2.5 分钟仍 running 就当它已经死了，别把按钮锁死。
+    // 一轮刷新最长约 125 秒（重页面各 50 秒兜底时限），started 超过 2.5 分钟仍 running 就当它已经死了，别把按钮锁死。
     const STALE_MS = 150000;
     const running = !!(rf.running && rf.started && Date.now() - rf.started < STALE_MS);
     if (running) {

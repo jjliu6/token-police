@@ -155,6 +155,128 @@ $0.00
   check('not the usage view', parseGrokUsage('just chatting with grok about code'), null);
 }
 
+// --- 2026-10 layout: "Grok Build" slice, total before reset, no "Total Usage" label ---
+{
+  const T = `Usage
+Weekly SuperGrok Limit
+10% used
+Resets October 22, 2026 at 11:20 AM
+Grok Build 7%
+Automations 3%
+Extra Usage Credits
+$0.00
+Additional Credits
+Buy Credits
+Auto Top-Up
+Automatically top-up when your credit balance runs low.
+Set up`;
+  const p = parseGrokUsage(T);
+  check('2026-10 layout: used %', p && p.used, 10);
+  check('2026-10 layout: reset', p && p.reset, 'October 22, 2026 at 11:20 AM');
+  check('2026-10 layout: Grok Build slice is known', p && p.breakdown.map((x) => x.name + ':' + x.percent), ['Grok Build:7', 'Automations:3']);
+  const renamed = T.replace('Grok Build 7%', 'Companion Mode 7%');
+  const q = parseGrokUsage(renamed);
+  check('unknown slice name is still picked up generically', q && q.breakdown.map((x) => x.name + ':' + x.percent), ['Automations:3', 'Companion Mode:7']);
+}
+
+// --- Learn the REST shape from a DOM read, then read fresh JSON with the map ---
+const { learnGrokApiMap, readGrokApiMap, grokFormatReset, grokParseResetMs, classifyCaptureFailure, captureTextSample } = ctx;
+{
+  const resetMs = Date.parse('October 22, 2026 11:20 AM');
+  const parsed = { used: 10, reset: 'October 22, 2026 at 11:20 AM', breakdown: [{ name: 'Grok Build', percent: 7 }, { name: 'Automations', percent: 3 }] };
+  const candidates = [
+    { url: 'https://grok.com/rest/auth/get-user', method: 'GET', status: 200, json: { userId: 'u1', createTime: '2024-01-01T00:00:00Z' } },
+    { url: 'https://grok.com/rest/app-chat/conversations', method: 'GET', status: 200, json: { conversations: [{ id: 'c1', title: 'ten things' }] } },
+    {
+      url: 'https://grok.com/rest/subscriptions/usage',
+      method: 'POST',
+      body: '{"window":"WEEKLY"}',
+      headers: { 'content-type': 'application/json', cookie: 'sso=secret', authorization: 'Bearer nope', 'x-xai-request-id': 'abc' },
+      status: 200,
+      json: {
+        weekly: {
+          percentUsed: 10,
+          resetsAt: new Date(resetMs).toISOString(),
+          categories: [
+            { name: 'Grok Build', percentUsed: 7 },
+            { name: 'Automations', percentUsed: 3 },
+          ],
+        },
+      },
+    },
+  ];
+  const map = learnGrokApiMap(candidates, parsed, 1000);
+  check('learn: picks the usage request', map && map.request.url, 'https://grok.com/rest/subscriptions/usage');
+  check('learn: keeps method + body for replay', map && [map.request.method, map.request.body], ['POST', '{"window":"WEEKLY"}']);
+  check('learn: drops cookie/authorization headers', map && Object.keys(map.request.headers).sort(), ['content-type', 'x-xai-request-id']);
+  check('learn: used path + kind', map && [map.used.path.join('.'), map.used.kind], ['weekly.percentUsed', 'used']);
+  check('learn: reset path + kind', map && [map.reset.path.join('.'), map.reset.kind], ['weekly.resetsAt', 'iso']);
+  check('learn: array breakdown rule', map && map.breakdown.map((r) => r.type + ':' + (r.arrayPath || r.path).join('.') + ':' + (r.nameKey || '') + ':' + (r.valueKey || '')), ['array:weekly.categories:name:percentUsed']);
+
+  // next week: different numbers, a brand-new slice → read straight from JSON
+  const later = {
+    weekly: {
+      percentUsed: 42,
+      resetsAt: '2026-10-29T18:20:00.000Z',
+      categories: [
+        { name: 'Grok Build', percentUsed: 30 },
+        { name: 'Automations', percentUsed: 2 },
+        { name: 'Imagine', percentUsed: 10 },
+      ],
+    },
+  };
+  const read = readGrokApiMap(map, later);
+  check('read: used from map', read && read.used, 42);
+  check('read: reset ms from map', read && read.resetAt, Date.parse('2026-10-29T18:20:00.000Z'));
+  check('read: every category, including a new one', read && read.breakdown, [{ name: 'Grok Build', percent: 30 }, { name: 'Automations', percent: 2 }, { name: 'Imagine', percent: 10 }]);
+  check('read: shape changed → null (falls back to DOM)', readGrokApiMap(map, { weekly: { usage: { pct: 42 } } }), null);
+  check('read: out-of-range → null', readGrokApiMap(map, { weekly: { percentUsed: 180 } }), null);
+  check('format reset round-trips through the DOM parser', grokParseResetMs(grokFormatReset(resetMs)), resetMs);
+}
+
+{
+  // remaining-fraction shape with fixed-path slices and an epoch-seconds reset
+  const resetMs = Date.parse('October 22, 2026 11:20 AM');
+  const parsed = { used: 25, reset: 'October 22, 2026 at 11:20 AM', breakdown: [{ name: 'Chat', percent: 20 }, { name: 'Automations', percent: 5 }] };
+  const cand = [{
+    url: 'https://grok.com/rest/billing/limits', method: 'GET', status: 200,
+    json: { superGrok: { remainingFraction: 0.75, resetUnix: Math.round(resetMs / 1000), chatPct: 20, automationsPct: 5, imaginePct: 0 } },
+  }];
+  const map = learnGrokApiMap(cand, parsed, 1);
+  check('learn: remaining fraction kind', map && [map.used.path.join('.'), map.used.kind], ['superGrok.remainingFraction', 'remainingFraction']);
+  check('learn: epoch seconds reset', map && map.reset.kind, 's');
+  check('learn: fixed-path slices', map && map.breakdown.map((r) => r.type + ':' + r.name + ':' + r.path.join('.')), ['path:Chat:superGrok.chatPct', 'path:Automations:superGrok.automationsPct']);
+  const read = readGrokApiMap(map, { superGrok: { remainingFraction: 0.4, resetUnix: 1800000000, chatPct: 50, automationsPct: 10 } });
+  check('read: remaining fraction → used %', read && read.used, 60);
+  check('read: epoch seconds → ms', read && read.resetAt, 1800000000000);
+}
+
+{
+  // a number that merely equals the total, with no usage hint anywhere, is not a map
+  const parsed = { used: 10, reset: null, breakdown: [] };
+  const cand = [{ url: 'https://grok.com/rest/app-chat/conversations', method: 'GET', status: 200, json: { page: 10, items: [] } }];
+  check('learn: coincidental number without hints is rejected', learnGrokApiMap(cand, parsed, 1), null);
+  check('learn: nothing to learn from', learnGrokApiMap([], parsed, 1), null);
+  const hinted = [{ url: 'https://grok.com/rest/foo', method: 'GET', status: 200, json: { quota: { percentUsed: 10 } } }];
+  check('learn: usage-named key alone is enough', (learnGrokApiMap(hinted, parsed, 1) || {}).used, { path: ['quota', 'percentUsed'], kind: 'used' });
+  const err = [{ url: 'https://grok.com/rest/subscriptions/usage', method: 'GET', status: 401, json: { error: 'unauthorized', percentUsed: 10 } }];
+  check('learn: non-2xx responses are ignored', learnGrokApiMap(err, parsed, 1), null);
+}
+
+// --- Failure triage: which layer broke ---
+{
+  check('triage: empty page', classifyCaptureFailure('grok.com', '  Loading… '), 'blank_page');
+  check('triage: login wall', classifyCaptureFailure('grok.com', 'Welcome back. Sign in to continue with Grok. Terms of service and privacy policy apply to everyone here.'), 'login_required');
+  check('triage: grok page without the usage dialog', classifyCaptureFailure('grok.com', 'Ask Grok anything. Build Imagine Voice. New chat. History: ten things about my project and more text to pass the size gate.'), 'usage_view_closed');
+  check('triage: grok dialog present but unparsed', classifyCaptureFailure('grok.com', 'Weekly SuperGrok Limit. Resets soon. Nothing numeric here but the dialog is open and long enough.'), 'parse_failed');
+  check('triage: other site, no percent', classifyCaptureFailure('gemini.google.com', 'Gemini is ready. Start a conversation about anything you like, there is plenty of text.'), 'usage_view_closed');
+  check('triage: other site, percent present', classifyCaptureFailure('gemini.google.com', 'Usage limits PRO. Something new 20% consumed. Resets on a date we do not recognise yet.'), 'parse_failed');
+  const sample = captureTextSample('Account\njane.doe@example.com\n\n\nWeekly SuperGrok Limit\n10% used\n');
+  check('sample: email removed', /\[email\]/.test(sample) && !/example\.com/.test(sample), true);
+  check('sample: blank lines squeezed', /\n\n/.test(sample), false);
+  check('sample: capped', captureTextSample('x'.repeat(5000)).length <= 702, true);
+}
+
 const { parseCursorDashboard } = ctx;
 if (typeof parseCursorDashboard !== 'function') {
   console.error('parseCursorDashboard was not loaded from parse.js');

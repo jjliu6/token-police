@@ -28,6 +28,8 @@ const AGENTS = [
     name: 'Grok',
     color: '#B78CF0',
     kind: 'chat',
+    // 用量弹窗来自页面自己发的 /rest/ JSON。content.js 第一次 DOM 抓成功时"对答案"学会这个
+    // 接口（grokApiMap），之后刷新直接重放请求出数，不再等弹窗；DOM 只做兜底和重新学习。
     page: 'https://grok.com/?_s=usage',
     scrape: ['https://grok.com/?_s=usage&cawrefresh=1'],
     foreground: true,

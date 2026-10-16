@@ -14,34 +14,64 @@ const contentSrc = readFileSync(resolve(root, 'content.js'), 'utf8');
 
 // 造一个最小的假浏览器环境：innerText 就是我们给的文本，MutationObserver / setInterval
 // 都由测试手动触发，chrome.runtime.sendMessage 记录发出的消息。
-function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchImpl }) {
+// storage: 假的 chrome.storage.local 内容（content.js 从这里读 grokApiMap、学会后写回）
+// scrapeInfo: background 对 "scrapeInfo" 的回答（模拟 SPA 改写了地址栏的情况）
+// 返回的 message(data) 模拟 MAIN world 的 grok-rest-tap.js 用 postMessage 转交一条响应
+function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchImpl, storage = {}, scrapeInfo = null }) {
   const sent = [];
   let body = { innerText: text, childNodes: [] };
   let observerCb = null;
   let intervalCb = null;
+  const listeners = [];
+  const win = {
+    addEventListener: (type, fn) => { if (type === 'message') listeners.push(fn); },
+    postMessage: (data) => { sent.push({ type: 'postMessage', data }); },
+  };
+  win.top = win;
   const ctxObj = {
     Date,
     Promise,
+    URL,
+    JSON,
     setTimeout,
     fetch: fetchImpl,
+    window: win,
     setInterval: (fn) => { intervalCb = fn; return 1; },
     clearInterval: () => { intervalCb = null; },
     MutationObserver: class { constructor(cb) { observerCb = cb; } observe() {} disconnect() { observerCb = null; } },
     document: { body, documentElement: {} },
     location: { hostname: host, pathname: path, search, hash, href: `https://${host}${path}${search}${hash}` },
-    chrome: { runtime: { sendMessage: (msg, cb) => { sent.push(msg); if (cb) cb(); }, lastError: null } },
+    chrome: {
+      runtime: {
+        sendMessage: (msg, cb) => {
+          sent.push(msg);
+          if (msg && msg.type === 'scrapeInfo') { if (cb) cb(scrapeInfo); return; }
+          if (cb) cb();
+        },
+        lastError: null,
+      },
+      storage: {
+        local: {
+          get: (keys, cb) => { const out = {}; (Array.isArray(keys) ? keys : [keys]).forEach((k) => { if (k in storage) out[k] = storage[k]; }); cb(out); },
+          set: (obj, cb) => { Object.assign(storage, obj); if (cb) cb(); },
+        },
+      },
+    },
   };
   const ctx = vm.createContext(ctxObj);
   vm.runInContext(parseSrc, ctx, { filename: 'parse.js' });
   vm.runInContext(contentSrc, ctx, { filename: 'content.js' });
   return {
     sent,
+    storage,
     setText: (t) => { body.innerText = t; if (observerCb) observerCb(); },
     tick: () => { if (intervalCb) intervalCb(); },
     flush: async (n = 8) => { for (let i = 0; i < n; i++) await Promise.resolve(); },
+    message: (data) => { listeners.forEach((fn) => fn({ source: win, data })); },
     agents: () => sent.filter((m) => m.type === 'agentData').map((m) => m.agent),
     closed: () => sent.some((m) => m.type === 'closeMe'),
     failures: () => sent.filter((m) => m.type === 'pageCaptureFailed'),
+    posted: () => sent.filter((m) => m.type === 'postMessage').map((m) => m.data),
   };
 }
 
@@ -129,8 +159,10 @@ Resets 9月3日 (23 hours and 4 minutes left)
   const p = runPage({ host: 'gemini.google.com', path: '/usage', text: 'Loading…' });
   for (let i = 0; i < 31; i++) p.tick();
   const fail = p.failures()[0];
-  check(fail && fail.agent_id === 'gemini' && fail.status === 'failed' && fail.reason === 'read_failed',
-    `page timeout should report failed/read_failed, got ${JSON.stringify(p.failures())}`);
+  check(fail && fail.agent_id === 'gemini' && fail.status === 'failed' && fail.reason === 'blank_page',
+    `page timeout on an unrendered page should report failed/blank_page, got ${JSON.stringify(p.failures())}`);
+  check(fail && fail.trigger === 'page' && /text=/.test(fail.detail || ''),
+    `page failure should carry the trigger and a text sample, got ${JSON.stringify(fail)}`);
 }
 
 // --- Gemini usage page from the user's screenshot ---
@@ -356,8 +388,130 @@ if (problems.length) {
   console.error(problems.join('\n'));
   process.exit(1);
 }
+// ===================== Grok: learned REST map first, DOM as fallback/teacher =====================
+const GROK_RESET_MS = Date.parse('October 22, 2026 11:20 AM');
+const GROK_USAGE_JSON = {
+  weekly: {
+    percentUsed: 10,
+    resetsAt: new Date(GROK_RESET_MS).toISOString(),
+    categories: [{ name: 'Grok Build', percentUsed: 7 }, { name: 'Automations', percentUsed: 3 }],
+  },
+};
+const GROK_DOM = `Usage
+Weekly SuperGrok Limit
+10% used
+Resets October 22, 2026 at 11:20 AM
+Grok Build 7%
+Automations 3%
+Extra Usage Credits
+$0.00
+Buy Credits
+Auto Top-Up`;
+const GROK_MAP = {
+  version: 1,
+  learnedAt: 1,
+  request: { url: 'https://grok.com/rest/subscriptions/usage', method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"window":"WEEKLY"}' },
+  used: { path: ['weekly', 'percentUsed'], kind: 'used' },
+  reset: { path: ['weekly', 'resetsAt'], kind: 'iso' },
+  breakdown: [{ type: 'array', arrayPath: ['weekly', 'categories'], nameKey: 'name', valueKey: 'percentUsed', kind: 'used' }],
+};
+function grokFetch(json, status = 200) {
+  const calls = [];
+  const impl = async (url, init) => {
+    calls.push({ url, init });
+    if (status !== 200) return { ok: false, status, type: 'basic', json: async () => null };
+    return { ok: true, status: 200, type: 'basic', json: async () => json };
+  };
+  impl.calls = calls;
+  return impl;
+}
+
+// --- Learned map: the frozen page never renders, the replayed request still yields the numbers ---
+{
+  const fetchImpl = grokFetch({ weekly: { percentUsed: 42, resetsAt: '2026-10-29T18:20:00.000Z', categories: [{ name: 'Grok Build', percentUsed: 30 }, { name: 'Imagine', percentUsed: 12 }] } });
+  const p = runPage({ host: 'grok.com', search: '?_s=usage&cawrefresh=1&cawtrigger=automatic', text: 'Loading…', fetch: fetchImpl, storage: { grokApiMap: GROK_MAP } });
+  await p.flush(12);
+  const g = p.agents().find((a) => a.id === 'grok-build');
+  check(g && g.limits[0].percent_left === 58, `replayed request should save Grok 58% left without any DOM, got ${JSON.stringify(g)}`);
+  check(g && g.source === 'api', 'API-sourced Grok agent should be tagged source=api');
+  check(g && g.breakdown && g.breakdown.map((x) => x.name + ':' + x.percent).join() === 'Grok Build:30,Imagine:12', `API breakdown should include every slice, got ${JSON.stringify(g && g.breakdown)}`);
+  check(g && g.limits[0].resets_text && !isNaN(Date.parse(g.limits[0].resets_text.replace(' at ', ' '))), `API reset should format like the page text, got ${g && g.limits[0].resets_text}`);
+  check(p.closed(), 'auto-opened Grok tab should close right after the API read');
+  const call = fetchImpl.calls[0];
+  check(call && call.url === GROK_MAP.request.url && call.init.method === 'POST' && call.init.body === '{"window":"WEEKLY"}' && call.init.credentials === 'include',
+    `replay must reuse url/method/body with cookies, got ${JSON.stringify(call)}`);
+  check(p.posted().some((d) => d.__tokenPolice === 'grok-rest-ready'), 'content.js must tell the MAIN-world tap it is ready');
+}
+
+// --- No map yet: DOM read succeeds, tap hands over the JSON, the map is learned and stored ---
+{
+  const p = runPage({ host: 'grok.com', search: '?_s=usage&cawrefresh=1', text: 'Loading…', fetch: grokFetch(null, 404), storage: {} });
+  await p.flush(12);
+  p.message({ __tokenPolice: 'grok-rest', url: 'https://grok.com/rest/auth/get-user', method: 'GET', status: 200, headers: {}, body: null, text: JSON.stringify({ userId: 'u1' }) });
+  p.message({ __tokenPolice: 'grok-rest', url: 'https://grok.com/rest/subscriptions/usage', method: 'POST', status: 200, headers: { 'content-type': 'application/json', cookie: 'sso=secret' }, body: '{"window":"WEEKLY"}', text: JSON.stringify(GROK_USAGE_JSON) });
+  p.message({ __tokenPolice: 'grok-rest', url: 'https://grok.com/rest/app-chat/stream', method: 'POST', status: 200, contentType: 'text/event-stream', text: null });
+  check(p.agents().length === 0, 'nothing saved before the dialog renders');
+  p.setText(GROK_DOM);
+  await new Promise((r) => setTimeout(r, 1300)); // the big number must hold still (grokStable)
+  p.tick();
+  await p.flush(12);
+  const g = p.agents().find((a) => a.id === 'grok-build');
+  check(g && g.limits[0].percent_left === 90 && g.source === 'dom', `DOM read should save Grok 90% left, got ${JSON.stringify(g)}`);
+  const map = p.storage.grokApiMap;
+  check(map && map.request.url === 'https://grok.com/rest/subscriptions/usage', `DOM success must teach the REST map, got ${JSON.stringify(map)}`);
+  check(map && map.used.path.join('.') === 'weekly.percentUsed' && map.reset && map.reset.kind === 'iso', `learned paths, got ${JSON.stringify(map)}`);
+  check(map && !('cookie' in map.request.headers), 'learned map must not keep the cookie header');
+  check(p.closed(), 'Grok tab closes once the DOM read is saved and the map learned');
+}
+
+// --- Map exists but the API shape changed: fall back to the DOM and re-learn ---
+{
+  const stale = Object.assign({}, GROK_MAP, { used: { path: ['weekly', 'oldField'], kind: 'used' } });
+  const p = runPage({ host: 'grok.com', search: '?_s=usage&cawrefresh=1', text: 'Loading…', fetch: grokFetch({ weekly: { percentUsed: 10 } }), storage: { grokApiMap: stale } });
+  await p.flush(12);
+  check(p.agents().length === 0, 'shape mismatch must not invent a number');
+  p.message({ __tokenPolice: 'grok-rest', url: 'https://grok.com/rest/subscriptions/usage', method: 'POST', status: 200, headers: {}, body: null, text: JSON.stringify(GROK_USAGE_JSON) });
+  p.setText(GROK_DOM);
+  await new Promise((r) => setTimeout(r, 1300));
+  p.tick();
+  await p.flush(12);
+  const g = p.agents().find((a) => a.id === 'grok-build');
+  check(g && g.source === 'dom' && g.limits[0].percent_left === 90, `DOM fallback after shape mismatch, got ${JSON.stringify(g)}`);
+  check(p.storage.grokApiMap && p.storage.grokApiMap.used.path.join('.') === 'weekly.percentUsed', 're-learned map replaces the stale one');
+}
+
+// --- Everything fails: the report says which layer broke and carries diagnostics ---
+{
+  const p = runPage({ host: 'grok.com', search: '?_s=usage&cawrefresh=1&cawtrigger=manual', text: 'Ask Grok anything. Build Imagine Voice. New chat. History: ten things about my project and lots more words here.', fetch: grokFetch(null, 401), storage: { grokApiMap: GROK_MAP } });
+  await p.flush(12);
+  p.message({ __tokenPolice: 'grok-rest', url: 'https://grok.com/rest/auth/get-user', method: 'GET', status: 200, headers: {}, body: null, text: JSON.stringify({ userId: 'u1' }) });
+  for (let i = 0; i < 20; i++) p.tick();
+  const f = p.failures().find((x) => x.agent_id === 'grok-build');
+  check(f && f.reason === 'usage_view_closed', `grok page without the dialog should report usage_view_closed, got ${JSON.stringify(f)}`);
+  check(f && f.trigger === 'manual', 'manual refresh failures are reported by the page itself');
+  check(f && /api=http_401/.test(f.detail) && /\/rest\/auth\/get-user/.test(f.detail) && /text="/.test(f.detail),
+    `diagnostics should carry api status, seen requests and a text sample, got ${f && f.detail}`);
+  check(p.closed(), 'auto-opened tab still closes after reporting');
+}
+
+// --- SPA rewrote the address bar: background says this tab is a scrape tab, so we scrape anyway ---
+{
+  const p = runPage({ host: 'grok.com', path: '/', search: '', text: 'Loading…', fetch: grokFetch({ weekly: { percentUsed: 10, resetsAt: new Date(GROK_RESET_MS).toISOString(), categories: [] } }), storage: { grokApiMap: GROK_MAP }, scrapeInfo: { url: 'https://grok.com/?_s=usage&cawrefresh=1&cawtrigger=automatic', trigger: 'automatic' } });
+  await p.flush(12);
+  const g = p.agents().find((a) => a.id === 'grok-build');
+  check(g && g.limits[0].percent_left === 90, `scrape tab with a rewritten URL should still read Grok via the map, got ${JSON.stringify(g)}`);
+  check(p.closed(), 'rewritten-URL scrape tab should still auto-close');
+}
+{
+  const p = runPage({ host: 'grok.com', path: '/', search: '', text: 'Ask Grok', storage: {}, scrapeInfo: null });
+  await p.flush(4);
+  check(p.sent.some((m) => m.type === 'scrapeInfo'), 'a grok chat page asks background whether it is a scrape tab');
+  check(p.agents().length === 0 && !p.closed(), 'a real chat tab (not a scrape tab) is left alone');
+}
+
 console.log('ok  Cursor spending page reports Cursor (4% left) and Grok Bot (87% left) from one scrape');
 console.log('ok  Missing / late Grok Bot section: Cursor saved, page waits, closes once done');
+console.log('ok  Grok: learned REST map replays first, DOM teaches/falls back, failures say which layer broke');
 console.log('ok  Gemini usage page reports weekly + current usage, PRO plan');
 console.log('ok  Codex analytics page reports weekly reset text (not null)');
 console.log('ok  Frozen spending page still saves Cursor + Grok Bot from dashboard JSON');

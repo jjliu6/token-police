@@ -12,6 +12,12 @@ let refreshing = false;
 // 本轮刷新打开的抓取标签页：tabId → { url, trigger }。content.js 在页面 URL 已被 SPA 改写、
 // 认不出自己是抓取页时会来问（scrapeInfo），用原始 URL 判断该抓谁。
 const scrapeTabs = {};
+// 同上，但要活过 service worker 被杀掉：deadline / trigger 会写进 chrome.storage.session，
+// 关页则另挂一个 chrome.alarms（setTimeout 随 worker 一起丢）。
+const scrapeBook = {};
+let quietRunning = false;
+let batchClaimed = false;
+let booting = Promise.resolve();
 
 // 等页面多久：轻页面后台 25s 够用；重页面（Cursor/Grok 的 SPA）首屏加载慢，content.js
 // 自己最多盯 36s 后会先把失败原因和文字样本报回来、再自关，所以这里只是兜底时限。
@@ -37,6 +43,22 @@ function clearBadge() {
 // 每次冷启动都重跑 syncAlarm/syncUpdateAlarm；chrome.alarms.create 用同一个名字再建
 // 一次会取消旧闹钟、把周期倒计时清零。频繁重启就意味着倒计时永远走不到点。
 // 先 get：同周期的已有闹钟别碰；关掉或改间隔才 clear / 重建。
+//
+// 抓取页另外两件不能只放在内存里的事：
+// 1. openAndWait 的强制关页是 setTimeout。MV3 worker 空闲约 30s 就被杀掉，计时器不算
+//    “还在干活”，QUIET_PAGE_MS（40s）经常走不到。页面若在启动/休眠后的后台标签里根本
+//    没提交导航（地址栏是个地球图标），content.js 不会跑，closeMe 也等不来，标签就
+//    一直空白挂着。浏览器下次打开还会把这些标签从会话里恢复出来，看起来像比设定间隔
+//    更频繁地“又开了一轮”。
+// 2. 周期闹钟在浏览器关闭或电脑睡眠期间过点的，会在下次唤醒时立刻补发。这时窗口往往
+//    还在恢复、甚至还没画出来，后台标签更容易永远不加载。补发的那一轮推迟一分钟再开。
+const CLOSE_ALARM = 'scrapeClose';
+const SOON_ALARM = 'quietRefreshSoon';
+const QUIET_CATCHUP_MS = 2 * 60 * 1000;
+const QUIET_DEFER_MIN = 1;
+const QUIET_SKEW_MS = 5000;
+const SCRAPE_NUDGE_MS = 8000;
+
 function ensureAlarm(name, info) {
   chrome.alarms.get(name, (existing) => {
     void chrome.runtime.lastError;
@@ -50,6 +72,7 @@ function syncAlarm() {
     const mins = resolveAutoRefreshMinutes(res);
     if (!mins) {
       chrome.alarms.clear('quietRefresh', () => void chrome.runtime.lastError);
+      chrome.alarms.clear(SOON_ALARM, () => void chrome.runtime.lastError);
       return;
     }
     chrome.alarms.get('quietRefresh', (existing) => {
@@ -72,13 +95,52 @@ function uniqueUrls(list, pick) {
   return out;
 }
 
-async function runQuietRefresh() {
-  if (refreshing) return; // 手动刷新进行中就别添乱
-  const en = (await getLocal(['enabledAgents'])).enabledAgents || {};
-  const list = AGENTS.filter((a) => en[a.id] !== false);
-  const started = Date.now();
-  await Promise.all(uniqueUrls(list).map((u) => openAndWait(u, false, QUIET_PAGE_MS, 'automatic')));
-  await recordRefreshFailures(list, started, 'automatic');
+function quietGapMs(mins) {
+  return Math.max(0, mins * 60000 - QUIET_SKEW_MS);
+}
+
+// 过点补发（scheduledTime 远早于现在）不要在浏览器刚醒来的那一下开一排后台页。
+// 同一会话里只推迟一次，避免 quietRefreshSoon 自己也过点时无限推迟。
+async function deferQuietCatchup(alarm) {
+  const scheduled = alarm && alarm.scheduledTime;
+  const age = scheduled ? Date.now() - scheduled : 0;
+  const catchup = alarm && alarm.name === 'quietRefresh' && age > QUIET_CATCHUP_MS;
+  const soonStale = alarm && alarm.name === SOON_ALARM && age > QUIET_CATCHUP_MS;
+  if (!catchup && !soonStale) return false;
+  const sess = await sessionGet(['deferredQuiet']);
+  const deferredAt = sess.deferredQuiet || 0;
+  const recentlyDeferred = deferredAt && Date.now() - deferredAt < 10 * 60000;
+  if (!recentlyDeferred) {
+    await sessionSet({ deferredQuiet: Date.now() });
+    chrome.alarms.create(SOON_ALARM, { delayInMinutes: QUIET_DEFER_MIN });
+    return true;
+  }
+  // 这一轮已经排过 soon：周期闹钟再响一次就丢掉，等 soon 来开页。
+  if (alarm.name === 'quietRefresh') return true;
+  return false;
+}
+
+async function runQuietRefresh(alarm) {
+  if (refreshing || quietRunning) return; // 手动刷新或另一轮静默检查进行中就别添乱
+  quietRunning = true;
+  try {
+    await booting;
+    const res = await getLocal(['autoRefresh', 'autoRefreshInterval', 'quietRefreshAt', 'enabledAgents']);
+    const mins = resolveAutoRefreshMinutes(res);
+    if (!mins) return;
+    if (res.quietRefreshAt && Date.now() - res.quietRefreshAt < quietGapMs(mins)) return;
+    if (await deferQuietCatchup(alarm)) return;
+    const started = Date.now();
+    await new Promise((resolve) => chrome.storage.local.set({ quietRefreshAt: started }, resolve));
+    const en = res.enabledAgents || {};
+    const list = AGENTS.filter((a) => en[a.id] !== false);
+    await sessionSet({ quietBatch: { started, trigger: 'automatic' } });
+    await Promise.all(uniqueUrls(list).map((u) => openAndWait(u, false, QUIET_PAGE_MS, 'automatic')));
+    await recordRefreshFailures(list, started, 'automatic');
+    await sessionSet({ quietBatch: null });
+  } finally {
+    quietRunning = false;
+  }
 }
 
 // 每天检查一次有没有新版本（checkUpdates，默认开）：向 GitHub 的公开 API 问一句
@@ -121,7 +183,9 @@ async function checkForUpdate(force) {
 if (chrome.alarms) {
   chrome.alarms.onAlarm.addListener((al) => {
     if (!al) return;
-    if (al.name === 'quietRefresh') runQuietRefresh();
+    // 把 Promise 交回去，worker 会等到抓取结束再睡；只靠 setTimeout 留不住它。
+    if (al.name === 'quietRefresh' || al.name === SOON_ALARM) return runQuietRefresh(al);
+    if (al.name === CLOSE_ALARM) return enforceScrapeDeadlines();
     if (al.name === 'updateCheck') checkForUpdate(true);
   });
 }
@@ -141,6 +205,7 @@ syncAlarm();
 clearBadge();
 syncUpdateAlarm();
 checkForUpdate(false);
+booting = recoverScrapeTabs().catch(() => {});
 
 function setRefresh(partial) {
   chrome.storage.local.get(['refresh'], (res) => {
@@ -602,39 +667,273 @@ function focusDispatchTab(tabId, url) {
   });
 }
 
-// 打开一个标签页，等它被 content.js 抓完自己关掉；最多等 maxMs 就强制关、继续下一个
+function sessionArea() {
+  return chrome.storage && chrome.storage.session;
+}
+
+function sessionGet(keys) {
+  return new Promise((resolve) => {
+    const area = sessionArea();
+    if (!area) return resolve({});
+    area.get(keys, (res) => { void chrome.runtime.lastError; resolve(res || {}); });
+  });
+}
+
+function sessionSet(obj) {
+  return new Promise((resolve) => {
+    const area = sessionArea();
+    if (!area) return resolve();
+    area.set(obj, () => { void chrome.runtime.lastError; resolve(); });
+  });
+}
+
+function bookSnapshot() {
+  const out = {};
+  Object.keys(scrapeBook).forEach((id) => {
+    const rec = scrapeBook[id];
+    out[id] = { url: rec.url, deadline: rec.deadline, trigger: rec.trigger, reloaded: !!rec.reloaded };
+  });
+  return out;
+}
+
+function persistBook() {
+  return sessionSet({ scrapeBook: bookSnapshot() });
+}
+
+// 最早一个 deadline 到点就醒过来关页。worker 中途被杀掉也没关系：闹钟在浏览器进程里。
+function armCloseAlarm() {
+  if (!chrome.alarms) return;
+  let soonest = 0;
+  Object.keys(scrapeBook).forEach((id) => {
+    const d = scrapeBook[id].deadline;
+    if (!soonest || d < soonest) soonest = d;
+  });
+  if (!soonest) {
+    chrome.alarms.clear(CLOSE_ALARM, () => void chrome.runtime.lastError);
+    return;
+  }
+  chrome.alarms.create(CLOSE_ALARM, { when: soonest });
+}
+
+function forgetScrapeTab(id) {
+  const rec = scrapeBook[id];
+  if (!rec && !scrapeTabs[id]) return;
+  if (rec && rec.timer) clearTimeout(rec.timer);
+  if (rec && rec.nudge) clearTimeout(rec.nudge);
+  delete scrapeBook[id];
+  delete scrapeTabs[id];
+  persistBook();
+  armCloseAlarm();
+  maybeFinishQuietBatch();
+}
+
+function armTabTimer(tid) {
+  const rec = scrapeBook[tid];
+  if (!rec) return;
+  if (rec.timer) clearTimeout(rec.timer);
+  const wait = Math.max(0, rec.deadline - Date.now());
+  rec.timer = setTimeout(() => {
+    if (!scrapeBook[tid]) return;
+    if (!chrome.tabs || !chrome.tabs.remove) return;
+    chrome.tabs.remove(Number(tid), () => void chrome.runtime.lastError);
+  }, wait);
+}
+
+function tabNeverLoaded(tab) {
+  if (!tab) return false;
+  const url = tab.url || '';
+  if (tab.discarded || tab.status === 'unloaded') return true;
+  if (!url || url === 'about:blank') return true;
+  return false;
+}
+
+// 后台标签在浏览器刚恢复、窗口还没画出来、或被 Memory Saver 丢掉时，导航不会提交。
+// 这种页重载一次才跑得了 content.js；已经重载过还是空白的，交给 deadline 关掉。
+function nudgeStuckTab(tid) {
+  const rec = scrapeBook[tid];
+  if (!rec || rec.reloaded || !chrome.tabs || !chrome.tabs.get) return;
+  chrome.tabs.get(Number(tid), (tab) => {
+    void chrome.runtime.lastError;
+    const cur = scrapeBook[tid];
+    if (!tab || !cur || cur.reloaded || !tabNeverLoaded(tab)) return;
+    cur.reloaded = true;
+    persistBook();
+    if (chrome.tabs.reload) chrome.tabs.reload(Number(tid), () => void chrome.runtime.lastError);
+  });
+}
+
+function isScrapeUrl(url) {
+  return typeof url === 'string' && url.indexOf('cawrefresh') !== -1;
+}
+
+function deadlineFromUrl(url) {
+  try {
+    const n = Number(new URL(url).searchParams.get('cawdue'));
+    return n || 0;
+  } catch (e) { return 0; }
+}
+
+function triggerFromUrl(url) {
+  try {
+    const t = new URL(url).searchParams.get('cawtrigger');
+    if (t === 'automatic' || t === 'manual') return t;
+  } catch (e) {}
+  return 'automatic';
+}
+
+function queryTabs() {
+  return new Promise((resolve) => {
+    if (!chrome.tabs || !chrome.tabs.query) return resolve([]);
+    chrome.tabs.query({}, (tabs) => {
+      void chrome.runtime.lastError;
+      resolve(tabs || []);
+    });
+  });
+}
+
+// worker 被杀掉之后：session 里还记着的页继续盯到 deadline；URL 上带 cawdue、
+// 但会话里已经没有账本的（上次没写完，或浏览器重启把 session 清了）按截止时间收养或关掉。
+// 浏览器重启后恢复出来的过期抓取页没有账本、cawdue 也过了，这里会直接关掉，
+// 不会一直空白挂在标签栏上。
+async function recoverScrapeTabs() {
+  const stored = await sessionGet(['scrapeBook']);
+  const saved = (stored && stored.scrapeBook) || {};
+  Object.keys(saved).forEach((id) => {
+    const rec = saved[id];
+    if (!rec || !rec.deadline) return;
+    scrapeBook[id] = { url: rec.url, deadline: rec.deadline, trigger: rec.trigger || 'automatic', reloaded: !!rec.reloaded };
+    scrapeTabs[id] = { url: rec.url, trigger: rec.trigger || 'automatic' };
+  });
+  const now = Date.now();
+  const tabs = await queryTabs();
+  const byId = {};
+  tabs.forEach((tab) => { if (tab && tab.id != null) byId[tab.id] = tab; });
+  // 账本按 tabId 认页，不认当前 URL：SPA 可能已经把 cawrefresh 从地址栏抹掉。
+  Object.keys(scrapeBook).forEach((id) => {
+    const tab = byId[id];
+    if (!tab) {
+      delete scrapeBook[id];
+      delete scrapeTabs[id];
+      return;
+    }
+    const rec = scrapeBook[id];
+    if (rec.deadline <= now) {
+      if (rec.timer) clearTimeout(rec.timer);
+      if (rec.nudge) clearTimeout(rec.nudge);
+      delete scrapeBook[id];
+      delete scrapeTabs[id];
+      chrome.tabs.remove(Number(id), () => void chrome.runtime.lastError);
+      return;
+    }
+    armTabTimer(id);
+    if (tabNeverLoaded(tab)) nudgeStuckTab(id);
+  });
+  // 会话账本丢了（浏览器重启会清 session，或上次还没写完 worker 就死了）：
+  // URL 上的 cawdue 还在。过点或没有截止时间的，当成恢复出来的空白页直接关。
+  tabs.forEach((tab) => {
+    if (!tab || tab.id == null || scrapeBook[tab.id]) return;
+    const url = tab.url || tab.pendingUrl || '';
+    if (!isScrapeUrl(url)) return;
+    const due = deadlineFromUrl(url) || deadlineFromUrl(tab.pendingUrl || '');
+    if (!due || due <= now) {
+      chrome.tabs.remove(tab.id, () => void chrome.runtime.lastError);
+      return;
+    }
+    const who = triggerFromUrl(url);
+    scrapeBook[tab.id] = { url, deadline: due, trigger: who, reloaded: false };
+    scrapeTabs[tab.id] = { url, trigger: who };
+    armTabTimer(tab.id);
+    if (tabNeverLoaded(tab)) nudgeStuckTab(tab.id);
+  });
+  await persistBook();
+  armCloseAlarm();
+  await maybeFinishQuietBatch();
+}
+
+async function enforceScrapeDeadlines() {
+  const now = Date.now();
+  Object.keys(scrapeBook).forEach((id) => {
+    const rec = scrapeBook[id];
+    // 闹钟可能比 when 早一点点；留 1s 余量，避免空响一轮又要再排。
+    if (!rec || rec.deadline > now + 1000) return;
+    if (rec.timer) clearTimeout(rec.timer);
+    if (rec.nudge) clearTimeout(rec.nudge);
+    delete scrapeBook[id];
+    delete scrapeTabs[id];
+    if (chrome.tabs && chrome.tabs.remove) chrome.tabs.remove(Number(id), () => void chrome.runtime.lastError);
+  });
+  await persistBook();
+  armCloseAlarm();
+  await maybeFinishQuietBatch();
+}
+
+// 静默检查的对账原本在 runQuietRefresh 末尾。worker 若死在关页之前，那次对账不会发生；
+// 账本清空时（正常关完，或恢复逻辑把过期页关掉）补记一次。quietRunning 期间由
+// runQuietRefresh 自己记，这里不重复写。
+async function maybeFinishQuietBatch() {
+  if (quietRunning || batchClaimed) return;
+  if (Object.keys(scrapeBook).length) return;
+  batchClaimed = true;
+  try {
+    const stored = await sessionGet(['quietBatch']);
+    const batch = stored && stored.quietBatch;
+    if (!batch || !batch.started) return;
+    await sessionSet({ quietBatch: null });
+    const en = (await getLocal(['enabledAgents'])).enabledAgents || {};
+    const list = AGENTS.filter((a) => en[a.id] !== false);
+    await recordRefreshFailures(list, batch.started, batch.trigger || 'automatic');
+  } finally {
+    batchClaimed = false;
+  }
+}
+
+if (chrome.tabs && chrome.tabs.onRemoved && chrome.tabs.onRemoved.addListener) {
+  chrome.tabs.onRemoved.addListener((id) => {
+    if (!scrapeBook[id] && !scrapeTabs[id]) return;
+    forgetScrapeTab(id);
+  });
+}
+
+// 打开一个标签页，等它被 content.js 抓完自己关掉；最多等 maxMs 就强制关、继续下一个。
+// 截止时间写在 URL（cawdue）和 session 账本里，并挂 scrapeClose 闹钟。worker 被杀掉后
+// 内存里的 setTimeout 没了，恢复逻辑或闹钟仍会把页关掉。
 function openAndWait(url, active, maxMs, trigger) {
   return new Promise((resolve) => {
+    const deadline = Date.now() + maxMs;
     let target = url;
     if (trigger) {
       try {
         const parsed = new URL(url);
         parsed.searchParams.set('cawtrigger', trigger);
+        parsed.searchParams.set('cawdue', String(deadline));
         target = parsed.toString();
       } catch (e) { /* keep the registered URL */ }
     }
     chrome.tabs.create({ url: target, active }, (tab) => {
       const tid = tab && tab.id;
       if (tid == null) return resolve();
-      scrapeTabs[tid] = { url: target, trigger: trigger || 'manual' };
+      const who = trigger || 'manual';
+      scrapeTabs[tid] = { url: target, trigger: who };
+      scrapeBook[tid] = { url: target, deadline, trigger: who, reloaded: false };
+      persistBook();
+      armCloseAlarm();
+      armTabTimer(tid);
+      if (chrome.tabs.update) chrome.tabs.update(tid, { autoDiscardable: false }, () => void chrome.runtime.lastError);
       let finished = false;
-      const timer = setTimeout(() => {
+      function done() {
         if (finished) return;
         finished = true;
         chrome.tabs.onRemoved.removeListener(onRemoved);
-        delete scrapeTabs[tid];
-        chrome.tabs.remove(tid, () => void chrome.runtime.lastError);
-        resolve();
-      }, maxMs);
-      function onRemoved(id) {
-        if (id !== tid || finished) return;
-        finished = true;
-        clearTimeout(timer);
-        chrome.tabs.onRemoved.removeListener(onRemoved);
-        delete scrapeTabs[tid];
+        forgetScrapeTab(tid);
         resolve();
       }
+      function onRemoved(id) {
+        if (id !== tid) return;
+        done();
+      }
       chrome.tabs.onRemoved.addListener(onRemoved);
+      if (tabNeverLoaded(tab)) nudgeStuckTab(tid);
+      scrapeBook[tid].nudge = setTimeout(() => nudgeStuckTab(tid), SCRAPE_NUDGE_MS);
     });
   });
 }
@@ -643,6 +942,8 @@ async function runRefresh() {
   if (refreshing) return;
   refreshing = true;
   const started = Date.now();
+  // 等启动扫尾结束再开页，避免把刚打开的抓取页当成“账本里有、查询结果里还没有”而丢掉。
+  await booting;
   let results = null;
   setRefresh({ running: true, started, finished: null, results: null });
   try {

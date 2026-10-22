@@ -17,13 +17,28 @@ function num(s) {
 
 // 有些页面（比如 Grok）把内容放进 Shadow DOM，普通 innerText 读不到。
 // 这个函数会连 Shadow DOM 里的文字一起收集。脚本/样式里的 "%" 不要算进去。
+// Grok 的用量数字是 NumberFlow 动画组件：每一位数字都是 0-9 一整列，只有当前那位
+// 没有 inert 属性。所以 inert 的不算；同一个数字组件里的字要连在一起（"4","4","%" → "44%"），
+// 不然只读到最后一位。
 function deepText(root) {
   let out = '';
   const SKIP = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1 };
+  const inert = (node) => node.nodeType === 1 && node.hasAttribute && node.hasAttribute('inert');
+  const flat = (node) => {
+    if (!node || inert(node)) return '';
+    if (node.nodeType === 3) return node.nodeValue;
+    if (node.nodeType === 1 && SKIP[node.nodeName]) return '';
+    let s = '';
+    if (node.shadowRoot) node.shadowRoot.childNodes.forEach((c) => { s += flat(c); });
+    if (node.childNodes) node.childNodes.forEach((c) => { s += flat(c); });
+    return s;
+  };
+  const isNumberWidget = (node) => /number-flow/i.test(node.nodeName || '');
   const walk = (node) => {
-    if (!node) return;
+    if (!node || inert(node)) return;
     if (node.nodeType === 3) { out += node.nodeValue + '\n'; return; }
     if (node.nodeType === 1 && SKIP[node.nodeName]) return;
+    if (node.nodeType === 1 && isNumberWidget(node)) { out += flat(node).replace(/\s+/g, '') + '\n'; return; }
     if (node.shadowRoot) node.shadowRoot.childNodes.forEach(walk);
     if (node.childNodes) node.childNodes.forEach(walk);
   };

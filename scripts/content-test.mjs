@@ -17,9 +17,9 @@ const contentSrc = readFileSync(resolve(root, 'content.js'), 'utf8');
 // storage: 假的 chrome.storage.local 内容（content.js 从这里读 grokApiMap、学会后写回）
 // scrapeInfo: background 对 "scrapeInfo" 的回答（模拟 SPA 改写了地址栏的情况）
 // 返回的 message(data) 模拟 MAIN world 的 grok-rest-tap.js 用 postMessage 转交一条响应
-function runPage({ host, path = '/', search = '', hash = '', text, fetch: fetchImpl, storage = {}, scrapeInfo = null }) {
+function runPage({ host, path = '/', search = '', hash = '', text, nodes = [], fetch: fetchImpl, storage = {}, scrapeInfo = null }) {
   const sent = [];
-  let body = { innerText: text, childNodes: [] };
+  let body = { innerText: text, childNodes: nodes };
   let observerCb = null;
   let intervalCb = null;
   const listeners = [];
@@ -384,10 +384,6 @@ function cursorFetch(handlers) {
   check(!p.closed(), 'failed JSON should keep waiting for the DOM, not close immediately');
 }
 
-if (problems.length) {
-  console.error(problems.join('\n'));
-  process.exit(1);
-}
 // ===================== Grok: learned REST map first, DOM as fallback/teacher =====================
 const GROK_RESET_MS = Date.parse('October 22, 2026 11:20 AM');
 const GROK_USAGE_JSON = {
@@ -509,9 +505,40 @@ function grokFetch(json, status = 200) {
   check(p.agents().length === 0 && !p.closed(), 'a real chat tab (not a scrape tab) is left alone');
 }
 
+// --- After the weekly reset Grok shows "0% used" via NumberFlow: the number lives
+// in Shadow DOM as digit columns 0-9 where only the current digit is not inert ---
+{
+  const txt = (t) => ({ nodeType: 3, nodeValue: t });
+  const el = (name, kids = [], attrs = {}, shadow = null) => ({
+    nodeType: 1, nodeName: name, childNodes: kids, shadowRoot: shadow ? { childNodes: shadow } : null,
+    hasAttribute: (a) => a in attrs,
+  });
+  const digit = (n) => el('SPAN', Array.from({ length: 10 }, (_, i) => el('SPAN', [txt(String(i))], i === n ? {} : { inert: '' })));
+  const flow = (digits) => el('NUMBER-FLOW-REACT', [], {}, [el('STYLE', [txt('.digit{--x:50%}')]), el('SPAN', digits.map(digit)), el('SPAN', [el('SPAN', [txt('%')])])]);
+  const inner = 'Usage\nWeekly SuperGrok Limit\nused\nResets October 29, 2026 at 11:20 AM\nWeekly Grok Bot Limit\nused\nResets October 28, 2026 at 12:41 AM\nExtra Usage Credits\nBuy Credits';
+  const nodes = [el('DIV', [
+    el('P', [txt('Weekly SuperGrok Limit')]), flow([4, 4]), el('SPAN', [txt('used')]), el('P', [txt('Resets October 29, 2026 at 11:20 AM')]),
+    el('P', [txt('Weekly Grok Bot Limit')]), flow([2]), el('SPAN', [txt('used')]), el('P', [txt('Extra Usage Credits')]),
+  ])];
+  const p = runPage({ host: 'grok.com', search: '?_s=usage&cawrefresh=1&cawtrigger=manual', text: inner, nodes, fetch: grokFetch(null, 404), storage: {} });
+  await p.flush(12);
+  p.tick();
+  await new Promise((r) => setTimeout(r, 1300));
+  p.tick();
+  await p.flush(12);
+  const g = p.agents().find((a) => a.id === 'grok-build');
+  check(g && g.limits[0].percent_left === 56, `NumberFlow "44%" in Shadow DOM should save Grok 56% left, got ${JSON.stringify(g)}`);
+  check(g && g.limits[0].resets_text === 'October 29, 2026 at 11:20 AM', `reset from the dialog, got ${JSON.stringify(g)}`);
+}
+
+if (problems.length) {
+  console.error(problems.join('\n'));
+  process.exit(1);
+}
 console.log('ok  Cursor spending page reports Cursor (4% left) and Grok Bot (87% left) from one scrape');
 console.log('ok  Missing / late Grok Bot section: Cursor saved, page waits, closes once done');
 console.log('ok  Grok: learned REST map replays first, DOM teaches/falls back, failures say which layer broke');
+console.log('ok  Grok NumberFlow digits in Shadow DOM are read as one number');
 console.log('ok  Gemini usage page reports weekly + current usage, PRO plan');
 console.log('ok  Codex analytics page reports weekly reset text (not null)');
 console.log('ok  Frozen spending page still saves Cursor + Grok Bot from dashboard JSON');

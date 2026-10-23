@@ -456,6 +456,20 @@ Available 3
   check('codex chat page is not usage', parseCodexUsage('What can I help with?'), null);
 }
 
+// --- 2026-10-22 after the weekly reset: the big "0%" is a NumberFlow widget in
+// Shadow DOM, so innerText has a bare "used" and no category slices. The deep
+// (Shadow DOM) copy appended after it does carry the number. ---
+{
+  const inner = `Settings\nUsage\nWeekly SuperGrok Limit\nused\nResets October 29, 2026 at 11:20 AM\nWeekly Grok Bot Limit\nused\nResets October 28, 2026 at 12:41 AM\nExtra Usage Credits\nAdditional Credits\nBuy Credits\nAuto Top-Up\nSet up`;
+  check('reset week, innerText only: no guess', parseGrokUsage(inner), null);
+  const deep = `Usage\nWeekly SuperGrok Limit\n0%\nused\nResets October 29, 2026 at 11:20 AM\nWeekly Grok Bot Limit\n2%\nused\nResets October 28, 2026 at 12:41 AM\nExtra Usage Credits\n$0.00\n`;
+  const p = parseGrokUsage(inner + '\n' + deep);
+  check('reset week, deep copy: used %', p && p.used, 0);
+  check('reset week, deep copy: reset', p && p.reset, 'October 29, 2026 at 11:20 AM');
+  const noSuper = deep.replace('0%\nused', 'used');
+  check('Grok Bot "2% used" is never read as SuperGrok', parseGrokUsage(inner + '\n' + noSuper), null);
+}
+
 if (failed) {
   console.error(`\n${failed} test(s) failed`);
   process.exit(1);

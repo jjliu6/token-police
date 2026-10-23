@@ -1,12 +1,21 @@
 // Pure text parsers for usage pages (no DOM). Loaded before content.js.
 
-function grokUsageSection(T) {
-  const start = T.search(/Weekly SuperGrok Limit|Total Usage/i);
-  if (start < 0) return T;
-  const rest = T.slice(start);
-  const endRel = rest.search(/Extra Usage Credits|Auto Top-Up/i);
-  const end = endRel < 0 ? Math.min(rest.length, 3000) : Math.min(rest.length, endRel + 40);
-  return rest.slice(0, end);
+// The usage dialog can show up twice in T: once in innerText (where Grok's
+// animated NumberFlow digits are invisible, so the big "0%" is missing) and
+// once in the Shadow-DOM walk (where they are present). Try every copy.
+function grokUsageSections(T) {
+  const out = [];
+  const re = /Weekly SuperGrok Limit|Total Usage/gi;
+  let m;
+  while ((m = re.exec(T))) {
+    const rest = T.slice(m.index);
+    // Stop before Grok Bot's own bar so its "2% used" is never read as SuperGrok's.
+    const endRel = rest.slice(1).search(/Weekly Grok Bot Limit|Extra Usage Credits|Auto Top-Up/i);
+    const end = endRel < 0 ? Math.min(rest.length, 3000) : endRel + 1;
+    out.push(rest.slice(0, end));
+    re.lastIndex = m.index + end;
+  }
+  return out.length ? out : [T];
 }
 
 // Category slices under the weekly bar. Grok renames these every few months
@@ -58,16 +67,18 @@ function grokTotalUsed(section, catSum, catCount) {
 
 function parseGrokUsage(T) {
   if (!T || !/SuperGrok/i.test(T)) return null;
-  const section = grokUsageSection(T);
-  const breakdown = grokCategories(section);
-  const catSum = breakdown.reduce((s, x) => s + x.percent, 0);
-  const used = grokTotalUsed(section, catSum, breakdown.length);
-  if (used == null) return null;
-  return {
-    used,
-    reset: grokReset(section) || grokReset(T),
-    breakdown,
-  };
+  for (const section of grokUsageSections(T)) {
+    const breakdown = grokCategories(section);
+    const catSum = breakdown.reduce((s, x) => s + x.percent, 0);
+    const used = grokTotalUsed(section, catSum, breakdown.length);
+    if (used == null) continue;
+    return {
+      used,
+      reset: grokReset(section) || grokReset(T),
+      breakdown,
+    };
+  }
+  return null;
 }
 
 // Cursor's spending page is a heavy SPA. In a background tab Chrome often

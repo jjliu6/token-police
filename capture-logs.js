@@ -13,13 +13,29 @@ function sanitizeSourceUrl(value) {
   }
 }
 
+// Page-structure dumps (`dom`, up to 12 KB each) are only kept on the newest
+// few entries per agent, so 5000 log lines never outgrow chrome.storage.local.
+const CAPTURE_LOG_DOM_KEEP = 3;
+
 function pruneCaptureLogs(logs, now) {
   now = now == null ? Date.now() : now;
   const cutoff = now - CAPTURE_LOG_MAX_AGE_MS;
-  return (Array.isArray(logs) ? logs : [])
+  const kept = (Array.isArray(logs) ? logs : [])
     .filter((entry) => entry && Number(entry.timestamp) >= cutoff)
     .sort((a, b) => Number(a.timestamp) - Number(b.timestamp))
     .slice(-CAPTURE_LOG_MAX_ENTRIES);
+  const domCount = {};
+  for (let i = kept.length - 1; i >= 0; i--) {
+    const entry = kept[i];
+    if (!entry.dom) continue;
+    domCount[entry.agent_id] = (domCount[entry.agent_id] || 0) + 1;
+    if (domCount[entry.agent_id] > CAPTURE_LOG_DOM_KEEP) {
+      const copy = Object.assign({}, entry);
+      delete copy.dom;
+      kept[i] = copy;
+    }
+  }
+  return kept;
 }
 
 function captureLogsJson(logs) {
@@ -37,7 +53,7 @@ function captureLogsCsv(logs) {
   const columns = [
     'timestamp', 'attempted_at', 'status', 'agent_id', 'agent_name', 'trigger', 'duration_ms',
     'reason', 'percent_left', 'limits', 'tokens_total', 'credits', 'plan',
-    'source_url', 'extension_version', 'detail',
+    'source_url', 'extension_version', 'detail', 'dom',
   ];
   const rows = (Array.isArray(logs) ? logs : []).slice()
     .sort((a, b) => Number(b.timestamp) - Number(a.timestamp))

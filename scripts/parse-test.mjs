@@ -477,6 +477,15 @@ Available 3
   check('learn: skipped at 100% used', learnGrokApiMap(cands, { used: 100, reset: null, breakdown: [] }, 0), null);
 }
 
+// --- 2026-10-23 user screenshot: 1% used, a single "Chat 1%" slice, big number invisible to innerText ---
+{
+  const T = `Usage\nWeekly SuperGrok Limit\nused\nResets October 29, 2026 at 11:20 AM\n•\nChat\n1%\nWeekly Grok Bot Limit\nused\nResets October 28, 2026 at 12:41 AM\nExtra Usage Credits\n$0.00\nAdditional Credits\nBuy Credits`;
+  const p = parseGrokUsage(T);
+  check('single slice: used %', p && p.used, 1);
+  check('single slice: breakdown', p && p.breakdown.map((x) => x.name + ':' + x.percent), ['Chat:1']);
+  check('single slice: reset', p && p.reset, 'October 29, 2026 at 11:20 AM');
+}
+
 if (failed) {
   console.error(`\n${failed} test(s) failed`);
   process.exit(1);

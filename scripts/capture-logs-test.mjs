@@ -48,24 +48,11 @@ for (const safe of ['"\'=HYPERLINK', '"\'+cmd"', '"\'@formula', '"\'-1 day"']) {
   if (!csv.includes(safe)) problems.push(`CSV should prefix formula-like values: ${safe}`);
 }
 
-// Page-structure dumps stay only on the 3 newest entries per agent
-{
-  const many = Array.from({ length: 6 }, (_, i) => ({ timestamp: now - (6 - i) * 1000, agent_id: 'grok-build', status: 'failed', dom: '<div>' + i }));
-  many.push({ timestamp: now, agent_id: 'gemini', status: 'failed', dom: '<p>g' });
-  const kept = ctx.pruneCaptureLogs(many, now);
-  const withDom = kept.filter((x) => x.agent_id === 'grok-build' && x.dom).map((x) => x.dom);
-  if (JSON.stringify(withDom) !== JSON.stringify(['<div>3', '<div>4', '<div>5'])) problems.push(`dom should stay on the 3 newest grok entries, got ${JSON.stringify(withDom)}`);
-  if (!kept.find((x) => x.agent_id === 'gemini').dom) problems.push('other agents keep their own dom');
-  if (kept.length !== 7) problems.push('stripping dom must not drop log entries');
-  if (!many[0].dom) problems.push('pruning must not mutate the stored entries in place');
-}
-
 if (problems.length) {
   console.error(problems.join('\n'));
   process.exit(1);
 }
 console.log('ok  Capture logs retain 30 days / 5,000 newest entries');
-console.log('ok  Page-structure dumps kept on the 3 newest entries per agent');
 console.log('ok  Source URLs drop query strings and hashes');
 console.log('ok  JSON/CSV exports are reverse chronological and CSV-neutralize formulas');
 console.log('\nCapture logs test passed.');

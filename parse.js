@@ -61,6 +61,9 @@ function grokTotalUsed(section, catSum, catCount) {
   if (catCount >= 2 && catSum >= 0 && catSum <= 100) {
     if (used == null || used < catSum - 1) used = catSum;
   }
+  // Early in the week there is often a single slice ("Chat 1%"). The big
+  // "N% used" is drawn so innerText cannot see it, so one slice is all we have.
+  if (used == null && catCount === 1 && catSum >= 0 && catSum <= 100) used = catSum;
   if (used == null || used < 0 || used > 100) return null;
   return used;
 }

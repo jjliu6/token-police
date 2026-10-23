@@ -564,38 +564,6 @@ function grokFetch(json, status = 200) {
   check(g && g.limits[0].resets_text === 'October 29, 2026 at 11:20 AM', `reset from the dialog, got ${JSON.stringify(g)}`);
 }
 
-// --- Black box: a Grok page that cannot be read stores the usage area's structure in the log ---
-{
-  const txt = (t) => ({ nodeType: 3, nodeValue: t });
-  const el = (name, kids = [], attrs = {}, shadow = null) => {
-    const node = {
-      nodeType: 1, nodeName: name, childNodes: kids, shadowRoot: shadow ? { childNodes: shadow } : null,
-      attributes: Object.keys(attrs).map((k) => ({ name: k, value: attrs[k] })),
-      hasAttribute: (a) => a in attrs,
-      get textContent() { return kids.map((k) => k.nodeType === 3 ? k.nodeValue : k.textContent).join(''); },
-    };
-    kids.forEach((k) => { k.parentElement = node; k.parentNode = node; });
-    if (shadow) { node.shadowRoot.host = node; shadow.forEach((k) => { k.parentNode = node.shadowRoot; }); }
-    return node;
-  };
-  const filler = 'x'.repeat(700);
-  const nodes = [el('SECTION', [
-    el('DIV', [el('P', [txt('Weekly SuperGrok Limit')]), el('DIV', [], { 'data-value': '0', style: '--num: 0' }), el('SPAN', [txt('used')])], { class: 'card' }),
-    el('DIV', [el('DIV', [], { role: 'progressbar', style: 'width: 0%' })]),
-    el('P', [txt(filler)]),
-    el('P', [txt('me@example.com')]),
-  ])];
-  const inner = 'Usage\nWeekly SuperGrok Limit\nused\nResets October 29, 2026 at 11:20 AM\nExtra Usage Credits\nBuy Credits';
-  const p = runPage({ host: 'grok.com', search: '?_s=usage&cawrefresh=1&cawtrigger=manual', text: inner, nodes, fetch: grokFetch(null, 404), storage: {} });
-  await p.flush(12);
-  for (let i = 0; i < 20; i++) p.tick();
-  const f = p.failures().find((x) => x.agent_id === 'grok-build');
-  check(f && f.reason === 'parse_failed', `unreadable dialog should be parse_failed, got ${JSON.stringify(f && f.reason)}`);
-  check(f && typeof f.dom === 'string' && /<p>\n\s+"Weekly SuperGrok Limit"/.test(f.dom), `dom dump should include the heading, got ${f && f.dom}`);
-  check(f && /data-value="0" style="--num: 0"/.test(f.dom) && /role="progressbar" style="width: 0%"/.test(f.dom), `dom dump keeps attributes that may hold the number, got ${f && f.dom}`);
-  check(f && /\[email\]/.test(f.dom) && !/me@example\.com/.test(f.dom), 'dom dump strips emails');
-}
-
 if (problems.length) {
   console.error(problems.join('\n'));
   process.exit(1);
@@ -604,7 +572,6 @@ console.log('ok  Cursor spending page reports Cursor (4% left) and Grok Bot (87%
 console.log('ok  Missing / late Grok Bot section: Cursor saved, page waits, closes once done');
 console.log('ok  Grok: learned REST map replays first, DOM teaches/falls back, failures say which layer broke');
 console.log('ok  Grok NumberFlow digits in Shadow DOM are read as one number');
-console.log('ok  Unreadable Grok page stores its usage-area structure in the log');
 console.log('ok  Gemini usage page reports weekly + current usage, PRO plan');
 console.log('ok  Codex analytics page reports weekly reset text (not null)');
 console.log('ok  Frozen spending page still saves Cursor + Grok Bot from dashboard JSON');

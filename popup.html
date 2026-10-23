@@ -81,6 +81,9 @@
   @keyframes spark-pop{0%{opacity:0;transform:scale(0) rotate(0)}22%{opacity:1;transform:scale(calc(var(--s,1) * 1.35)) rotate(18deg)}100%{opacity:0;transform:scale(calc(var(--s,1) * .35)) translateY(-18px) rotate(52deg)}}
   .buddy{position:fixed;z-index:40;top:54px;right:8px;width:176px;padding:10px 10px 12px;background:rgba(20,22,28,.28);border:1px solid rgba(255,255,255,.14);border-radius:16px;box-shadow:0 10px 28px rgba(0,0,0,.28);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);cursor:grab;user-select:none;touch-action:none;display:flex;flex-direction:column;align-items:center;transition:left 7.2s cubic-bezier(.4,.08,.2,1),top 7.2s cubic-bezier(.4,.08,.2,1)}
   .buddy.dragging{cursor:grabbing;animation:none;transition:none!important}
+  .buddy-x{position:absolute;top:4px;right:4px;z-index:2;width:20px;height:20px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.08);color:var(--muted);font-size:14px;line-height:20px;text-align:center;cursor:pointer;opacity:.6;transition:opacity .15s,background .15s}
+  .buddy:hover .buddy-x,.buddy-x:focus-visible{opacity:1}
+  .buddy-x:hover{background:rgba(255,255,255,.18);color:var(--ink)}
   .buddy.wander .mascot{animation:buddy-bob 2.8s ease-in-out infinite}
   .buddy.wander .mascot.regrow{animation:hair-regrow-pop .85s cubic-bezier(.18,1.4,.32,1)}
   .buddy.dragging .mascot{animation:none}
@@ -368,6 +371,7 @@
     </div>
   </section>
   <div class="buddy wander" id="buddy" hidden>
+    <button class="buddy-x" id="buddy-close" type="button">×</button>
     <p class="say" id="say" hidden></p>
     <span class="mascot" id="hair" hidden></span>
     <div class="acts" id="acts" hidden></div>

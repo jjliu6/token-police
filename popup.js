@@ -687,6 +687,14 @@ function initBuddy(pos) {
   if (buddy.dataset) buddy.dataset.ready = '1';
   if (buddy.style) buddy.style.transition = buddyGlide();
   if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') placeBuddy(pos.x, pos.y);
+  // 右上角 ×：等同于设置里取消勾选「发量小人」，onChanged 会重绘把小人藏起来
+  const close = document.getElementById('buddy-close');
+  if (close && close.addEventListener) {
+    close.addEventListener('click', (e) => {
+      if (e && e.stopPropagation) e.stopPropagation();
+      chrome.storage.local.set({ showHair: false });
+    });
+  }
   if (buddy.addEventListener) {
     let dragging = false, ox = 0, oy = 0;
     const endDrag = () => {
@@ -888,6 +896,11 @@ function renderBuddy(show, pct, pick, due, pos, offer) {
     return;
   }
   initBuddy(pos);
+  const x = document.getElementById('buddy-close');
+  if (x) {
+    x.title = t('hideHair');
+    if (x.setAttribute) x.setAttribute('aria-label', t('hideHair'));
+  }
   renderActs(pct, pick, due, offer);
   armSay(pct, due, true);
 }

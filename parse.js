@@ -478,8 +478,15 @@ function grokReadBreakdown(rules, json) {
 
 // candidates: [{ url, method, body, headers, status, json }] seen by the tap.
 // parsed: the DOM result { used, reset, breakdown }. Returns a map or null.
+// At 0% or 100% used every stray 0 / 100 / 1.0 in a response "matches", so a
+// map learned then could lock onto the wrong field and read 0% forever. Wait
+// for a reading in between.
+function grokLearnSkipped(parsed) {
+  return !parsed || parsed.used == null || parsed.used <= 0 || parsed.used >= 100;
+}
+
 function learnGrokApiMap(candidates, parsed, now) {
-  if (!parsed || parsed.used == null || !Array.isArray(candidates) || !candidates.length) return null;
+  if (grokLearnSkipped(parsed) || !Array.isArray(candidates) || !candidates.length) return null;
   const resetMs = grokParseResetMs(parsed.reset);
   let best = null;
   for (const c of candidates) {

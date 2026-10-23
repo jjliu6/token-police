@@ -1,8 +1,8 @@
 // grok.com 用量数据的"网络监听器"（MAIN world，document_start，只在 ?_s=usage 页、顶层框架）。
 //
 // 为什么需要它：Grok 的用量弹窗是重 SPA，后台标签页经常根本画不出来，靠 innerText
-// 抓就三天两头失败。弹窗里的数字其实来自页面自己发的一个 /rest/ JSON 请求。这里把
-// 页面收到的 grok.com /rest/ JSON 响应原样转交给 content.js（postMessage），content.js
+// 抓就三天两头失败。弹窗里的数字其实来自页面自己发的某个请求（不一定在 /rest/ 下）。这里把
+// 页面收到的同源 JSON 响应原样转交给 content.js（postMessage），其它请求只报路径和类型；content.js
 // 在 DOM 抓取成功时"对答案"学会这个接口（见 parse.js learnGrokApiMap），以后刷新就直接
 // 自己重放请求，不再依赖弹窗。
 //
@@ -24,7 +24,7 @@
   function emit(item) {
     if (ready) { post(item); return; }
     buffer.push(item);
-    if (buffer.length > 60) buffer.shift();
+    if (buffer.length > 120) buffer.shift();
   }
   window.addEventListener('message', (ev) => {
     if (ev.source !== window || !ev.data || ev.data.__tokenPolice !== 'grok-rest-ready') return;
@@ -32,12 +32,16 @@
     buffer.splice(0).forEach(post);
   });
 
-  function restUrl(u) {
+  // Same-origin grok.com requests are candidates (JSON is forwarded whole). The
+  // usage call is not guaranteed to live under /rest/ (it may be gRPC-web or on
+  // another host), so everything else is still reported by path + content-type —
+  // no body — so a failed learn can say what the page actually fetched.
+  const STATIC = /\.(js|mjs|css|map|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|mp4|webm|mp3|wav)$/i;
+  function tapUrl(u) {
     try {
       const x = new URL(String(u), location.href);
-      if (!/(^|\.)grok\.com$/.test(x.hostname)) return null;
-      if (x.pathname.indexOf('/rest/') !== 0 && x.pathname.indexOf('/api/') !== 0) return null;
-      return x.toString();
+      if (!/^https?:$/.test(x.protocol) || STATIC.test(x.pathname) || /^\/(_next|cdn-cgi)\//.test(x.pathname)) return null;
+      return { url: x.toString(), same: x.origin === location.origin };
     } catch (e) { return null; }
   }
   function headerObj(h) {
@@ -61,15 +65,16 @@
     window.fetch = function (input, init) {
       const p = origFetch.apply(this, arguments);
       try {
-        const url = restUrl(typeof input === 'string' ? input : (input && input.url));
-        if (url) {
+        const t = tapUrl(typeof input === 'string' ? input : (input && input.url));
+        if (t) {
+          const url = t.url;
           const method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
           const headers = headerObj((init && init.headers) || (input && input.headers));
           const body = bodyText(init && init.body);
           p.then((res) => {
             if (!res || !res.headers) return;
             const ct = (res.headers.get && res.headers.get('content-type')) || '';
-            if (!/json/i.test(ct)) { emit({ url, method, status: res.status, contentType: ct, text: null }); return; }
+            if (!t.same || !/json/i.test(ct)) { emit({ url, method, status: res.status, contentType: ct, text: null }); return; }
             res.clone().text().then((text) => {
               if (text && text.length <= MAX_TEXT) emit({ url, method, headers, body, status: res.status, contentType: ct, text });
             }).catch(() => {});
@@ -84,7 +89,7 @@
   if (XP && XP.open && XP.send && XP.setRequestHeader) {
     const oOpen = XP.open, oSend = XP.send, oSet = XP.setRequestHeader;
     XP.open = function (method, url) {
-      try { this.__tpRest = { method: String(method || 'GET').toUpperCase(), url: restUrl(url), headers: {} }; } catch (e) {}
+      try { const t = tapUrl(url); this.__tpRest = t ? { method: String(method || 'GET').toUpperCase(), url: t.url, same: t.same, headers: {} } : null; } catch (e) {}
       return oOpen.apply(this, arguments);
     };
     XP.setRequestHeader = function (k, v) {
@@ -99,7 +104,7 @@
           this.addEventListener('load', () => {
             try {
               const ct = this.getResponseHeader('content-type') || '';
-              if (!/json/i.test(ct)) { emit({ url: tp.url, method: tp.method, status: this.status, contentType: ct, text: null }); return; }
+              if (!tp.same || !/json/i.test(ct)) { emit({ url: tp.url, method: tp.method, status: this.status, contentType: ct, text: null }); return; }
               const text = (this.responseType === '' || this.responseType === 'text') ? this.responseText : null;
               if (text && text.length <= MAX_TEXT) emit({ url: tp.url, method: tp.method, headers: tp.headers, body: tp.body, status: this.status, contentType: ct, text });
             } catch (e) {}

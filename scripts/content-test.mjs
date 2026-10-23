@@ -460,6 +460,39 @@ function grokFetch(json, status = 200) {
   check(p.closed(), 'Grok tab closes once the DOM read is saved and the map learned');
 }
 
+// --- Learning fails: the success log gets a report of what the page fetched ---
+{
+  const p = runPage({ host: 'grok.com', search: '?_s=usage&cawrefresh=1', text: 'Loading…', fetch: grokFetch(null, 404), storage: {} });
+  await p.flush(12);
+  p.message({ __tokenPolice: 'grok-rest', url: 'https://grok.com/rest/products', method: 'GET', status: 200, headers: {}, body: null, text: JSON.stringify({ plans: [{ price: 30 }] }) });
+  p.message({ __tokenPolice: 'grok-rest', url: 'https://grok.com/xai.billing.Usage/GetWeekly', method: 'POST', status: 200, contentType: 'application/grpc-web+proto', text: null });
+  p.message({ __tokenPolice: 'grok-rest', url: 'https://api.x.ai/v1/usage', method: 'GET', status: 200, contentType: 'application/json; charset=utf-8', text: null });
+  p.setText(GROK_DOM);
+  await new Promise((r) => setTimeout(r, 1300));
+  p.tick();
+  await new Promise((r) => setTimeout(r, 2800)); // learn hold expires, page closes
+  await p.flush(12);
+  const d = p.sent.find((m) => m.type === 'captureDetail');
+  check(d && d.agent_id === 'grok-build' && /^learn=fail; dom_used=10/.test(d.detail), `failed learn should send a report, got ${JSON.stringify(d)}`);
+  check(d && /json=\[\/rest\/products\]/.test(d.detail), `report lists JSON candidates, got ${d && d.detail}`);
+  check(d && /\/xai\.billing\.Usage\/GetWeekly \[application\/grpc-web\+proto\]/.test(d.detail) && /api\.x\.ai\/v1\/usage \[application\/json\]/.test(d.detail),
+    `report lists non-JSON and other-host requests with their type, got ${d && d.detail}`);
+  check(!p.storage.grokApiMap, 'nothing learned from unrelated JSON');
+}
+
+// --- Learning works: the report names the endpoint and field ---
+{
+  const p = runPage({ host: 'grok.com', search: '?_s=usage&cawrefresh=1', text: 'Loading…', fetch: grokFetch(null, 404), storage: {} });
+  await p.flush(12);
+  p.message({ __tokenPolice: 'grok-rest', url: 'https://grok.com/rest/subscriptions/usage', method: 'POST', status: 200, headers: {}, body: '{}', text: JSON.stringify(GROK_USAGE_JSON) });
+  p.setText(GROK_DOM);
+  await new Promise((r) => setTimeout(r, 1300));
+  p.tick();
+  await p.flush(12);
+  const d = p.sent.find((m) => m.type === 'captureDetail');
+  check(d && d.detail === 'learn=ok; POST /rest/subscriptions/usage used=weekly.percentUsed(used)', `successful learn report, got ${JSON.stringify(d)}`);
+}
+
 // --- Map exists but the API shape changed: fall back to the DOM and re-learn ---
 {
   const stale = Object.assign({}, GROK_MAP, { used: { path: ['weekly', 'oldField'], kind: 'used' } });

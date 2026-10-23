@@ -290,6 +290,16 @@ if (claudeLog && claudeLog.source_url !== 'https://claude.ai/new') {
   problems.push(`capture log source URL should remove query/hash, got ${claudeLog.source_url}`);
 }
 
+// 1b) Grok 页面在成功之后补一段"接口学没学会"的说明：只写到最新那条成功日志上
+await send(agentData({ id: 'grok-build', scraped_at: Date.now(), limits: [{ label: 'Weekly (SuperGrok)', percent_left: 44 }] }));
+await send({ type: 'captureDetail', agent_id: 'grok-build', detail: 'learn=fail; dom_used=56; json=[/rest/products]' });
+const grokLog = store.captureLogs && store.captureLogs.find((x) => x.agent_id === 'grok-build');
+if (!grokLog || grokLog.status !== 'success' || grokLog.detail !== 'learn=fail; dom_used=56; json=[/rest/products]') {
+  problems.push(`captureDetail should attach to the fresh Grok success log, got ${JSON.stringify(grokLog)}`);
+}
+await send({ type: 'captureDetail', agent_id: 'gemini', detail: 'no log to attach to' });
+if (store.captureLogs.some((x) => x.agent_id === 'gemini')) problems.push('captureDetail must not invent a log');
+
 // 2) Cursor 分两页：后到的一页要合并、不能丢掉先到那页的字段
 await send(agentData({ id: 'cursor', scraped_at: now + 1, limits: [{ label: 'Cursor Models', percent_left: 40 }] }));
 await send(agentData({ id: 'cursor', scraped_at: now + 2, tokens: { total: 5e6 } }));
@@ -699,6 +709,7 @@ if (problems.length) {
   process.exit(1);
 }
 console.log('ok  Concurrent agentData saves are serialized (no lost update)');
+console.log('ok  Grok learn report attaches to its success log');
 console.log('ok  Cursor usage+spending pages merge into one record');
 console.log('ok  History dedupe and closeMe behave as before');
 console.log('ok  Toolbar badge stays empty (no remaining-% number, including after refresh)');

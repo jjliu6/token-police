@@ -346,6 +346,27 @@ function saveAgent(a) {
   return writeQueue;
 }
 
+// A page adds diagnostics to the success it just saved (Grok: why the usage API
+// was or was not learned). Only the newest success for that agent, and only if fresh.
+function saveCaptureDetail(agentId, detail) {
+  const run = () => new Promise((resolve) => {
+    chrome.storage.local.get(['captureLogs'], (res) => {
+      const logs = (res.captureLogs || []).slice();
+      for (let i = logs.length - 1; i >= 0; i--) {
+        const log = logs[i];
+        if (!log || log.agent_id !== agentId) continue;
+        if (log.status !== 'success' || Date.now() - (Number(log.timestamp) || 0) > 2 * 60000) break;
+        logs[i] = Object.assign({}, log, { detail: String(detail || '').slice(0, 1500) });
+        chrome.storage.local.set({ captureLogs: logs }, resolve);
+        return;
+      }
+      resolve();
+    });
+  });
+  writeQueue = writeQueue.then(run, run);
+  return writeQueue;
+}
+
 function saveFailedAttempt(agent, status, reason, trigger, started, sourceUrl, detail) {
   const run = () => new Promise((resolve) => {
     chrome.storage.local.get(['captureLogs', 'latestAttempts'], (res) => {
@@ -442,6 +463,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       ).then(() => sendResponse({ ok: true }));
       return true;
     }
+  }
+  if (msg && msg.type === 'captureDetail' && typeof msg.agent_id === 'string' && msg.detail) {
+    saveCaptureDetail(msg.agent_id, msg.detail).then(() => sendResponse({ ok: true }));
+    return true;
   }
   if (msg && msg.type === 'scrapeInfo') {
     const tid = sender && sender.tab && sender.tab.id;

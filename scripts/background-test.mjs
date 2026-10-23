@@ -300,6 +300,11 @@ if (!grokLog || grokLog.status !== 'success' || grokLog.detail !== 'learn=fail; 
 await send({ type: 'captureDetail', agent_id: 'gemini', detail: 'no log to attach to' });
 if (store.captureLogs.some((x) => x.agent_id === 'gemini')) problems.push('captureDetail must not invent a log');
 
+// 1c) 失败日志带上页面结构（黑匣子）
+await send({ type: 'pageCaptureFailed', agent_id: 'grok-build', status: 'failed', reason: 'parse_failed', trigger: 'manual', started: Date.now(), detail: 'x', dom: '<div>\n  "0%"' });
+const domLog = store.captureLogs && store.captureLogs.slice().reverse().find((x) => x.agent_id === 'grok-build' && x.status === 'failed');
+if (!domLog || domLog.dom !== '<div>\n  "0%"') problems.push(`failed log should keep the page structure, got ${JSON.stringify(domLog)}`);
+
 // 2) Cursor 分两页：后到的一页要合并、不能丢掉先到那页的字段
 await send(agentData({ id: 'cursor', scraped_at: now + 1, limits: [{ label: 'Cursor Models', percent_left: 40 }] }));
 await send(agentData({ id: 'cursor', scraped_at: now + 2, tokens: { total: 5e6 } }));

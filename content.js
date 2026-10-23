@@ -190,6 +190,86 @@ function pageAgentIds() {
   return [];
 }
 
+// "黑匣子"：读不到数时，把用量区域的页面结构抄一份进日志（标签、属性、文字，连 Shadow DOM、
+// CSS ::before/::after 生成的字、inert 标记一起）。以后页面再改，看日志就知道数字藏在哪，
+// 不用再请用户手动跑控制台代码。只抄锚点附近一块，不抄整页；邮箱抹掉。
+const DOM_ANCHORS = {
+  'grok-build': /Weekly SuperGrok Limit|SuperGrok/,
+  'grok-bot': /Grok Bot/,
+  cursor: /Cursor Models|Included/,
+  gemini: /Weekly limit|Current usage/i,
+  codex: /5-hour|Weekly|usage limit/i,
+  'claude-code': /Current session|Weekly/i,
+};
+const DOM_DUMP_MAX = 12000;
+
+function findTextNode(root, re) {
+  let hit = null;
+  const walk = (node, depth) => {
+    if (hit || !node || depth > 60) return;
+    if (node.nodeType === 3) { if (re.test(node.nodeValue || '')) hit = node; return; }
+    if (node.nodeType === 1 && (node.nodeName === 'SCRIPT' || node.nodeName === 'STYLE')) return;
+    if (node.shadowRoot) node.shadowRoot.childNodes.forEach((c) => walk(c, depth + 1));
+    if (node.childNodes) node.childNodes.forEach((c) => walk(c, depth + 1));
+  };
+  walk(root, 0);
+  return hit;
+}
+
+function domParent(node) {
+  if (node.parentElement) return node.parentElement;
+  if (node.parentNode && node.parentNode.host) return node.parentNode.host; // 跨出 Shadow DOM
+  try { const r = node.getRootNode && node.getRootNode(); if (r && r.host) return r.host; } catch (e) {}
+  return null;
+}
+
+function usageDomDump(id) {
+  if (!document.body) return '';
+  const re = DOM_ANCHORS[id] || /usage|limit/i;
+  const start = findTextNode(document.body, re);
+  if (!start) return 'anchor_not_found ' + re;
+  let box = domParent(start);
+  for (let i = 0; box && i < 10; i++) {
+    const p = domParent(box);
+    if (!p || p === document.body || (box.textContent || '').length >= 600) break;
+    box = p;
+  }
+  const out = [];
+  let size = 0;
+  const push = (line) => { if (size < DOM_DUMP_MAX) { out.push(line); size += line.length + 1; } };
+  const pseudo = (el, which) => {
+    try {
+      if (typeof getComputedStyle !== 'function') return '';
+      const c = getComputedStyle(el, which).content;
+      return c && c !== 'none' && c !== 'normal' ? ' ' + which + '=' + c.slice(0, 40) : '';
+    } catch (e) { return ''; }
+  };
+  const walk = (node, d) => {
+    if (!node || d > 40 || size >= DOM_DUMP_MAX) return;
+    const pad = '  '.repeat(Math.min(d, 20));
+    if (node.nodeType === 3) {
+      const t = (node.nodeValue || '').trim();
+      if (t) push(pad + JSON.stringify(t.slice(0, 200).replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[email]')));
+      return;
+    }
+    if (node.nodeType !== 1 || node.nodeName === 'SCRIPT' || node.nodeName === 'STYLE') return;
+    const tag = String(node.nodeName).toLowerCase();
+    const attrs = [];
+    const list = node.attributes || [];
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      if (a.name === 'd' || a.name === 'points') continue; // SVG 路径是噪音
+      attrs.push(a.name + '="' + String(a.value).slice(0, 80) + '"');
+    }
+    push(pad + '<' + tag + (attrs.length ? ' ' + attrs.join(' ') : '') + '>' + pseudo(node, '::before') + pseudo(node, '::after') + (node.shadowRoot ? ' #shadow' : ''));
+    if (tag === 'svg') return;
+    if (node.shadowRoot) node.shadowRoot.childNodes.forEach((c) => walk(c, d + 1));
+    if (node.childNodes) node.childNodes.forEach((c) => walk(c, d + 1));
+  };
+  walk(box, 0);
+  return out.join('\n').slice(0, DOM_DUMP_MAX);
+}
+
 // 页面上该有的产品没抓到 → 告诉 background。以前只在用户自己开的页上报、并且一律写
 // "read_failed"；现在手动/自动刷新也上报，而且分清是哪一层坏了（页面没渲染 / 要登录 /
 // 弹窗没打开 / 文字变了没认出），再附一段页面文字样本到本地日志。下次再坏，看日志就能修。
@@ -202,12 +282,16 @@ function failureDetail(id, text) {
     bits.push('rest=[' + seen.join(', ') + ']');
   }
   bits.push('text=' + JSON.stringify(captureTextSample(text)));
-  return bits.join('; ').slice(0, 1500);
+  return bits.join('; ').slice(0, 3000);
 }
 
 function pageText() {
   if (!document.body) return '';
   try { return (document.body.innerText || '') + '\n' + deepText(document.body); } catch (e) { return document.body.innerText || ''; }
+}
+
+function safeDomDump(id) {
+  try { return usageDomDump(id); } catch (e) { return 'dump_error ' + (e && e.message); }
 }
 
 function reportPageOutcomes() {
@@ -225,6 +309,7 @@ function reportPageOutcomes() {
         status: missing ? 'missing' : 'failed',
         reason,
         detail: missing ? '' : failureDetail(id, text),
+        dom: missing ? '' : safeDomDump(id),
         trigger: captureTrigger(),
         started: captureStartedAt,
         source_url: captureSourceUrl(),

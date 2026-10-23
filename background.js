@@ -367,7 +367,7 @@ function saveCaptureDetail(agentId, detail) {
   return writeQueue;
 }
 
-function saveFailedAttempt(agent, status, reason, trigger, started, sourceUrl, detail) {
+function saveFailedAttempt(agent, status, reason, trigger, started, sourceUrl, detail, dom) {
   const run = () => new Promise((resolve) => {
     chrome.storage.local.get(['captureLogs', 'latestAttempts'], (res) => {
       const timestamp = Date.now();
@@ -387,8 +387,9 @@ function saveFailedAttempt(agent, status, reason, trigger, started, sourceUrl, d
         plan: null,
         source_url: sanitizeSourceUrl(sourceUrl || agent.page),
         extension_version: chrome.runtime.getManifest().version,
-        detail: detail ? String(detail).slice(0, 1500) : '',
+        detail: detail ? String(detail).slice(0, 3000) : '',
       };
+      if (dom) log.dom = String(dom).slice(0, 12000);
       const logs = pruneCaptureLogs([...(res.captureLogs || []), log], timestamp);
       const latestAttempts = Object.assign({}, res.latestAttempts, {
         [agent.id]: {
@@ -460,6 +461,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         Number(msg.started) || Date.now(),
         msg.source_url || (sender.tab && sender.tab.url),
         msg.detail,
+        msg.dom,
       ).then(() => sendResponse({ ok: true }));
       return true;
     }

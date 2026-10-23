@@ -470,6 +470,13 @@ Available 3
   check('Grok Bot "2% used" is never read as SuperGrok', parseGrokUsage(inner + '\n' + noSuper), null);
 }
 
+// --- Learning is skipped at 0% / 100% used: every stray 0 would match ---
+{
+  const cands = [{ url: 'https://grok.com/rest/subscriptions/usage', method: 'GET', status: 200, json: { weekly: { percentUsed: 0, credits: 0 } } }];
+  check('learn: skipped at 0% used', learnGrokApiMap(cands, { used: 0, reset: null, breakdown: [] }, 0), null);
+  check('learn: skipped at 100% used', learnGrokApiMap(cands, { used: 100, reset: null, breakdown: [] }, 0), null);
+}
+
 if (failed) {
   console.error(`\n${failed} test(s) failed`);
   process.exit(1);

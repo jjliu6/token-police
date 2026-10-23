@@ -198,7 +198,7 @@ function failureDetail(id, text) {
   if (id === 'grok-build') {
     bits.push(grokRest.detail || 'api=idle');
     const seen = [];
-    grokRest.seen.forEach((u) => { if (seen.indexOf(u) < 0 && seen.length < 12) seen.push(u); });
+    grokRest.seen.forEach((u) => { if (seen.indexOf(u) < 0 && seen.length < 30) seen.push(u); });
     bits.push('rest=[' + seen.join(', ') + ']');
   }
   bits.push('text=' + JSON.stringify(captureTextSample(text)));
@@ -283,6 +283,7 @@ function maybeClose() {
     return;
   }
   closing = true;
+  if (grokRest.learnPending || grokRest.learnedMap) sendGrokLearnReport();
   reportPageOutcomes();
   closeIfAuto();
 }
@@ -320,8 +321,8 @@ function grokRestListen() {
     if (ev.source !== window || !ev.data || ev.data.__tokenPolice !== 'grok-rest') return;
     const c = ev.data;
     let label = '';
-    try { const u = new URL(c.url); label = u.pathname; } catch (e) { label = String(c.url || ''); }
-    if (c.text == null) { grokRest.seen.push(label + ' [' + (c.contentType || '?') + ']'); return; }
+    try { const u = new URL(c.url); label = (u.hostname === L().hostname ? '' : u.hostname) + u.pathname; } catch (e) { label = String(c.url || ''); }
+    if (c.text == null) { grokRest.seen.push(label + ' [' + String(c.contentType || '?').split(';')[0] + ']'); return; }
     let json = null;
     try { json = JSON.parse(c.text); } catch (e) { grokRest.seen.push(label + ' [bad-json]'); return; }
     grokRest.seen.push(label);
@@ -339,8 +340,41 @@ function grokLearn() {
   if (!map) return false;
   grokRest.learned = true;
   grokRest.learnPending = null;
+  grokRest.learnedMap = map;
   storageSet({ grokApiMap: map });
   return true;
+}
+
+// DOM 读到了但接口没学会（或学会了）：把"页面到底发了哪些请求、哪个 JSON 里有对得上的数"
+// 写进这条成功日志。以前成功时什么都不记，学不会也不知道为什么。
+function grokLearnReport(parsed) {
+  if (grokRest.learnedMap) {
+    const m = grokRest.learnedMap;
+    let path = '';
+    try { path = new URL(m.request.url).pathname; } catch (e) { path = m.request.url; }
+    return 'learn=ok; ' + m.request.method + ' ' + path + ' used=' + m.used.path.join('.') + '(' + m.used.kind + ')';
+  }
+  const bits = ['learn=fail', 'dom_used=' + (parsed ? parsed.used : '?')];
+  if (parsed && grokLearnSkipped(parsed)) bits.push('skipped=ambiguous_value');
+  const json = [];
+  grokRest.candidates.forEach((c) => {
+    let path = '';
+    try { path = new URL(c.url).pathname; } catch (e) { path = String(c.url); }
+    const hit = parsed ? grokJsonLeaves(c.json, 4000).find((l) => grokUsedKind(l.value, parsed.used)) : null;
+    json.push(path + (hit ? ' {' + hit.path.join('.') + '=' + hit.value + '}' : ''));
+  });
+  const uniq = (a) => a.filter((x, i) => a.indexOf(x) === i);
+  bits.push('json=[' + uniq(json).join(', ') + ']');
+  bits.push('other=[' + uniq(grokRest.seen.filter((x) => / \[/.test(x))).join(', ') + ']');
+  return bits.join('; ').slice(0, 1500);
+}
+
+function sendGrokLearnReport() {
+  if (grokRest.reported || !grokLastParsed || !saved['grok-build']) return;
+  grokRest.reported = true;
+  try {
+    chrome.runtime.sendMessage({ type: 'captureDetail', agent_id: 'grok-build', detail: grokLearnReport(grokLastParsed) }, () => { void chrome.runtime.lastError; });
+  } catch (e) {}
 }
 
 function grokAgentFromApi(read) {

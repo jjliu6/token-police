@@ -1,0 +1,26 @@
+{
+  "viewport": {
+    "width": 500,
+    "height": 860
+  },
+  "boxes": {
+    "buddy": {
+      "x": 162,
+      "y": 236,
+      "width": 176,
+      "height": 152
+    },
+    "hair": {
+      "x": 214,
+      "y": 267,
+      "width": 72,
+      "height": 108
+    },
+    "say": {
+      "x": 189,
+      "y": 247,
+      "width": 122,
+      "height": 14
+    }
+  }
+}

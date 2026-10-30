@@ -1,0 +1,32 @@
+{
+  "viewport": {
+    "width": 500,
+    "height": 860
+  },
+  "boxes": {
+    "card": {
+      "x": 100,
+      "y": 199,
+      "width": 300,
+      "height": 461
+    },
+    "pitch": {
+      "x": 113,
+      "y": 452,
+      "width": 274,
+      "height": 54
+    },
+    "privacy": {
+      "x": 113,
+      "y": 516,
+      "width": 274,
+      "height": 51
+    },
+    "url": {
+      "x": 113,
+      "y": 578,
+      "width": 274,
+      "height": 28
+    }
+  }
+}

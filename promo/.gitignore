@@ -1,0 +1,7 @@
+# Model weights, samples and render intermediates — regenerate with the scripts.
+# Anchored with "/" so capture/out/ (the committed UI frames) is NOT ignored.
+/.cache/
+/build/
+
+# Rendered deliverables (sent directly; regenerate with render/encode.py)
+/out/

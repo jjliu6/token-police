@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Token Police — promo stage</title>
+<!--
+  1920×1080 composition for the promo. Deterministic: window.render(t) draws the
+  frame for time t (seconds); promo/render/render.mjs steps t at 30 fps and
+  screenshots each frame. Everything inside the side panel is the real
+  popup.html captured by promo/capture/ (no redrawn UI). The side-panel frame,
+  the notification banner and the text around them are drawn here.
+-->
+<style>
+  @font-face{font-family:"Inter";src:url(../assets/fonts/InterVariable-latin.woff2) format("woff2");font-weight:100 900;}
+  :root{
+    /* Token Police tokens — popup.html :root */
+    --bg:#101218; --ink:#f3f5f9; --ink2:#c8cfdb; --muted:#9aa3b3; --line:#313948;
+    --good:#4fd9a8; --accent:#7fe3c3; --bad:#ef7d7d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#000;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:"cv11","ss01"}
+  #frame{position:absolute;inset:0;overflow:hidden;background:#0a0c11}
+
+  /* ── Background (static; the panel's glow follows it) ── */
+  #bg{position:absolute;inset:0;background:
+      radial-gradient(900px 600px at 12% 108%, rgba(110,155,245,.10), rgba(110,155,245,0) 70%),
+      linear-gradient(180deg,#0d1016 0%,#0a0c11 60%,#08090d 100%)}
+  #glow{position:absolute;left:0;top:0;width:1400px;height:1100px;margin:-550px 0 0 -700px;pointer-events:none;
+      background:radial-gradient(closest-side, rgba(79,217,168,.16), rgba(79,217,168,.05) 55%, rgba(79,217,168,0))}
+
+  /* ── Camera target: the side panel in a generic Chrome side-panel frame ── */
+  #cam{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;will-change:transform}
+  #pf{position:absolute;left:0;top:0;width:530px;border-radius:14px;overflow:hidden;background:#101218;transform-origin:50% 50%;
+      box-shadow:0 0 0 1px rgba(255,255,255,.08),0 40px 90px rgba(0,0,0,.6),0 10px 30px rgba(0,0,0,.4)}
+  #pfh{height:42px;display:flex;align-items:center;gap:10px;padding:0 14px;background:#1a1d24;border-bottom:1px solid rgba(255,255,255,.06);
+      color:#e8eaed;font-size:14px;font-weight:600;letter-spacing:.005em}
+  #pfh img{width:20px;height:20px;border-radius:5px}
+  #pfh .sp{flex:1}
+  #pfh svg{display:block;opacity:.7}
+  #content{position:relative;width:530px;height:911.6px;overflow:hidden;background:#101218}
+  #content img{position:absolute;left:0;top:0;width:530px;height:911.6px;opacity:0}
+
+  /* ── Left column: section typography (replaces Estha's lower-left title capsule) ── */
+  .cap{position:absolute;left:118px;top:0;width:780px;height:1080px;display:flex;flex-direction:column;justify-content:center;opacity:0;pointer-events:none}
+  .cap .k{display:flex;align-items:center;gap:12px;font-size:19px;font-weight:650;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:22px}
+  .cap .k i{width:10px;height:10px;border-radius:3px;display:block;background:var(--accent);box-shadow:0 0 18px rgba(127,227,195,.6)}
+  .cap .h{font-size:66px;font-weight:700;letter-spacing:-.035em;line-height:1.06;color:#fff;max-width:780px}
+  .cap .s{margin-top:26px;font-size:26px;font-weight:450;line-height:1.42;color:rgba(255,255,255,.62);max-width:700px}
+
+  /* ── Notification banner (system UI, drawn; text from background.js lowTitle / lowBodyR) ── */
+  #notif{position:absolute;right:30px;top:30px;width:560px;display:flex;gap:18px;align-items:center;padding:18px 24px 19px 18px;border-radius:22px;opacity:0;
+      background:rgba(36,40,50,.94);backdrop-filter:blur(24px);box-shadow:0 0 0 1px rgba(255,255,255,.12) inset,0 24px 60px rgba(0,0,0,.55)}
+  #notif img{width:60px;height:60px;border-radius:14px;flex:none}
+  #notif .t{font-size:22px;font-weight:650;color:#fff;line-height:1.25}
+  #notif .b{font-size:19px;color:rgba(255,255,255,.8);line-height:1.35;margin-top:4px}
+
+  /* Story cards: a situation, over the blurred panel or black */
+  #card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;color:#fff;pointer-events:none;opacity:0}
+  #card .who{font-size:30px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(127,227,195,.8);margin-bottom:22px}
+  #card .l1,#card .l2{font-size:76px;font-weight:650;letter-spacing:-.035em;line-height:1.08;max-width:1500px}
+  #card .l2{margin-top:10px;color:rgba(255,255,255,.58)}
+
+  #end{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;
+    background:radial-gradient(900px 600px at 50% 40%, rgba(79,217,168,.14), rgba(79,217,168,0) 70%), #0a0c11}
+  #end img{width:176px;height:176px;filter:drop-shadow(0 18px 40px rgba(0,0,0,.55))}
+  #end .word{margin-top:30px;font-size:84px;font-weight:750;letter-spacing:-.04em;color:#fff}
+  #end .tag{margin-top:10px;font-size:32px;font-weight:500;letter-spacing:-.015em;color:rgba(255,255,255,.86)}
+  #end .row{display:flex;gap:10px;margin-top:34px}
+  #end .pill{font-size:16px;font-weight:500;color:rgba(255,255,255,.76);padding:8px 15px;border-radius:999px;
+    border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04)}
+  #end .pill b{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--good);margin-right:8px;vertical-align:1px}
+  #end .url{margin-top:28px;font-size:22px;font-weight:550;letter-spacing:.005em;color:var(--accent)}
+  #end .fine{position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:15px;color:rgba(255,255,255,.38)}
+  #black{position:absolute;inset:0;background:#000;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="frame">
+  <div id="bg"><div id="glow"></div></div>
+  <div id="cam">
+    <div id="pf">
+      <div id="pfh">
+        <img src="../../icons/mark-128.png" alt="">
+        <span>Token Police</span>
+        <span class="sp"></span>
+        <!-- generic close glyph -->
+        <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 2l10 10M12 2L2 12" stroke="#e8eaed" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </div>
+      <div id="content"><!-- shots injected --></div>
+    </div>
+  </div>
+
+  <div id="caps"></div>
+  <div id="notif"><img src="../../icons/mark-128.png" alt=""><div><div class="t"></div><div class="b"></div></div></div>
+  <div id="card"><div class="who"></div><div class="l1"></div><div class="l2"></div></div>
+
+  <div id="end">
+    <img src="../../icons/token-police.svg" alt="">
+    <div class="word">Token Police</div>
+    <div class="tag">Know how much AI coding quota you have left — at a glance.</div>
+    <div class="row">
+      <span class="pill"><b></b>Free</span>
+      <span class="pill">Open source</span>
+      <span class="pill">Nothing leaves your browser</span>
+    </div>
+    <div class="url">token-police.philosophie.ai</div>
+    <div class="fine">Unofficial. Not affiliated with Anthropic, OpenAI, xAI, Cursor or Google.</div>
+  </div>
+  <div id="black"></div>
+</div>
+
+<script src="./scenes.js"></script>
+<script src="./timeline.js"></script>
+</body>
+</html>

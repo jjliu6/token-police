@@ -1,0 +1,26 @@
+{
+  "viewport": {
+    "width": 500,
+    "height": 860
+  },
+  "boxes": {
+    "refresh": {
+      "x": 407,
+      "y": 13,
+      "width": 80,
+      "height": 26
+    },
+    "hint": {
+      "x": 17,
+      "y": 715,
+      "width": 466,
+      "height": 16
+    },
+    "header": {
+      "x": 13,
+      "y": 12,
+      "width": 474,
+      "height": 28
+    }
+  }
+}

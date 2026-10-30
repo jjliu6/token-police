@@ -1,0 +1,32 @@
+{
+  "viewport": {
+    "width": 500,
+    "height": 860
+  },
+  "boxes": {
+    "float": {
+      "x": 12,
+      "y": 327,
+      "width": 476,
+      "height": 482
+    },
+    "note": {
+      "x": 23,
+      "y": 783,
+      "width": 454,
+      "height": 14
+    },
+    "go": {
+      "x": 23,
+      "y": 747,
+      "width": 454,
+      "height": 28
+    },
+    "picked": {
+      "x": 23,
+      "y": 685,
+      "width": 454,
+      "height": 32
+    }
+  }
+}

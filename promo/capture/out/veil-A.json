@@ -1,0 +1,26 @@
+{
+  "viewport": {
+    "width": 500,
+    "height": 860
+  },
+  "boxes": {
+    "buddy": {
+      "x": 162,
+      "y": 236,
+      "width": 176,
+      "height": 360
+    },
+    "acts": {
+      "x": 173,
+      "y": 385,
+      "width": 154,
+      "height": 198
+    },
+    "stage": {
+      "x": 13,
+      "y": 52,
+      "width": 474,
+      "height": 677
+    }
+  }
+}

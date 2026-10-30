@@ -1,0 +1,146 @@
+{
+  "viewport": {
+    "width": 500,
+    "height": 860
+  },
+  "boxes": {
+    "header": {
+      "x": 13,
+      "y": 12,
+      "width": 474,
+      "height": 28
+    },
+    "grid": {
+      "x": 13,
+      "y": 52,
+      "width": 474,
+      "height": 631
+    },
+    "refresh": {
+      "x": 423,
+      "y": 13,
+      "width": 64,
+      "height": 26
+    },
+    "gear": {
+      "x": 375,
+      "y": 13,
+      "width": 40,
+      "height": 26
+    },
+    "claude": {
+      "x": 13,
+      "y": 52,
+      "width": 232,
+      "height": 199
+    },
+    "codex": {
+      "x": 255,
+      "y": 52,
+      "width": 232,
+      "height": 199
+    },
+    "grok": {
+      "x": 13,
+      "y": 261,
+      "width": 232,
+      "height": 214
+    },
+    "cursor": {
+      "x": 255,
+      "y": 261,
+      "width": 232,
+      "height": 199
+    },
+    "grokbot": {
+      "x": 13,
+      "y": 485,
+      "width": 232,
+      "height": 199
+    },
+    "gemini": {
+      "x": 255,
+      "y": 485,
+      "width": 232,
+      "height": 199
+    },
+    "claudeBurn": {
+      "x": 26,
+      "y": 165,
+      "width": 206,
+      "height": 15
+    },
+    "grokBurn": {
+      "x": 26,
+      "y": 374,
+      "width": 206,
+      "height": 30
+    },
+    "geminiBurn": {
+      "x": 268,
+      "y": 598,
+      "width": 206,
+      "height": 15
+    },
+    "claudeSpark": {
+      "x": 26,
+      "y": 187,
+      "width": 206,
+      "height": 23
+    },
+    "grokSpark": {
+      "x": 26,
+      "y": 411,
+      "width": 206,
+      "height": 23
+    },
+    "geminiSpark": {
+      "x": 268,
+      "y": 619,
+      "width": 206,
+      "height": 23
+    },
+    "grokRing": {
+      "x": 26,
+      "y": 299,
+      "width": 66,
+      "height": 66
+    },
+    "geminiRing": {
+      "x": 268,
+      "y": 523,
+      "width": 66,
+      "height": 66
+    },
+    "geminiMid": {
+      "x": 268,
+      "y": 523,
+      "width": 206,
+      "height": 66
+    },
+    "buddy": {
+      "x": 316,
+      "y": 676,
+      "width": 176,
+      "height": 132
+    },
+    "footer": {
+      "x": 17,
+      "y": 763,
+      "width": 466,
+      "height": 28
+    },
+    "credits": {
+      "x": 17,
+      "y": 799,
+      "width": 466,
+      "height": 44
+    },
+    "ver": {
+      "x": 17,
+      "y": 739,
+      "width": 466,
+      "height": 16
+    }
+  }
+}

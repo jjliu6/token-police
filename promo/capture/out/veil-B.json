@@ -1,0 +1,26 @@
+{
+  "viewport": {
+    "width": 500,
+    "height": 860
+  },
+  "boxes": {
+    "buddy": {
+      "x": 162,
+      "y": 236,
+      "width": 176,
+      "height": 269
+    },
+    "acts": {
+      "x": 173,
+      "y": 365,
+      "width": 154,
+      "height": 126
+    },
+    "done": {
+      "x": 173,
+      "y": 458,
+      "width": 154,
+      "height": 34
+    }
+  }
+}

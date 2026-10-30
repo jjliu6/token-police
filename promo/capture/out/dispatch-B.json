@@ -1,0 +1,32 @@
+{
+  "viewport": {
+    "width": 500,
+    "height": 860
+  },
+  "boxes": {
+    "board": {
+      "x": 0,
+      "y": 0,
+      "width": 500,
+      "height": 860
+    },
+    "title": {
+      "x": 13,
+      "y": 17,
+      "width": 281,
+      "height": 17
+    },
+    "tiles": {
+      "x": 13,
+      "y": 74,
+      "width": 474,
+      "height": 738
+    },
+    "foot": {
+      "x": 13,
+      "y": 820,
+      "width": 474,
+      "height": 22
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "viewport": {
+    "width": 500,
+    "height": 860
+  },
+  "boxes": {
+    "settings": {
+      "x": 13,
+      "y": 52,
+      "width": 474,
+      "height": 104
+    },
+    "notifyLow": {
+      "x": 175,
+      "y": 110,
+      "width": 113,
+      "height": 14
+    },
+    "showHair": {
+      "x": 302,
+      "y": 110,
+      "width": 84,
+      "height": 14
+    },
+    "moveReminder": {
+      "x": 159,
+      "y": 133,
+      "width": 101,
+      "height": 14
+    },
+    "autoCheck": {
+      "x": 26,
+      "y": 107,
+      "width": 135,
+      "height": 20
+    }
+  }
+}

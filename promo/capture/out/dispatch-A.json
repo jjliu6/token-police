@@ -1,0 +1,50 @@
+{
+  "viewport": {
+    "width": 500,
+    "height": 860
+  },
+  "boxes": {
+    "float": {
+      "x": 12,
+      "y": 423,
+      "width": 476,
+      "height": 385
+    },
+    "kind": {
+      "x": 378,
+      "y": 432,
+      "width": 99,
+      "height": 28
+    },
+    "prompt": {
+      "x": 23,
+      "y": 479,
+      "width": 454,
+      "height": 72
+    },
+    "repo": {
+      "x": 23,
+      "y": 559,
+      "width": 454,
+      "height": 28
+    },
+    "chips": {
+      "x": 23,
+      "y": 625,
+      "width": 454,
+      "height": 66
+    },
+    "go": {
+      "x": 253,
+      "y": 747,
+      "width": 224,
+      "height": 28
+    },
+    "sendRow": {
+      "x": 23,
+      "y": 699,
+      "width": 454,
+      "height": 14
+    }
+  }
+}

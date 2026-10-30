@@ -1,0 +1,50 @@
+{
+  "viewport": {
+    "width": 500,
+    "height": 860
+  },
+  "boxes": {
+    "float": {
+      "x": 12,
+      "y": 313,
+      "width": 476,
+      "height": 496
+    },
+    "status": {
+      "x": 23,
+      "y": 369,
+      "width": 454,
+      "height": 28
+    },
+    "privacy": {
+      "x": 23,
+      "y": 405,
+      "width": 454,
+      "height": 28
+    },
+    "confirm": {
+      "x": 23,
+      "y": 441,
+      "width": 454,
+      "height": 14
+    },
+    "pick": {
+      "x": 23,
+      "y": 635,
+      "width": 454,
+      "height": 28
+    },
+    "picked": {
+      "x": 23,
+      "y": 671,
+      "width": 454,
+      "height": 32
+    },
+    "go": {
+      "x": 23,
+      "y": 733,
+      "width": 454,
+      "height": 28
+    }
+  }
+}
